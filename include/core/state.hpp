@@ -1,0 +1,63 @@
+#pragma once
+
+#include "util/vecdefs.hpp"
+
+struct StateTr {
+    vec3d r = vec3d::Zero(); // position
+    vec3d v = vec3d::Zero(); // velocity
+};
+
+inline vec4d q_default{0.0, 0.0, 0.0, 1.0};
+struct StateAtt {
+    vec4d q = q_default;     // euler-parameter/quaternion
+    vec3d w = vec3d::Zero(); // angular velocity
+};
+
+// Derivatives
+struct DerivTr {
+    vec3d dr, dv;
+};
+
+struct DerivAtt {
+    vec4d dq;
+    vec3d dw;
+};
+
+// Translation Operations
+inline StateTr operator+(const StateTr& x1, const StateTr& x2) {
+    return StateTr{.r = x1.r + x2.r, .v = x1.v + x2.v};
+}
+inline StateTr operator-(const StateTr& x1, const StateTr& x2) {
+    return StateTr{.r = x1.r - x2.r, .v = x1.v - x2.v};
+}
+inline StateTr operator*(const StateTr& x, f64 scalar) {
+    return StateTr{.r = x.r * scalar, .v = x.v * scalar};
+}
+inline StateTr operator*(f64 scalar, const StateTr& x) { return x * scalar; }
+
+inline StateTr operator+(const StateTr& x, const DerivTr& mdx) {
+    return StateTr{.r = x.r + mdx.dr, .v = x.v + mdx.dv};
+}
+inline StateTr operator+(const DerivTr& mdx, const StateTr& x) { return x + mdx; }
+inline StateTr& operator+=(StateTr& x, const DerivTr& dx) {
+    x.r += dx.dr;
+    x.v += dx.dv;
+    return x;
+}
+inline StateTr operator-(const StateTr& x) { return StateTr{.r = -x.r, .v = -x.v}; }
+
+inline DerivTr operator+(const DerivTr& dx1, const DerivTr& dx2) {
+    return DerivTr{.dr = dx1.dr + dx2.dr, .dv = dx1.dv + dx2.dv};
+}
+inline DerivTr operator-(const DerivTr& dx1, const DerivTr& dx2) {
+    return DerivTr{.dr = dx1.dr - dx2.dr, .dv = dx1.dv - dx2.dv};
+}
+inline DerivTr operator*(const DerivTr& dx, f64 scalar) {
+    return DerivTr{.dr = dx.dr * scalar, .dv = dx.dv * scalar};
+}
+inline DerivTr operator*(f64 scalar, const DerivTr& dx) { return dx * scalar; }
+inline DerivTr operator-(const DerivTr& dx) {
+    return DerivTr{.dr = -dx.dr, .dv = -dx.dv};
+}
+
+// Attitude Operations

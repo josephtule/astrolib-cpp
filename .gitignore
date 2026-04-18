@@ -1,0 +1,11 @@
+**/build/
+**/.cache/
+**/.DS_Store
+**/internal/
+**/build_ci/
+**/site/
+**/interal/
+**/__pycache__
+**/legacy/
+**/ref/
+**/external/

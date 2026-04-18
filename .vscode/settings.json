@@ -1,0 +1,26 @@
+{
+    "markdown.math.enabled": true,
+    "markdown.extension.math.enabled": false,
+    "mdmath.macros": {
+        "\\R": "\\mathbb{R}",
+        "\\E": "\\mathbb{E}",
+        "\\N": "\\mathbb{N}",
+        "\\Z": "\\mathbb{Z}",
+        "\\Q": "\\mathbb{Q}",
+        "\\C": "\\mathbb{C}",
+        "\\vecb": "\\boldsymbol{#1}",
+        "\\unitv": "\\hat{\\boldsymbol{#1}}",
+        "\\norm": "\\left\\lVert#1\\right\\rVert",
+        "\\abs": "\\left\\lvert#1\\right\\rvert",
+        "\\tbf": "\\textbf{#1}",
+        "\\Span": "\\operatorname{span}",
+        "\\rank": "\\operatorname{rank}",
+        "\\diag": "\\operatorname{diag}",
+        "\\image": "\\operatorname{Im}",
+        "\\bmat": "\\begin{bmatrix}#1\\end{bmatrix}",
+        "\\pmat": "\\begin{pmatrix}#1\\end{pmatrix}",
+        "\\cmat": "\\begin{Bmatrix}#1\\end{Bmatrix}",
+        "\\vmat": "\\begin{vmatrix}#1\\end{vmatrix}",
+        "\\vvmat": "\\begin{Vmatrix}#1\\end{Vmatrix}"
+    }
+}
