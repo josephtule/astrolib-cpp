@@ -27,7 +27,7 @@ struct OEDelaunay {};
 inline OEClassical rv_to_coe(
     vec3d r,
     vec3d v,
-    Celestial& cb,
+    f64 mu,
     UAngle uangle_out = UAngle::degree,
     f64 tol = tol_strict
 ) {
@@ -51,7 +51,7 @@ inline OEClassical rv_to_coe(
     if (N(1) < 0.0) coe.raan = 2.0 * pi - coe.raan;
 
     f64 v_r = r.dot(v) / r_mag;
-    vec3d e = 1.0 / cb.mu * ((v_mag2 - cb.mu / r_mag) * r - r.dot(v) * v);
+    vec3d e = 1.0 / mu * ((v_mag2 - mu / r_mag) * r - r.dot(v) * v);
     coe.ecc = e.norm();
 
     coe.aop = std::acos(N.dot(e) / N_mag / coe.ecc);
@@ -60,8 +60,8 @@ inline OEClassical rv_to_coe(
     coe.ta = std::real(std::acos(e.dot(r) / coe.ecc / r_mag));
     if (v_r < 0.0) coe.ta = 2.0 * pi - coe.ta;
 
-    f64 E = v_mag2 / 2 - cb.mu / r_mag;
-    coe.sma = -cb.mu / E / 2.0;
+    f64 E = v_mag2 / 2 - mu / r_mag;
+    coe.sma = -mu / E / 2.0;
 
     if (std::abs(coe.raan - 2.0 * pi) < tol) coe.raan = 0.0;
     if (std::abs(coe.aop - 2.0 * pi) < tol) coe.aop = 0.0;
@@ -77,12 +77,12 @@ inline OEClassical rv_to_coe(
 
 inline OEClassical rv_to_coe(
     StateTr x_tr,
-    Celestial& cb,
+    f64 mu,
     UAngle uangle_out = UAngle::degree,
     f64 tol = tol_strict
 ) {
     OEClassical coe;
-    rv_to_coe(x_tr.r, x_tr.v, cb, uangle_out, tol);
+    rv_to_coe(x_tr.r, x_tr.v, mu, uangle_out, tol);
     return coe;
 }
 
@@ -93,7 +93,7 @@ inline StateTr coe_to_rv(
     f64 raan,
     f64 aop,
     f64 ta,
-    Celestial& cb,
+    f64 mu,
     UAngle uangle_in = UAngle::degree,
     f64 tol = tol_strict
 ) {
@@ -134,7 +134,7 @@ inline StateTr coe_to_rv(
     vec3d r_orbit
         = vec3d{p * canom / (1.0 + ecc * canom), p * sanom / (1.0 + ecc * canom), 0.0};
     vec3d v_orbit
-        = vec3d{-std::sqrt(cb.mu / p) * sanom, std::sqrt(cb.mu / p) * (ecc + canom), 0.0};
+        = vec3d{-std::sqrt(mu / p) * sanom, std::sqrt(mu / p) * (ecc + canom), 0.0};
 
     // Rotate into inertial frame
     std::array<RotAxis, 3> seq = {RotAxis::z, RotAxis::x, RotAxis::z};
@@ -148,7 +148,7 @@ inline StateTr coe_to_rv(
 
 inline StateTr coe_to_rv(
     OEClassical coe,
-    Celestial& cb,
+    f64 mu,
     UAngle uangle_in = UAngle::degree,
     f64 tol = tol_strict
 ) {
@@ -160,7 +160,7 @@ inline StateTr coe_to_rv(
         coe.raan,
         coe.aop,
         coe.ta,
-        cb,
+        mu,
         uangle_in,
         tol
     );

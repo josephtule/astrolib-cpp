@@ -30,9 +30,12 @@ inline vec3d accel_gravity_zonal(
     f64 epsilon = tol_strict
 ) {
     vec3d a = accel_gravity_pointmass(r_rel, mu);
+    degree = std::min(degree, 6);
 
     f64 r_mag2 = r_rel.squaredNorm();
     f64 r_mag = std::sqrt(r_mag2);
+    if (r_mag < epsilon) return a;
+
     f64 Rr = R_cb / r_mag;
     f64 mur2 = mu / r_mag2;
     f64 r0r = r_rel(0) / r_mag;
@@ -106,7 +109,6 @@ inline vec3d accel_gravity_zonal(
     }
     return a;
 }
-
 
 inline void norm_legendre(
     f64 phi,
