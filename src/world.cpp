@@ -132,7 +132,23 @@ vec3d World::gravity_accel_from(EntityId target_id, EntityId source_id) const {
 
     vec3d r_rel_inertial = target->x_tr.r - source->x_tr.r;
     switch (source->gravity_model) {
-    case GravityModel::spherical_harmonics: break;
+    case GravityModel::spherical_harmonics: {
+        vec4d q_BN = source->x_att.q; // [BN]: N -> B
+        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
+        // Body fixed relative position for spherical harmonic gravity perturbations
+        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
+        vec3d a_body = accel_gravity_spherical_harmonics(
+            r_rel_body,
+            source->mu,
+            source->mean_radius,
+            source->degree,
+            source->order,
+            source->C,
+            source->S
+        ); // Acceleration in body fixed frame
+        a = ep_rotate_fast_passive(q_NB, a_body);
+        break;
+    }
     case GravityModel::zonal: {
         vec4d q_BN = source->x_att.q; // [BN]: N -> B
         vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
@@ -145,7 +161,6 @@ vec3d World::gravity_accel_from(EntityId target_id, EntityId source_id) const {
             source->degree,
             source->J
         ); // Acceleration in body fixed frame
-
         a = ep_rotate_fast_passive(q_NB, a_body);
         break;
     }

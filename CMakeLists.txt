@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
-set(PROJECT_NAME cr3bp)
-set(TARGET_NAME cr3bp)
+set(PROJECT_NAME astrolib)
+set(TARGET_NAME astrolib)
 
 project(${PROJECT_NAME} LANGUAGES CXX)
 
@@ -16,7 +16,9 @@ list(FILTER SOURCES EXCLUDE REGEX ".*/src/legacy/.*")
 add_executable(${TARGET_NAME} ${SOURCES})
 
 
-
+target_compile_definitions(astrolib PRIVATE
+    PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
+)
 
 target_include_directories(${TARGET_NAME} PRIVATE
 ${CMAKE_CURRENT_SOURCE_DIR}/include

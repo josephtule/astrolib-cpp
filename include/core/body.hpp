@@ -31,9 +31,9 @@ struct Celestial : public Body {
     // Gravity
     GravityModel gravity_model = GravityModel::pointmass;
     f64 mu = 0.0;
-    i32 degree = 0, order = 0;
-    vec7d J = vec7d::Zero(); // zonal coefs
-    matXd C, S;              // sph harmonic coefs
+    i32 degree = 0, order = 0; // spherical harmonics degree (n) and order (m)
+    vec7d J = vec7d::Zero();   // zonal coefs
+    matXd C, S;                // sph harmonic coefs
 
     // Radiation
     RadiationModel radiation_model = RadiationModel::none;
@@ -52,6 +52,14 @@ struct Celestial : public Body {
     Celestial() {
         kind = BodyKind::celestial;
         emits_gravity = true;
+    }
+
+    void set_spin_rate(f64 spin_rate_) {
+        // in rad/s
+        if (use_simple_spin) {
+            spin_rate = spin_rate_;
+            x_att.w[2] = spin_rate;
+        }
     }
 };
 

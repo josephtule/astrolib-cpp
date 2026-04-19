@@ -185,7 +185,7 @@ inline vec3<T> ep_rotate_fast_passive(vec4<T> q, vec3<T> v) {
 
 template <typename T>
 inline vec4<T> dcm_to_ep(mat3<T> R) {
-    T Rtr = trace(R);
+    T Rtr = R.trace();
     T q1, q2, q3, q4;
     // Shepperd's Selection Algorithm
     if ((Rtr > R(0, 0)) && (Rtr > R(1, 1)) && (Rtr > R(2, 2))) {

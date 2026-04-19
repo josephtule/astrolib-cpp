@@ -1,111 +1,335 @@
 #include "core/body.hpp"
+#include "core/dynamics_translational.hpp"
 #include "core/entity.hpp"
 #include "core/planets.hpp"
 #include "core/state.hpp"
 #include "core/world.hpp"
+#include "util/constants.hpp"
+#include "util/transform.hpp"
+#include "util/vecdefs.hpp"
 
+#include <iostream>
 #include <print>
 
-int main() {
+void run_gravity_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+);
+void run_station_geo_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+);
+void run_zonal_orientation_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+);
+void run_zonal_pert_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+);
+void run_spherical_harmonics_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+);
 
+int main() {
     World world;
 
-    EntityId sat_id = world.spawn_satellite();
-    world.satellite(sat_id)->x_tr.r = {7000.0, 0.0, 0.0};
-
+    // Earth (at origin, tilted, spinning, zonal)
     EntityId earth_id = wgs84(world);
-    EntityId earth2_id = wgs84(world);
-    world.celestial(earth2_id)->x_tr.r = {10000.0, 10000.0, 10000.0};
-
-    auto a_from1 = world.gravity_accel_from(sat_id, earth_id);
-    auto a_from2 = world.gravity_accel_from(sat_id, earth2_id);
-    auto a_on = world.gravity_accel_on(sat_id);
-    auto earth = world.celestial(earth_id);
-    auto earth2 = world.celestial(earth2_id);
-
-    std::println(
-        "from earth1: {} (mag = {})\nfrom earth2: {} (mag = {})\non: {} (mag = {})",
-        a_from1,
-        a_from1.norm(),
-        a_from2,
-        a_from2.norm(),
-        a_on,
-        a_on.norm()
-    );
-    std::println("error: {}", a_from1 + a_from2 - a_on);
-
-    std::println();
-    std::println("{}", world.gravity_accel_from(earth_id, earth_id));
-
+    Celestial* earth = world.celestial(earth_id);
+    earth->gravity_model = GravityModel::zonal;
+    earth->degree = 2;
     earth->use_simple_spin = true;
-    earth->spin_rate = 100;
-    earth->x_att.w[2] = earth->spin_rate;
+    earth->set_spin_rate(earth->spin_rate); // spin rate in rad/s
+    mat3d earth_tilt_dcm = rotX(23.44 * deg_to_rad);
+    earth->x_att.q = dcm_to_ep(earth_tilt_dcm);
 
-    std::println("{}", world.celestial(earth_id)->x_att.w);
+    // Urath (offset, inertial aligned, fixed, pointmass)
+    EntityId urath_id = wgs84(world);
+    Celestial* urath = world.celestial(urath_id);
+    urath->x_tr.r = {10000.0, 10000.0, 10000.0};
+    urath->gravity_model = GravityModel::pointmass;
+    urath->degree = 0;
 
+    // Satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    sat->x_tr.r = {7000.0, 0.0, 0.0};
+
+    // Station
     EntityId stat_id = world.spawn_station();
-    auto station = world.station(stat_id);
-    station->anchor_id = earth_id;
-    station->r_body = {earth->mean_radius, 0, 0};
+    Station* stat = world.station(stat_id);
+    stat->anchored = true;
+    stat->anchor_id = earth_id;
+    stat->r_body = {earth->mean_radius, 0, 0};
+    // earth rotated only about x-axis, station still on x-axis
 
-    std::println("stat_r_inertial: {}", world.stat_r_inertial(stat_id));
-    std::println("stat_v_inertial: {}", world.stat_v_inertial(stat_id));
-    std::println("stat_r_inertial: {}", world.stat_x_tr_inertial(stat_id).r);
-    std::println("stat_v_inertial: {}", world.stat_x_tr_inertial(stat_id).v);
+    // run_gravity_diag(world, earth_id, urath_id, sat_id, stat_id);
+    // run_station_geo_diag(world, earth_id, urath_id, sat_id, stat_id);
+    // run_zonal_orientation_diag(world, earth_id, urath_id, sat_id, stat_id);
+    // run_zonal_pert_diag(world, earth_id, urath_id, sat_id, stat_id);
+    run_spherical_harmonics_diag(world, earth_id, urath_id, sat_id, stat_id);
 
-    std::println();
-
-    std::println("z inertial earth: {}", world.body_z_inertial(earth_id));
-    std::println("w inertial earth: {}", world.body_w_inertial(earth_id));
-    vec4d q_earth0 = earth->x_att.q;
-
-    earth->x_att.q = vec4d{1, 2, 3, 4}.normalized();
-    auto a_from1_rot = world.gravity_accel_from(sat_id, earth_id);
-
-    earth->x_att.q = q_default;
-    earth->gravity_model = GravityModel::zonal;
-    earth->degree = 2;
-    auto a_from1_j2 = world.gravity_accel_from(sat_id, earth_id);
-
-    earth->x_att.q = vec4d{1, 2, 3, 4}.normalized();
-    auto a_from1_j2rot = world.gravity_accel_from(sat_id, earth_id);
-
-    std::println(
-        "from earth (point): {} (mag = {})\nfrom earth (point rot): {} (mag = {})\nfrom "
-        "earth1 (j2): {} (mag = {})\nfrom earth1 "
-        "(j2rot): {} (mag = {})",
-        a_from1,
-        a_from1.norm(),
-        a_from1_rot,
-        a_from1_rot.norm(),
-        a_from1_j2,
-        a_from1_j2.norm(),
-        a_from1_j2rot,
-        a_from1_j2rot.norm()
-    );
-    std::println("J2 pertrubation mag: {}", (a_from1 - a_from1_j2rot).norm());
-    std::println("Earth J2: {}", earth->J[2]);
-
-    earth->gravity_model = GravityModel::pointmass;
-    earth->x_att.q = q_earth0;
-    vec3d a_point = world.gravity_accel_from(sat_id, earth_id);
-
-    earth->x_att.q = vec4d{1, 2, 3, 4}.normalized();
-    vec3d a_point_rot = world.gravity_accel_from(sat_id, earth_id);
-
-    earth->gravity_model = GravityModel::zonal;
-    earth->degree = 2;
-    earth->x_att.q = q_earth0;
-    vec3d a_zonal = world.gravity_accel_from(sat_id, earth_id);
-
-    earth->x_att.q = vec4d{1, 2, 3, 4}.normalized();
-    vec3d a_zonal_rot = world.gravity_accel_from(sat_id, earth_id);
-
-    std::println("zonal - point: {}", a_zonal - a_point);
-    std::println("zonal_rot - point: {}", a_zonal_rot - a_point);
-    std::println("zonal_rot - zonal: {}", a_zonal_rot - a_zonal);
-
-    earth->x_att.q = q_earth0;
+    // matXd C, S;
+    // i32 degree = 6;
+    // i32 order = 0;
+    // matXd P = matXd::Zero(degree + 3, order + 3);
+    // matXd scales = matXd::Zero(degree + 3, order + 3);
+    // read_egm2008(std::string(PROJECT_ROOT) + "/scratch/egm2008_120.txt", C, S, 6, 0);
+    // for (i32 i = 0; i < 7; ++i) {
+    //     std::println("{:.18f},", C(i, 0) * norm_factor(i, order));
+    // }
+    // std::println();
+    // std::cout << C << std::endl;
 
     return 0;
+}
+
+void run_gravity_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+) {
+    Celestial* earth = world.celestial(earth_id);
+    Celestial* urath = world.celestial(urath_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
+
+    vec3d a_from_earth = world.gravity_accel_from(sat_id, earth_id);
+    vec3d a_from_urath = world.gravity_accel_from(sat_id, urath_id);
+    vec3d a_total = world.gravity_accel_on(sat_id);
+
+    std::println("Satellite Gravity Diagnostic -------------------------------");
+    std::println("a_earth = {}, mag = {}", a_from_earth, a_from_earth.norm());
+    std::println("a_urath = {}, mag = {}", a_from_urath, a_from_urath.norm());
+    std::println("a_total = {}, mag = {}", a_total, a_total.norm());
+    std::println("------------------------------------------------------------");
+}
+
+void run_station_geo_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+) {
+    Celestial* earth = world.celestial(earth_id);
+    Celestial* urath = world.celestial(urath_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
+
+    std::println("Station Geometry Diagnostic --------------------------------");
+    std::println("stat_r_inertial: {}", world.stat_r_inertial(stat_id));
+    std::println("stat_v_inertial: {}", world.stat_v_inertial(stat_id));
+    std::println("z inertial earth: {}", world.body_z_inertial(earth_id));
+    std::println("w inertial earth: {}", world.body_w_inertial(earth_id));
+    std::println("w body earth: {}", earth->x_att.w);
+
+    // std::println("stat_r_inertial: {}", world.stat_x_tr_inertial(stat_id).r);
+    // std::println("stat_v_inertial: {}", world.stat_x_tr_inertial(stat_id).v);
+    std::println("------------------------------------------------------------");
+}
+
+void run_zonal_orientation_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+) {
+    Celestial* earth = world.celestial(earth_id);
+    Celestial* urath = world.celestial(urath_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
+
+    sat->x_tr.r = 7000.0 * vec3d{std::cos(pio2), 0.0, std::sin(pio2)};
+
+    vec4d earth_q0 = earth->x_att.q;
+
+    // pointmass (no orientation)
+    earth->x_att.q = q_default;
+    earth->gravity_model = GravityModel::pointmass;
+    vec3d a_point = world.gravity_accel_from(sat_id, earth_id);
+
+    // pointmass (tilted)
+    earth->x_att.q = earth_q0;
+    vec3d a_point_tilt = world.gravity_accel_from(sat_id, earth_id);
+
+    // zonal (no orientation)
+    earth->gravity_model = GravityModel::zonal;
+    earth->x_att.q = q_default;
+    vec3d a_zonal = world.gravity_accel_from(sat_id, earth_id);
+
+    // zonal (tilted)
+    earth->x_att.q = earth_q0;
+    vec3d a_zonal_tilt = world.gravity_accel_from(sat_id, earth_id);
+
+    std::println("Zonal Orientation Diagnostic -------------------------------");
+    std::println("a_point = {} (mag = {})", a_point, a_point.norm());
+    std::println("a_point_tilt = {} (mag = {})", a_point_tilt, a_point_tilt.norm());
+    std::println("a_zonal = {} (mag = {})", a_zonal, a_zonal.norm());
+    std::println("a_zonal_tilt = {} (mag = {})", a_zonal_tilt, a_zonal_tilt.norm());
+    std::println(
+        "a_point tilt error = {} (mag = {})",
+        a_point - a_point_tilt,
+        (a_point - a_point_tilt).norm()
+    );
+    std::println(
+        "a_zonal tilt error = {} (mag = {})",
+        a_zonal - a_zonal_tilt,
+        (a_zonal - a_zonal_tilt).norm()
+    );
+    std::println("------------------------------------------------------------");
+}
+
+void run_zonal_pert_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+) {
+    Celestial* earth = world.celestial(earth_id);
+    Celestial* urath = world.celestial(urath_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
+
+    sat->x_tr.r = 7000.0 * vec3d{std::cos(pio2), 0.0, std::sin(pio2)};
+
+    mat3d earth_tilt_dcm = rotX(23.44 * deg_to_rad);
+    earth->x_att.q = dcm_to_ep(earth_tilt_dcm);
+
+    // point (tilted = untilted)
+    earth->gravity_model = GravityModel::pointmass;
+    vec3d a_point_tilt = world.gravity_accel_from(sat_id, earth_id);
+
+    // zonal (tilted)
+    earth->gravity_model = GravityModel::zonal;
+    vec3d a_zonal_tilt = world.gravity_accel_from(sat_id, earth_id);
+
+    vec3d r_rel_inertial = sat->x_tr.r - earth->x_tr.r;
+    vec3d r_rel_body = ep_rotate_fast_passive(earth->x_att.q, r_rel_inertial);
+    vec3d a_zonal_pert = pert_zonal_single(
+        r_rel_body,
+        earth->mu,
+        earth->mean_radius,
+        earth->degree,
+        earth->J
+    );
+
+    a_zonal_pert = ep_rotate_fast_passive(ep_conj(earth->x_att.q), a_zonal_pert);
+
+    std::println("Zonal Perturbation Diagnostic ------------------------------");
+    std::println("a_point = {} (mag = {})", a_point_tilt, a_point_tilt.norm());
+    std::println("a_zonal = {} (mag = {})", a_zonal_tilt, a_zonal_tilt.norm());
+    std::println("pert zonal = {} (mag = {})", a_zonal_pert, a_zonal_pert.norm());
+    vec3d error = (a_point_tilt + a_zonal_pert) - a_zonal_tilt;
+    std::println("error = {}, (mag = {})", error, error.norm()); // should be about 0
+    std::println("------------------------------------------------------------");
+}
+
+void run_spherical_harmonics_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+) {
+    Celestial* earth = world.celestial(earth_id);
+    Celestial* urath = world.celestial(urath_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
+
+    i32 degree = 6;
+
+    sat->x_tr.r = 7000.0 * vec3d{std::cos(pio2), 0.0, std::sin(pio2)};
+
+    mat3d earth_tilt_dcm = rotX(23.44 * deg_to_rad);
+    earth->x_att.q = dcm_to_ep(earth_tilt_dcm);
+
+    // Pointmass
+    earth->gravity_model = GravityModel::pointmass;
+    vec3d a_point = world.gravity_accel_from(sat_id, earth_id);
+
+    // Zonal, J_degree
+    earth->gravity_model = GravityModel::zonal;
+    earth->degree = degree;
+    vec3d a_zonal = world.gravity_accel_from(sat_id, earth_id);
+
+    // Spherical Harmonics, n = degree, m = 0
+    earth->gravity_model = GravityModel::spherical_harmonics;
+    earth->degree = degree;
+    earth->order = 0;
+    read_egm2008(
+        std::string(PROJECT_ROOT) + "/scratch/egm2008_120.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    vec3d a_sphh = world.gravity_accel_from(sat_id, earth_id);
+
+    std::println("Spherical Harmonics Diagnostic -----------------------------");
+    std::println("a_point = {} (mag = {})", a_point, a_point.norm());
+    std::println("a_zonal = {} (mag = {})", a_zonal, a_zonal.norm());
+    std::println("a_sphh = {} (mag = {})", a_sphh, a_sphh.norm());
+    vec3d error = a_zonal - a_sphh;
+    std::println("error= {} (mag = {})", error, error.norm());
+    std::println("------------------------------------------------------------");
+}
+
+void run_sphh_longitude_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+) {
+    Celestial* earth = world.celestial(earth_id);
+    Celestial* urath = world.celestial(urath_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
+
+    i32 degree = 3;
+    i32 order = 3;
+
+    sat->x_tr.r = 7000.0 * vec3d{std::cos(pio2), 0.0, std::sin(pio2)};
+
+    mat3d earth_tilt_dcm = rotX(23.44 * deg_to_rad);
+    earth->x_att.q = dcm_to_ep(earth_tilt_dcm);
+
+    // Spherical Harmonics, n = 2, m = 0
+    earth->gravity_model = GravityModel::spherical_harmonics;
+    earth->degree = degree;
+    earth->order = 0;
+    read_egm2008(
+        std::string(PROJECT_ROOT) + "/scratch/egm2008_120.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    vec3d a_sphh = world.gravity_accel_from(sat_id, earth_id);
+
+    std::println("Spherical Harmonics Diagnostic -----------------------------");
+    std::println("a_sphh = {} (mag = {})", a_sphh, a_sphh.norm());
+    std::println("------------------------------------------------------------");
 }
