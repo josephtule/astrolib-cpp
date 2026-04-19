@@ -200,8 +200,8 @@ inline void norm_legendre(
     f64 cphi = std::cos(pio2 - phi);
     f64 sphi = std::sin(pio2 - phi);
 
-    if (cphi <= tol) cphi = 0;
-    if (sphi <= tol) sphi = 0;
+    if (std::abs(cphi) <= tol) cphi = 0;
+    if (std::abs(sphi) <= tol) sphi = 0;
 
     f64 sqrt3 = std::sqrt(3);
     P(0, 0) = 1.0;

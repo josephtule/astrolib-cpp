@@ -47,7 +47,7 @@ svec<T> vieta(const eref<const vecX<T>>& poles) {
 
     for (int i = 0; i < poles.size(); ++i) {
         svec<T> new_poly(poly.size() + 1, T(0));
-        for (size_t j = 0; j < poly.size(); ++j) {
+        for (i32 j = 0; j < poly.size(); ++j) {
             new_poly[j] += poly[j];                 // coefficient without this root
             new_poly[j + 1] += -poles(i) * poly[j]; // include this root
         }
@@ -65,8 +65,8 @@ vecX<T> conv(const eref<const vecX<T>>& a, const eref<const vecX<T>>& b) {
 
     std::vector<T> y(a.size() + b.size() - 1, T{});
 
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        for (std::size_t j = 0; j < b.size(); ++j) {
+    for (i32 i = 0; i < a.size(); ++i) {
+        for (i32 j = 0; j < b.size(); ++j) {
             y[i + j] += a[i] * b[j];
         }
     }

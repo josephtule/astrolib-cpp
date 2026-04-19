@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/body.hpp"
+#include "util/constants.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
@@ -214,3 +216,184 @@ inline vec4<T> dcm_to_ep(mat3<T> R) {
 
     return q;
 }
+
+inline vec3d body_to_centric(vec3d r_body, UAngle u_out = UAngle::degree) {
+    vec3d llr = vec3d::Zero();
+
+    f64 x = r_body(0);
+    f64 y = r_body(1);
+    f64 z = r_body(2);
+
+    f64 r = r_body.norm();
+    f64 r_tilde = std::sqrt(x * x + y * y);
+
+    // Planetocentric latitude/longitude (radians)
+    f64 longitude = (r_tilde > 0.0) ? std::atan2(y, x) : 0.0;
+    f64 latitude = std::atan2(z, r_tilde);
+
+    // Convert
+    if (u_out == UAngle::degree) {
+        longitude *= rad_to_deg;
+        latitude *= rad_to_deg;
+    }
+
+    llr << latitude, longitude, r;
+    return llr;
+}
+
+inline vec3d centric_to_body(vec3d llr, UAngle u_in = UAngle::degree) {
+    vec3d r_body = vec3d::Zero();
+
+    f64 latitude = llr(0);
+    f64 longitude = llr(1);
+    f64 r = llr(2);
+
+    if (u_in != UAngle::radian) {
+        latitude = convert_angle(latitude, u_in, UAngle::radian);
+        longitude = convert_angle(longitude, u_in, UAngle::radian);
+    }
+
+    f64 slat = std::sin(latitude);
+    f64 clat = std::cos(latitude);
+    f64 slon = std::sin(longitude);
+    f64 clon = std::cos(longitude);
+
+    r_body = vec3d{r * clat * clon, r * clat * slon, r * slat};
+
+    return r_body;
+}
+
+inline vec3d body_to_detic(
+    vec3d r_body,
+    Celestial& body,
+    UAngle u_out = UAngle::degree,
+    f64 tol = tol_strict
+) {
+    vec3d llh = vec3d::Zero();
+
+    f64 x = r_body(0);
+    f64 y = r_body(1);
+    f64 z = r_body(2);
+
+    f64 r_tilde2 = x * x + y * y;
+    f64 r_tilde = std::sqrt(r_tilde2);
+
+    // Ellipsoid
+    f64 a = body.semimajor_axis;
+    f64 f = body.flattening;
+    f64 b = a * (1.0 - f);
+
+    f64 e2 = (a * a - b * b) / (a * a);
+    f64 ep2 = (a * a - b * b) / (b * b);
+
+    f64 longitude = (r_tilde > tol) ? std::atan2(y, x) : 0.0;
+
+    f64 latitude, h;
+
+    // Special handling near poles
+    if (r_tilde < tol) {
+        latitude = (z >= 0.0 ? pio2 : -pio2);
+        h = std::abs(z) - b;
+    } else {
+        // Closed-form solution
+        f64 F = 54.0 * b * b * z * z;
+        f64 G = r_tilde2 + (1.0 - e2) * z * z - e2 * (a * a - b * b);
+
+        f64 c = (std::abs(G) > tol) ? (e2 * e2 * F * r_tilde2) / (G * G * G) : 0.0;
+
+        f64 s = std::cbrt(1.0 + c + std::sqrt(c * c + 2.0 * c));
+        f64 P = F / (3.0 * (s + 1.0 / s + 1.0) * (s + 1.0 / s + 1.0) * G * G);
+        f64 Q = std::sqrt(1.0 + 2.0 * e2 * e2 * P);
+
+        f64 r0 = -P * e2 * r_tilde / (1.0 + Q)
+                 + std::sqrt(
+                     0.5 * a * a * (1.0 + 1.0 / Q)
+                     - P * (1.0 - e2) * z * z / (Q * (1.0 + Q)) - 0.5 * P * r_tilde2
+                 );
+
+        f64 U = std::sqrt((r_tilde - e2 * r0) * (r_tilde - e2 * r0) + z * z);
+        f64 V = std::sqrt((r_tilde - e2 * r0) * (r_tilde - e2 * r0) + (1.0 - e2) * z * z);
+        f64 z0 = b * b * z / (a * V);
+
+        latitude = std::atan2(z + ep2 * z0, r_tilde);
+        h = U * (1.0 - b * b / (a * V));
+    }
+
+    if (u_out == UAngle::degree) {
+        longitude *= rad_to_deg;
+        latitude *= rad_to_deg;
+    }
+
+    llh << latitude, longitude, h;
+    return llh;
+}
+
+inline vec3d detic_to_body(
+    vec3d llh,
+    const Celestial& body,
+    UAngle u_in = UAngle::degree
+) {
+    vec3d r_body = vec3d::Zero();
+
+    f64 latitude = llh(0);
+    f64 longitude = llh(1);
+    f64 h = llh(2);
+
+    if (u_in != UAngle::radian) {
+        latitude = convert_angle(latitude, u_in, UAngle::radian);
+        longitude = convert_angle(longitude, u_in, UAngle::radian);
+    }
+
+    f64 slat = std::sin(latitude);
+    f64 clat = std::cos(latitude);
+    f64 slon = std::sin(longitude);
+    f64 clon = std::cos(longitude);
+
+    // Ellipsoid
+    f64 a = body.semimajor_axis;
+    f64 f = body.flattening;
+    f64 e2 = 2.0 * f - f * f;
+
+    f64 N = a / std::sqrt(1.0 - e2 * slat * slat);
+
+    r_body = vec3d{
+        (N + h) * clat * clon,
+        (N + h) * clat * slon,
+        (N * (1.0 - e2) + h) * slat
+    };
+
+    return r_body;
+}
+
+inline vec3d get_radec(
+    ecref<vec3d> r_obj,
+    ecref<vec3d> r_stat,
+    UAngle u_out = UAngle::degree
+) {
+    // r_obj and r_stat must be in the same inertial frame
+    vec3d radec;
+
+    // Topocentric (station relative position of obj)
+    vec3d r_topo = r_obj - r_stat;
+    f64 x = r_topo(0);
+    f64 y = r_topo(1);
+    f64 z = r_topo(2);
+    f64 rho = r_topo.norm();
+
+    // Compute right ascension and declination
+    f64 ra = atan2(y, x);
+    f64 dec = atan2(z, std::sqrt(x * x + y * y));
+
+    if (u_out == UAngle::degree) {
+        ra *= rad_to_deg;
+        dec *= rad_to_deg;
+    }
+
+    radec = vec3d{ra, dec, rho};
+
+    return radec;
+}
+
+// inline vec3d radec_to_azel(vec3d radec, vec3d stat_geod, f64 theta) {
+// TODO: do later
+// }

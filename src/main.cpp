@@ -46,6 +46,13 @@ void run_spherical_harmonics_diag(
     EntityId sat_id,
     EntityId stat_id
 );
+void run_sphh_longitude_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+);
 
 int main() {
     World world;
@@ -84,19 +91,8 @@ int main() {
     // run_station_geo_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_zonal_orientation_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_zonal_pert_diag(world, earth_id, urath_id, sat_id, stat_id);
-    run_spherical_harmonics_diag(world, earth_id, urath_id, sat_id, stat_id);
-
-    // matXd C, S;
-    // i32 degree = 6;
-    // i32 order = 0;
-    // matXd P = matXd::Zero(degree + 3, order + 3);
-    // matXd scales = matXd::Zero(degree + 3, order + 3);
-    // read_egm2008(std::string(PROJECT_ROOT) + "/scratch/egm2008_120.txt", C, S, 6, 0);
-    // for (i32 i = 0; i < 7; ++i) {
-    //     std::println("{:.18f},", C(i, 0) * norm_factor(i, order));
-    // }
-    // std::println();
-    // std::cout << C << std::endl;
+    // run_spherical_harmonics_diag(world, earth_id, urath_id, sat_id, stat_id);
+    run_sphh_longitude_diag(world, earth_id, urath_id, sat_id, stat_id);
 
     return 0;
 }
@@ -308,18 +304,14 @@ void run_sphh_longitude_diag(
     Satellite* sat = world.satellite(sat_id);
     Station* stat = world.station(stat_id);
 
-    i32 degree = 3;
-    i32 order = 3;
-
-    sat->x_tr.r = 7000.0 * vec3d{std::cos(pio2), 0.0, std::sin(pio2)};
-
     mat3d earth_tilt_dcm = rotX(23.44 * deg_to_rad);
     earth->x_att.q = dcm_to_ep(earth_tilt_dcm);
 
-    // Spherical Harmonics, n = 2, m = 0
+    i32 degree = 6;
+    i32 order = 6;
     earth->gravity_model = GravityModel::spherical_harmonics;
     earth->degree = degree;
-    earth->order = 0;
+    earth->order = order;
     read_egm2008(
         std::string(PROJECT_ROOT) + "/scratch/egm2008_120.txt",
         earth->C,
@@ -327,9 +319,58 @@ void run_sphh_longitude_diag(
         earth->degree,
         earth->order
     );
-    vec3d a_sphh = world.gravity_accel_from(sat_id, earth_id);
+
+    // Spherical Harmonics, zonal only
+    vec3d llh = vec3d{-45.0, 0, 7000.0}; // in body fixed frame
+    vec3d r_body = detic_to_body(llh, *earth); // in body fixed frame
+    sat->x_tr.r = ep_rotate_fast_passive(ep_conj(earth->x_att.q), r_body); // back to inertial
+    earth->degree = degree;
+    earth->order = 0;
+    vec3d a_sphh_zonal_long1 = world.gravity_accel_from(sat_id, earth_id);
+
+    // Spherical Harmonics, zonal only, different longitude
+    llh = vec3d{-45.0, 57.0, 7000.0};
+    r_body = detic_to_body(llh, *earth); 
+    sat->x_tr.r = ep_rotate_fast_passive(ep_conj(earth->x_att.q), r_body);
+    vec3d a_sphh_zonal_long2 = world.gravity_accel_from(sat_id, earth_id);
+
+    // Spherical Harmonics
+    llh = vec3d{-45.0, 0.0, 7000.0};
+    r_body = detic_to_body(llh, *earth);
+    sat->x_tr.r = ep_rotate_fast_passive(ep_conj(earth->x_att.q), r_body);
+    earth->order = order;
+    vec3d a_sphh_long1 = world.gravity_accel_from(sat_id, earth_id);
+
+    // Spherical Harmonics, different longitude
+    llh = vec3d{-45.0, 57.0, 7000.0};
+    r_body = detic_to_body(llh, *earth);
+    sat->x_tr.r = ep_rotate_fast_passive(ep_conj(earth->x_att.q), r_body);
+    vec3d a_sphh_long2 = world.gravity_accel_from(sat_id, earth_id);
 
     std::println("Spherical Harmonics Diagnostic -----------------------------");
-    std::println("a_sphh = {} (mag = {})", a_sphh, a_sphh.norm());
+    std::println(
+        "a_sphh_zonal_long1 = {} (mag = {})",
+        a_sphh_zonal_long1,
+        a_sphh_zonal_long1.norm()
+    );
+    std::println(
+        "a_sphh_zonal_long2 = {} (mag = {})",
+        a_sphh_zonal_long2,
+        a_sphh_zonal_long2.norm()
+    );
+    f64 zonal_long_mag_error = a_sphh_zonal_long2.norm() - a_sphh_zonal_long1.norm();
+    std::println(
+        "zonal_long_error = {}",
+        zonal_long_mag_error
+    );
+
+    std::println("a_sphh_long1 = {} (mag = {})", a_sphh_long1, a_sphh_long1.norm());
+    std::println("a_sphh_long2 = {} (mag = {})", a_sphh_long2, a_sphh_long2.norm());
+    vec3d sphh_long_error = a_sphh_long2 - a_sphh_long1;
+    std::println(
+        "sphh_long_error = {} (mag = {})",
+        sphh_long_error,
+        sphh_long_error.norm()
+    );
     std::println("------------------------------------------------------------");
 }
