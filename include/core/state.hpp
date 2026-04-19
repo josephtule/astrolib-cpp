@@ -15,12 +15,13 @@ struct StateAtt {
 
 // Derivatives
 struct DerivTr {
-    vec3d dr, dv;
+    vec3d dr = vec3d::Zero();
+    vec3d dv = vec3d::Zero();
 };
 
 struct DerivAtt {
-    vec4d dq;
-    vec3d dw;
+    vec4d dq = vec4d::Zero();
+    vec3d dw = vec3d::Zero();
 };
 
 // Translation Operations

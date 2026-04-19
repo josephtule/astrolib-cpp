@@ -51,7 +51,7 @@ inline mat3<T> rotZ_active(T angle, UAngle uin = UAngle::radian) {
     return rotZ(angle, uin).transpose();
 }
 
-enum struct RotAxis { x = 1, y = 2, z = 3 };
+enum struct RotAxis : i32 { x = 1, y = 2, z = 3 };
 
 template <typename T>
 inline mat3<T> rot(T angle, RotAxis axis, UAngle uin = UAngle::radian) {
@@ -89,10 +89,10 @@ inline mat3<T> ea_to_dcm(
     UAngle units_in = UAngle::radian
 ) {
     for (int i = 0; i < 3; i++) {
-        angles[i] = convert_angle(angles[i], units_in, UAngle::radian);
+        angles(i) = convert_angle(angles(i), units_in, UAngle::radian);
     }
 
-    mat3<T> R = rot(angles[2], seq[2]) * rot(angles[1], seq[1]) * rot(angles[0], seq[0]);
+    mat3<T> R = rot(angles(2), seq[2]) * rot(angles(1), seq[1]) * rot(angles(0), seq[0]);
 
     return R;
 }
@@ -101,10 +101,10 @@ inline mat3<T> ea_to_dcm(
 template <typename T>
 inline mat3<T> ep_to_dcm(ecref<vec4d> q) {
     mat3<T> R;
-    T q1 = q[0];
-    T q2 = q[1];
-    T q3 = q[2];
-    T q4 = q[3];
+    T q1 = q( 0 );
+    T q2 = q( 1 );
+    T q3 = q( 2 );
+    T q4 = q( 3 );
 
     T q11 = q1 * q1;
     T q22 = q2 * q2;
@@ -134,8 +134,8 @@ template <typename T>
 inline vec4<T> ep_mult(vec4<T> a, vec4<T> b) {
     vec3<T> av = a.template segment<3>(0);
     vec3<T> bv = b.template segment<3>(0);
-    T as = a[3];
-    T bs = b[3];
+    T as = a( 3 );
+    T bs = b( 3 );
 
     T qs = as * bs - av.dot(bv);
     vec3<T> qv = as * bv + bs * av + av.cross(bv);
@@ -146,7 +146,7 @@ inline vec4<T> ep_mult(vec4<T> a, vec4<T> b) {
 
 template <typename T>
 inline vec4<T> ep_conj(vec4<T> q) {
-    vec4<T> qc = {-q[0], -q[1], -q[2], q[3]};
+    vec4<T> qc = {-q( 0 ), -q( 1 ), -q( 2 ), q( 3 )};
     return qc;
 }
 
@@ -154,7 +154,7 @@ template <typename T>
 inline vec3<T> ep_rotate_active(vec4<T> q, vec3<T> v) {
     // this is an active rotation B -> N
     // assume q is normalized
-    vec4<T> vq = {v[0], v[1], v[2], static_cast<T>(0)};
+    vec4<T> vq = {v( 0 ), v( 1 ), v( 2 ), static_cast<T>(0)};
     vec4<T> qc = ep_conj(q);
     vec3<T> vp = ep_mult(ep_mult(q, vq), qc);
 
@@ -165,7 +165,7 @@ inline vec3<T> ep_rotate_fast_active(vec4<T> q, vec3<T> v) {
     // this is an active rotation [NB]: B -> N
     // assume q is normalized
     vec3<T> u = q.template segment<3>(0);
-    T s = q[3];
+    T s = q( 3 );
     vec3<T> uxv = u.cross(v);
     vec3<T> vp = v + 2 * s * uxv + 2 * (u.dot(v) * u - u.dot(u) * v);
 

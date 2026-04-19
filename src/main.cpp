@@ -32,13 +32,6 @@ void run_zonal_orientation_diag(
     EntityId sat_id,
     EntityId stat_id
 );
-void run_zonal_pert_diag(
-    World& world,
-    EntityId earth_id,
-    EntityId urath_id,
-    EntityId sat_id,
-    EntityId stat_id
-);
 void run_spherical_harmonics_diag(
     World& world,
     EntityId earth_id,
@@ -90,7 +83,6 @@ int main() {
     // run_gravity_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_station_geo_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_zonal_orientation_diag(world, earth_id, urath_id, sat_id, stat_id);
-    // run_zonal_pert_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_spherical_harmonics_diag(world, earth_id, urath_id, sat_id, stat_id);
     run_sphh_longitude_diag(world, earth_id, urath_id, sat_id, stat_id);
 
@@ -196,52 +188,6 @@ void run_zonal_orientation_diag(
     std::println("------------------------------------------------------------");
 }
 
-void run_zonal_pert_diag(
-    World& world,
-    EntityId earth_id,
-    EntityId urath_id,
-    EntityId sat_id,
-    EntityId stat_id
-) {
-    Celestial* earth = world.celestial(earth_id);
-    Celestial* urath = world.celestial(urath_id);
-    Satellite* sat = world.satellite(sat_id);
-    Station* stat = world.station(stat_id);
-
-    sat->x_tr.r = 7000.0 * vec3d{std::cos(pio2), 0.0, std::sin(pio2)};
-
-    mat3d earth_tilt_dcm = rotX(23.44 * deg_to_rad);
-    earth->x_att.q = dcm_to_ep(earth_tilt_dcm);
-
-    // point (tilted = untilted)
-    earth->gravity_model = GravityModel::pointmass;
-    vec3d a_point_tilt = world.gravity_accel_from(sat_id, earth_id);
-
-    // zonal (tilted)
-    earth->gravity_model = GravityModel::zonal;
-    vec3d a_zonal_tilt = world.gravity_accel_from(sat_id, earth_id);
-
-    vec3d r_rel_inertial = sat->x_tr.r - earth->x_tr.r;
-    vec3d r_rel_body = ep_rotate_fast_passive(earth->x_att.q, r_rel_inertial);
-    vec3d a_zonal_pert = pert_zonal_single(
-        r_rel_body,
-        earth->mu,
-        earth->mean_radius,
-        earth->degree,
-        earth->J
-    );
-
-    a_zonal_pert = ep_rotate_fast_passive(ep_conj(earth->x_att.q), a_zonal_pert);
-
-    std::println("Zonal Perturbation Diagnostic ------------------------------");
-    std::println("a_point = {} (mag = {})", a_point_tilt, a_point_tilt.norm());
-    std::println("a_zonal = {} (mag = {})", a_zonal_tilt, a_zonal_tilt.norm());
-    std::println("pert zonal = {} (mag = {})", a_zonal_pert, a_zonal_pert.norm());
-    vec3d error = (a_point_tilt + a_zonal_pert) - a_zonal_tilt;
-    std::println("error = {}, (mag = {})", error, error.norm()); // should be about 0
-    std::println("------------------------------------------------------------");
-}
-
 void run_spherical_harmonics_diag(
     World& world,
     EntityId earth_id,
@@ -321,16 +267,17 @@ void run_sphh_longitude_diag(
     );
 
     // Spherical Harmonics, zonal only
-    vec3d llh = vec3d{-45.0, 0, 7000.0}; // in body fixed frame
+    vec3d llh = vec3d{-45.0, 0, 7000.0};       // in body fixed frame
     vec3d r_body = detic_to_body(llh, *earth); // in body fixed frame
-    sat->x_tr.r = ep_rotate_fast_passive(ep_conj(earth->x_att.q), r_body); // back to inertial
+    sat->x_tr.r
+        = ep_rotate_fast_passive(ep_conj(earth->x_att.q), r_body); // back to inertial
     earth->degree = degree;
     earth->order = 0;
     vec3d a_sphh_zonal_long1 = world.gravity_accel_from(sat_id, earth_id);
 
     // Spherical Harmonics, zonal only, different longitude
     llh = vec3d{-45.0, 57.0, 7000.0};
-    r_body = detic_to_body(llh, *earth); 
+    r_body = detic_to_body(llh, *earth);
     sat->x_tr.r = ep_rotate_fast_passive(ep_conj(earth->x_att.q), r_body);
     vec3d a_sphh_zonal_long2 = world.gravity_accel_from(sat_id, earth_id);
 
@@ -359,10 +306,7 @@ void run_sphh_longitude_diag(
         a_sphh_zonal_long2.norm()
     );
     f64 zonal_long_mag_error = a_sphh_zonal_long2.norm() - a_sphh_zonal_long1.norm();
-    std::println(
-        "zonal_long_error = {}",
-        zonal_long_mag_error
-    );
+    std::println("zonal_long_error = {}", zonal_long_mag_error);
 
     std::println("a_sphh_long1 = {} (mag = {})", a_sphh_long1, a_sphh_long1.norm());
     std::println("a_sphh_long2 = {} (mag = {})", a_sphh_long2, a_sphh_long2.norm());

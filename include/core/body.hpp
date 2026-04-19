@@ -5,12 +5,12 @@
 #include "util/vecdefs.hpp"
 #include <string>
 
-enum struct BodyKind { celestial, satellite, station };
+enum struct BodyKind { unknown, celestial, satellite, station };
 
 struct Body {
-    EntityId id;
+    EntityId id = kInvalidEntityId;
     std::string name;
-    BodyKind kind;
+    BodyKind kind = BodyKind::unknown;
 
     StateTr x_tr;
     StateAtt x_att;
@@ -58,7 +58,7 @@ struct Celestial : public Body {
         // in rad/s
         if (use_simple_spin) {
             spin_rate = spin_rate_;
-            x_att.w[2] = spin_rate;
+            x_att.w(2) = spin_rate;
         }
     }
 };
