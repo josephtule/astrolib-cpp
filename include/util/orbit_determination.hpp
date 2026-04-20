@@ -337,3 +337,37 @@ inline StateTr iod_laplace(
     return StateTr{.r = r2, .v = v2};
 }
 // TODO: overloads for previous iod
+
+enum struct StatObservationModel {
+    // Coordinates that ground stations record from space objects
+    unknown,
+    topo_radec,
+    topo_azel,
+    topo_inertial_cart, // inertial relative to station
+    topo_fixed_cart,    // body fixed relative to station
+    // TODO: create observation models and jacobians for these (to use in EKF)
+};
+// TODO: not sure if i should do structs and enum for observation types or variants
+struct StatObservation {
+    StatObservationModel obs_model = StatObservationModel::unknown;
+};
+struct StatRADecObsv : public StatObservation {
+    f64 ra = 0.0;
+    f64 dec = 0.0;
+};
+struct StatAzElObsv : public StatObservation {
+    f64 az = 0.0;
+    f64 el = 0.0;
+};
+
+enum struct VehicleObservationModel {};
+
+inline void LUMVEstat(
+    StateTr x_0, // initial guess
+    StatObservationModel obs_model = StatObservationModel::topo_inertial_cart,
+    i32 max_iter = 10
+) {
+    // Nonlinear Least Squares / Linear, Unbiased, Minimum Variance Estimate (NLS/LUMVE)
+    // This is a nonlinear least squares iterative batch estimator for ground station
+    // observers to perform orbit determination corrections
+}
