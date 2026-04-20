@@ -1,12 +1,14 @@
 #include "core/body.hpp"
+#include "core/dynamics_rotational.hpp"
 #include "core/dynamics_translational.hpp"
 #include "core/entity.hpp"
 #include "core/planets.hpp"
 #include "core/state.hpp"
+#include "core/transform.hpp"
 #include "core/world.hpp"
 #include "util/constants.hpp"
-#include "util/transform.hpp"
 #include "util/vecdefs.hpp"
+#include "core/time.hpp"
 
 #include <iostream>
 #include <print>
@@ -40,6 +42,13 @@ void run_spherical_harmonics_diag(
     EntityId stat_id
 );
 void run_sphh_longitude_diag(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+);
+void run_epkde(
     World& world,
     EntityId earth_id,
     EntityId urath_id,
@@ -84,7 +93,8 @@ int main() {
     // run_station_geo_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_zonal_orientation_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_spherical_harmonics_diag(world, earth_id, urath_id, sat_id, stat_id);
-    run_sphh_longitude_diag(world, earth_id, urath_id, sat_id, stat_id);
+    // run_sphh_longitude_diag(world, earth_id, urath_id, sat_id, stat_id);
+    run_epkde(world, earth_id, urath_id, sat_id, stat_id);
 
     return 0;
 }
@@ -317,4 +327,22 @@ void run_sphh_longitude_diag(
         sphh_long_error.norm()
     );
     std::println("------------------------------------------------------------");
+}
+
+void run_epkde(
+    World& world,
+    EntityId earth_id,
+    EntityId urath_id,
+    EntityId sat_id,
+    EntityId stat_id
+) {
+    Celestial* earth = world.celestial(earth_id);
+
+    vec4d q = q_default;
+    vec3d w = earth->spin_rate * axis_z;
+
+    vec4d q_dot = k_eulerparams(q, w);
+    std::println("q = {}", q);
+    std::println("w = {}", w);
+    std::println("q_dot = {}", q_dot);
 }

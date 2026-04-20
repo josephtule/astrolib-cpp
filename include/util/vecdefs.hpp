@@ -117,3 +117,15 @@ using mat12f = eig::Matrix<f32, 12, 12>;
 const vec3d axis_x = vec3d{1.0, 0.0, 0.0};
 const vec3d axis_y = vec3d{0.0, 1.0, 0.0};
 const vec3d axis_z = vec3d{0.0, 0.0, 1.0};
+
+const vec2d vec2d0 = vec2d::Zero();
+const vec3d vec3d0 = vec3d::Zero();
+const vec4d vec4d0 = vec4d::Zero();
+const vec5d vec5d0 = vec5d::Zero();
+const vec6d vec6d0 = vec6d::Zero();
+const vec7d vec7d0 = vec7d::Zero();
+const vec8d vec8d0 = vec8d::Zero();
+const vec9d vec9d0 = vec9d::Zero();
+const vec10d vec10d0 = vec10d::Zero();
+const vec11d vec11d0 = vec11d::Zero();
+const vec12d vec12d0 = vec12d::Zero();

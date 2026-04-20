@@ -3,7 +3,7 @@
 #include "core/dynamics_translational.hpp"
 #include "core/entity.hpp"
 #include "core/state.hpp"
-#include "util/transform.hpp"
+#include "core/transform.hpp"
 #include "util/vecdefs.hpp"
 #include <cstddef>
 #include <memory>
@@ -93,19 +93,19 @@ EntityId World::insert_station(std::unique_ptr<Station> stat) {
 bool World::is_celestial(EntityId id) const {
     const auto ptr = body(id);
     if (ptr == nullptr) return false;
-    if (ptr->kind != BodyKind::celestial) return false;
+    if (ptr->body_type != BodyType::celestial) return false;
     return true;
 }
 bool World::is_satellite(EntityId id) const {
     const auto ptr = body(id);
     if (ptr == nullptr) return false;
-    if (ptr->kind != BodyKind::satellite) return false;
+    if (ptr->body_type != BodyType::satellite) return false;
     return true;
 }
 bool World::is_station(EntityId id) const {
     const auto ptr = body(id);
     if (ptr == nullptr) return false;
-    if (ptr->kind != BodyKind::station) return false;
+    if (ptr->body_type != BodyType::station) return false;
     return true;
 }
 

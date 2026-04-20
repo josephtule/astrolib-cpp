@@ -5,12 +5,12 @@
 #include "util/vecdefs.hpp"
 #include <string>
 
-enum struct BodyKind { unknown, celestial, satellite, station };
+enum struct BodyType { unknown, celestial, satellite, station };
 
 struct Body {
     EntityId id = kInvalidEntityId;
     std::string name;
-    BodyKind kind = BodyKind::unknown;
+    BodyType body_type = BodyType::unknown;
 
     StateTr x_tr;
     StateAtt x_att;
@@ -50,7 +50,7 @@ struct Celestial : public Body {
 
     // Constructor(s)
     Celestial() {
-        kind = BodyKind::celestial;
+        body_type = BodyType::celestial;
         emits_gravity = true;
     }
 
@@ -70,7 +70,7 @@ struct Satellite : public Body {
     mat3d I_inv = mat3d::Identity();
 
     // Constructor(s)
-    Satellite() { kind = BodyKind::satellite; }
+    Satellite() { body_type = BodyType::satellite; }
 };
 
 struct Station : public Body {
@@ -81,7 +81,7 @@ struct Station : public Body {
 
     // Constructor(s)
     Station() {
-        kind = BodyKind::station;
+        body_type = BodyType::station;
         propagate_att = false;
         propagate_tr = false;
     }
