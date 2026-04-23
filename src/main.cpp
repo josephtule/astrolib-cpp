@@ -1,16 +1,17 @@
 #include "core/body.hpp"
 #include "core/dynamics_rotational.hpp"
-#include "core/dynamics_translational.hpp"
+#include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
 #include "core/planets.hpp"
 #include "core/state.hpp"
+#include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "util/constants.hpp"
+#include "util/math.hpp"
 #include "util/vecdefs.hpp"
-#include "core/time.hpp"
 
-#include <iostream>
+#include <cmath>
 #include <print>
 
 void run_gravity_diag(
@@ -55,6 +56,7 @@ void run_epkde(
     EntityId sat_id,
     EntityId stat_id
 );
+void run_time_diag();
 
 int main() {
     World world;
@@ -94,7 +96,27 @@ int main() {
     // run_zonal_orientation_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_spherical_harmonics_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_sphh_longitude_diag(world, earth_id, urath_id, sat_id, stat_id);
-    run_epkde(world, earth_id, urath_id, sat_id, stat_id);
+    // run_epkde(world, earth_id, urath_id, sat_id, stat_id);
+    JulianDate jd{.day = 2451545.0, .frac = 0.0};
+
+    std::println("{}", gmst_from_jd(jd));
+
+    f64 angle = 1.1 * pi;
+    std::println("angle: {}\nwrapped: {}", angle, wrap_angle(angle, -pi, pi));
+
+    EarthNutationParams params{};
+    EarthNutationModel model = EarthNutationModel::IAU1996;
+    i32 precision = 10;
+    i32 lineskips = 3;
+    load_nutation_model(
+        std::string(PROJECT_ROOT) + "/scratch/assets/nut_IERS1996.dat.txt",
+        params,
+        model,
+        precision,
+        lineskips
+    );
+
+    std::println("{}", params.Psisin);
 
     return 0;
 }
@@ -231,7 +253,7 @@ void run_spherical_harmonics_diag(
     earth->degree = degree;
     earth->order = 0;
     read_egm2008(
-        std::string(PROJECT_ROOT) + "/scratch/egm2008_120.txt",
+        std::string(PROJECT_ROOT) + "/scratch/assets/egm2008_120.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -269,7 +291,7 @@ void run_sphh_longitude_diag(
     earth->degree = degree;
     earth->order = order;
     read_egm2008(
-        std::string(PROJECT_ROOT) + "/scratch/egm2008_120.txt",
+        std::string(PROJECT_ROOT) + "/scratch/assets/egm2008_120.txt",
         earth->C,
         earth->S,
         earth->degree,

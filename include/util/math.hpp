@@ -98,3 +98,56 @@ inline T vector_angle(vecX<T> a, vecX<T> b, UAngle u_out = UAngle::radian) {
 
     return angle;
 }
+
+template <typename T>
+inline T wrap_angle(
+    T angle,
+    T min = 0,
+    T max = 2.0 * pi,
+    UAngle u_in = UAngle::radian,
+    UAngle u_out = UAngle::radian
+) {
+    if (u_in != UAngle::radian) {
+        angle = convert_angle(angle, u_in, UAngle::radian);
+        min = convert_angle(min, u_in, UAngle::radian);
+        max = convert_angle(max, u_in, UAngle::radian);
+    }
+
+    T width = max - min;
+    T wrapped = std::fmod(angle - min, width);
+    if (wrapped < 0) {
+        wrapped += width;
+    }
+    angle = wrapped + min;
+
+    if (u_out != UAngle::radian) {
+        angle = convert_angle(angle, UAngle::radian, u_out);
+    }
+
+    return angle;
+}
+
+struct DMSAngle {
+    f64 degree = 0.0;
+    f64 minute = 0.0;
+    f64 second = 0.0;
+};
+
+inline f64 DMS_to_deg(f64 degrees, f64 minutes, f64 seconds) {
+    f64 degs = degrees + minutes / 60.0 + seconds / 3600.0;
+    return degs;
+}
+
+inline f64 DMS_to_deg(DMSAngle dms) {
+    return DMS_to_deg(dms.degree, dms.minute, dms.second);
+}
+
+template <typename T>
+inline T sind(T val) {
+    return std::sin(val * deg_to_rad);
+}
+
+template <typename T>
+inline T cosd(T val) {
+    return std::cos(val * deg_to_rad);
+}

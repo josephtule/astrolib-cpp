@@ -4,9 +4,7 @@
 #include "util/vecdefs.hpp"
 #include <cmath>
 #include <cstddef>
-#include <fstream>
-#include <iostream>
-#include <sstream>
+
 
 inline f64 inv_r3_safe(const ecref<vec3d> r, f64 epsilon = tol_strict) {
     f64 r_mag = std::sqrt(r.squaredNorm());
@@ -261,60 +259,3 @@ inline vec3d accel_gravity_spherical_harmonics(
     return a;
 }
 
-inline bool read_egm2008(
-    std::string filename,
-    matXd& C,
-    matXd& S,
-    i32 degree,
-    i32 order,
-    i32 lineskips = 0
-) {
-    order = std::min(order, degree);
-    C = matXd::Zero(degree + 1, order + 1);
-    S = matXd::Zero(degree + 1, order + 1);
-
-    std::ifstream file(filename);
-    if (!file) return false;
-
-    std::string line;
-
-    for (i32 i = 0; i < lineskips && std::getline(file, line); ++i) {}
-
-    while (getline(file, line)) {
-
-        std::replace(line.begin(), line.end(), 'D', 'E');
-        std::replace(line.begin(), line.end(), 'd', 'e');
-
-        std::istringstream iss(line);
-
-        i32 n, m;
-        f64 c, s;
-        if (!(iss >> n >> m >> c >> s)) continue;
-
-        if (n > degree) break;
-        if (m > order) continue;
-
-        C(n, m) = c;
-        S(n, m) = s;
-    }
-    return true;
-}
-
-inline f64 kronecker_delta(i32 n, i32 m) { return n == m ? 1 : 0; }
-inline i64 factorial(int n) {
-    if (n < 0) return 0;
-
-    i64 result = 1;
-    for (int i = 2; i <= n; i++) {
-        result *= i;
-    }
-    return result;
-}
-inline f64 norm_factor(i32 n, i32 m) {
-    // multiply to denormalize, divide to normalize
-    f64 factor = std::sqrt(
-        (2.0 - kronecker_delta(0, m)) * (2.0 * n + 1) * static_cast<f64>(factorial(n - m))
-        / static_cast<f64>(factorial(n + m))
-    );
-    return factor;
-}

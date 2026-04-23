@@ -1,9 +1,8 @@
 #pragma once
 
-#include "core/body.hpp"
 #include "core/state.hpp"
+#include "core/transform.hpp"
 #include "util/constants.hpp"
-#include "util/transform.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
@@ -24,7 +23,7 @@ struct OEFlight {}; // AKA ADBARV
 struct OEPoincare {};
 struct OEDelaunay {};
 
-inline OEClassical rv_to_coe(
+inline OEClassical rv_to_classical(
     vec3d r,
     vec3d v,
     f64 mu,
@@ -82,11 +81,11 @@ inline OEClassical rv_to_coe(
     f64 tol = tol_strict
 ) {
     OEClassical coe;
-    rv_to_coe(x_tr.r, x_tr.v, mu, uangle_out, tol);
+    rv_to_classical(x_tr.r, x_tr.v, mu, uangle_out, tol);
     return coe;
 }
 
-inline StateTr coe_to_rv(
+inline StateTr classical_to_rv(
     f64 sma,
     f64 ecc,
     f64 inc,
@@ -153,7 +152,7 @@ inline StateTr coe_to_rv(
     f64 tol = tol_strict
 ) {
     StateTr rv;
-    rv = coe_to_rv(
+    rv = classical_to_rv(
         coe.sma,
         coe.ecc,
         coe.inc,
