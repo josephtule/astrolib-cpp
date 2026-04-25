@@ -9,8 +9,10 @@
 #include "core/world.hpp"
 #include "util/constants.hpp"
 #include "util/math.hpp"
+#include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <print>
 
@@ -59,6 +61,7 @@ void run_epkde(
 void run_time_diag();
 
 int main() {
+    std::string pwd = std::string(PROJECT_ROOT);
     World world;
 
     // Earth (at origin, tilted, spinning, zonal)
@@ -97,27 +100,31 @@ int main() {
     // run_spherical_harmonics_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_sphh_longitude_diag(world, earth_id, urath_id, sat_id, stat_id);
     // run_epkde(world, earth_id, urath_id, sat_id, stat_id);
-    JulianDate jd{.day = 2451545.0, .frac = 0.0};
 
-    std::println("{}", gmst_from_jd(jd));
+    LeapSecondParams lsp{
+        .filename = pwd + "/scratch/assets/leap-seconds.list.txt",
+        .lineskips = 85
+    };
+    EarthPolarMotionParams pmp{
+        .filename = pwd + "/scratch/assets/EOP2long.txt",
+        .lineskips = 20,
+        .model = EarthPolarMotionModel::JPLEOP2
+    };
+    EarthNutationParams enp{
+        .filename = pwd + "/scratch/assets/nut_IAU1980.dat.txt",
+        .lineskips = 3,
+        .precision = 106,
+        .approx = false,
+        .model = EarthNutationModel::IAU1980
+    };
+    EarthOrientationParams eop{.leap_seconds = lsp, .nutation = enp, .polar_motion = pmp};
 
-    f64 angle = 1.1 * pi;
-    std::println("angle: {}\nwrapped: {}", angle, wrap_angle(angle, -pi, pi));
-
-    EarthNutationParams params{};
-    EarthNutationModel model = EarthNutationModel::IAU1996;
-    i32 precision = 10;
-    i32 lineskips = 3;
-    load_nutation_model(
-        std::string(PROJECT_ROOT) + "/scratch/assets/nut_IERS1996.dat.txt",
-        params,
-        model,
-        precision,
-        lineskips
-    );
-
-    std::println("{}", params.Psisin);
-
+    auto start = std::chrono::high_resolution_clock::now();
+    bool eop_ok = load_all_eop(eop);
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::println("EOP Loaded: {}", eop_ok);
+    auto duration = (stop - start);
+    print_chrono(duration, UTime::millisecond);
     return 0;
 }
 

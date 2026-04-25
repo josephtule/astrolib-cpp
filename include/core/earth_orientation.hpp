@@ -64,6 +64,16 @@ inline f64 lmst_from_jd(
     return LMST;
 }
 
+inline f64 earth_rot_angle_from_jd(
+    const JulianDate& jd,
+    TimeScale scale_in = TimeScale::ut1,
+    TimeOffsets offsets = TimeOffsets{},
+    UAngle angle_out = UAngle::degree
+) {
+    // Just a wrapper for GMST
+    return gmst_from_jd(jd, scale_in, offsets, angle_out);
+}
+
 /*
 Precession: TT
 Nutation: TT
@@ -81,25 +91,34 @@ enum struct EarthNutationModel {
     IAU1996
 };
 enum struct EarthPrecessionModel {};
-enum struct EarthPolarMotionModel {};
-struct EarthOrientationParams {
-    JulianDate jd;
-    TimeOffsets offsets;
-    EarthNutationModel nutation_model;
-    EarthPrecessionModel precession_model;
-    EarthPolarMotionModel polar_motion_model;
+enum struct EarthPolarMotionModel { JPLEOP2, IERSEOPC01, IERSEOPC04 };
+
+struct LeapSecondParams {
+    std::string filename;
+    i32 lineskips = -1;
+    vecX<JulianDate> jd;
+    vecXd leap_seconds;
+    bool loaded = false;
 };
-inline std::unique_ptr<EarthOrientationParams> load_EOP() {
-    auto eop = std::make_unique<EarthOrientationParams>();
-
-    return eop;
-}
-// load_nutation_model
-// load_precession_model
-// load polar motion model
-
+struct EarthPolarMotionParams {
+    // Common
+    std::string filename;
+    i32 lineskips = -1;
+    EarthPolarMotionModel model;
+    bool loaded = false;
+    UAngle units = UAngle::arcsecond;
+    vecX<JulianDate> jd;
+    vecXd xp, yp;
+    vecXd time_offset;
+};
 struct EarthNutationParams {
     // Common
+    std::string filename;
+    i32 lineskips = -1;
+    EarthNutationModel model = EarthNutationModel::IAU1980;
+    bool approx = false;
+    i32 precision = 106;
+    bool loaded = false;
     vecXd lm, ls, F, D, Om, period;
     // IAU1980
     vecXd Psisin, t_sin, epscos, t_cos;
@@ -107,20 +126,66 @@ struct EarthNutationParams {
     // https://iers-conventions.obspm.fr/content/tn36.pdf
     vecXd lme, lv, le, lma, lj, lS, lu, ln, pa, Psicos, epssin;
 };
+struct EarthOrientationParams {
+    JulianDate jd;
+    TimeOffsets offsets{};
+    LeapSecondParams leap_seconds{};
+    bool loaded = false;
+
+    // Nutation
+    EarthNutationParams nutation{};
+
+    // Polar Motion
+    EarthPolarMotionParams polar_motion;
+
+    // Precision
+};
+
+inline bool get_time_offsets(
+    const JulianDate& jd,
+    TimeOffsets& offsets,
+    const LeapSecondParams& lsp,
+    const EarthPolarMotionParams& pmp
+) {
+    if (!(lsp.loaded || pmp.loaded)) {
+        return false;
+    }
+
+    i32 idx_ls = get_jd_index(jd, lsp.jd);
+    offsets.tai_utc = lsp.leap_seconds(idx_ls);
+
+    i32 idx_ut1_utc = get_jd_index(jd, pmp.jd);
+    offsets.ut1_utc = pmp.time_offset(idx_ut1_utc);
+
+    return true;
+}
+inline bool get_time_offsets(const JulianDate& jd, EarthOrientationParams& eop) {
+
+    return get_time_offsets(jd, eop.offsets, eop.leap_seconds, eop.polar_motion);
+}
+
 inline bool load_nutation_model(
     std::string filename,
     EarthNutationParams& params,
     EarthNutationModel model,
-    i32 precision = 1,
-    i32 lineskips = 0
+    i32 precision,
+    i32 lineskips,
+    bool approx = false
 ) {
-    std::ifstream file(filename);
+    params.filename = filename;
+    params.model = model;
+    params.lineskips = lineskips;
+    params.precision = precision;
+    params.approx = approx;
+
+    std::ifstream file(params.filename);
     if (!file) return false;
     std::string line;
 
     for (i32 i = 0; i < lineskips && std::getline(file, line); ++i) {}
 
-    if (model == EarthNutationModel::IAU1980) {
+    switch (model) {
+    case EarthNutationModel::IAU1980: {
         params.lm.resize(precision);
         params.ls.resize(precision);
         params.F.resize(precision);
@@ -144,11 +209,22 @@ inline bool load_nutation_model(
             if (failed) {
                 continue;
             }
-
             ++i;
         }
-    } else if (model == EarthNutationModel::IAU1996) {
+        params.lm.conservativeResize(i);
+        params.ls.conservativeResize(i);
+        params.F.conservativeResize(i);
+        params.D.conservativeResize(i);
+        params.Om.conservativeResize(i);
+        params.period.conservativeResize(i);
+        params.Psisin.conservativeResize(i);
+        params.t_sin.conservativeResize(i);
+        params.epscos.conservativeResize(i);
+        params.t_cos.conservativeResize(i);
+        params.precision = i;
+    } break;
 
+    case EarthNutationModel::IAU1996: {
         params.lm.resize(precision);
         params.ls.resize(precision);
         params.F.resize(precision);
@@ -187,11 +263,268 @@ inline bool load_nutation_model(
             if (failed) {
                 continue;
             }
-
             ++i;
         }
+        params.lm.conservativeResize(i);
+        params.ls.conservativeResize(i);
+        params.F.conservativeResize(i);
+        params.D.conservativeResize(i);
+        params.Om.conservativeResize(i);
+        params.lme.conservativeResize(i);
+        params.lv.conservativeResize(i);
+        params.le.conservativeResize(i);
+        params.lma.conservativeResize(i);
+        params.lj.conservativeResize(i);
+        params.lS.conservativeResize(i);
+        params.lu.conservativeResize(i);
+        params.ln.conservativeResize(i);
+        params.pa.conservativeResize(i);
+        params.period.conservativeResize(i);
+        params.Psisin.conservativeResize(i);
+        params.Psicos.conservativeResize(i);
+        params.epssin.conservativeResize(i);
+        params.epscos.conservativeResize(i);
+        params.precision = i;
+    } break;
     }
+    params.loaded = true;
     return true;
+}
+inline bool load_nutation_model(EarthNutationParams& params) {
+    return load_nutation_model(
+        params.filename,
+        params,
+        params.model,
+        params.precision,
+        params.lineskips,
+        params.approx
+    );
+}
+
+inline bool load_leap_seconds(
+    std::string filename,
+    vecX<JulianDate>& jd,
+    vecXd& leap_seconds,
+    i32 lineskips
+) {
+    i32 numlines = 50; // arbitrary
+    jd.resize(numlines);
+    leap_seconds.resize(numlines);
+
+    // https://data.iana.org/time-zones/data/leap-seconds.list
+    std::ifstream file(filename);
+    if (!file) return false;
+    std::string line;
+
+    for (i32 i = 0; i < lineskips && std::getline(file, line); ++i) {}
+
+    i32 i = 0;
+    while (getline(file, line)) {
+        if (i >= numlines) {
+            numlines = i * 2;
+            jd.conservativeResize(i * 2);
+            leap_seconds.conservativeResize(i * 2);
+        }
+
+        std::istringstream iss(line);
+        // NTP time in UTC
+        f64 ntp_time;
+        f64 tai_utc;
+        bool failed = !(iss >> ntp_time >> tai_utc);
+
+        jd(i) = mjd_to_jd(mjd_from_scalar(ntp_time / 86400 + 15020.0));
+        leap_seconds(i) = tai_utc;
+
+        if (failed) {
+            continue;
+        }
+        ++i;
+    }
+    jd.conservativeResize(i);
+    leap_seconds.conservativeResize(i);
+
+    return true;
+}
+inline bool load_leap_seconds(
+    std::string filename,
+    LeapSecondParams& params,
+    i32 lineskips
+) {
+    params.loaded = true;
+    return load_leap_seconds(filename, params.jd, params.leap_seconds, lineskips);
+}
+
+inline bool load_polar_motion_model_all(
+    std::string filename,
+    EarthPolarMotionParams& params,
+    EarthPolarMotionModel model,
+    const LeapSecondParams& lsp,
+    i32 lineskips
+) {
+    params.filename = filename;
+    params.lineskips = lineskips;
+    params.model = model;
+
+    std::ifstream file(filename);
+    if (!file) return false;
+    std::string line;
+    i32 numlines = 5000; // arbitrary
+
+    params.jd.resize(numlines);
+    params.xp.resize(numlines);
+    params.yp.resize(numlines);
+    params.time_offset.resize(numlines);
+
+    for (i32 i = 0; i < lineskips && std::getline(file, line); ++i) {}
+
+    switch (model) {
+    case EarthPolarMotionModel::JPLEOP2: {
+        i32 i = 0;
+        while (getline(file, line)) {
+            if (i >= numlines) {
+                numlines = i * 2;
+                params.jd.conservativeResize(i * 2);
+                params.xp.conservativeResize(i * 2);
+                params.yp.conservativeResize(i * 2);
+                params.time_offset.conservativeResize(i * 2);
+            }
+            std::replace(line.begin(), line.end(), ',', ' ');
+            std::istringstream iss(line);
+            f64 mjd_temp;
+            f64 temp_offset;
+            bool failed
+                = !(iss >> mjd_temp >> params.xp(i) >> params.yp(i) >> temp_offset);
+            // JPL EOP2 gives tai-ut1, need ut1-utc and tai-utc (leap seconds)
+            // TODO: complete this
+            params.jd(i) = mjd_to_jd(mjd_from_scalar(mjd_temp));
+            i32 idx = get_jd_index(params.jd(i), lsp.jd);
+            f64 leap_seconds = lsp.leap_seconds(idx);
+            params.time_offset(i) = leap_seconds - temp_offset;
+
+            if (failed) {
+                continue;
+            }
+            ++i;
+        }
+        params.jd.conservativeResize(i);
+        params.xp.conservativeResize(i);
+        params.yp.conservativeResize(i);
+    } break;
+    case EarthPolarMotionModel::IERSEOPC01: {
+    } break;
+    case EarthPolarMotionModel::IERSEOPC04: {
+    } break;
+    }
+
+    params.loaded = true;
+    return true;
+}
+inline bool load_polar_motion_model_all(
+    EarthPolarMotionParams& params,
+    const LeapSecondParams& lsp
+) {
+    return load_polar_motion_model_all(
+        params.filename,
+        params,
+        params.model,
+        lsp,
+        params.lineskips
+    );
+}
+
+inline i32 get_polar_motion_index(
+    const JulianDate& jd,
+    const EarthPolarMotionParams& params
+) {
+    return get_jd_index(jd, params.jd);
+}
+
+inline bool load_all_eop(
+    EarthOrientationParams params,
+    std::string leap_second_filename,
+    i32 leap_second_lineskips,
+    std::string polar_motion_filename,
+    EarthPolarMotionModel polar_motion_model,
+    i32 polar_motion_lineskips,
+    std::string nutation_filename,
+    EarthNutationModel nutation_model,
+    i32 nutation_precision,
+    bool nutation_approx,
+    i32 nutation_lineskips
+) {
+    LeapSecondParams leap_second_params;
+    bool leap_seconds_ok = load_leap_seconds(
+        leap_second_filename,
+        leap_second_params,
+        leap_second_lineskips
+    );
+
+    EarthPolarMotionParams polar_motion_params;
+    bool polar_motion_ok = load_polar_motion_model_all(
+        polar_motion_filename,
+        polar_motion_params,
+        polar_motion_model,
+        leap_second_params,
+        polar_motion_lineskips
+    );
+
+    EarthNutationParams nutation_params;
+
+    bool nutation_ok = load_nutation_model(
+        nutation_filename,
+        nutation_params,
+        nutation_model,
+        nutation_precision,
+        nutation_lineskips,
+        nutation_approx
+    );
+
+    params.polar_motion = polar_motion_params;
+    params.nutation = nutation_params;
+
+    params.loaded = leap_seconds_ok && polar_motion_ok && nutation_ok;
+    return params.loaded;
+}
+
+inline bool load_all_eop(EarthOrientationParams& params) {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto stop = std::chrono::high_resolution_clock::now();
+
+    start = std::chrono::high_resolution_clock::now();
+    bool leap_seconds_ok = load_leap_seconds(
+        params.leap_seconds.filename,
+        params.leap_seconds,
+        params.leap_seconds.lineskips
+    );
+    stop = std::chrono::high_resolution_clock::now();
+    print_chrono(stop - start, UTime::millisecond);
+
+    start = std::chrono::high_resolution_clock::now();
+
+    bool polar_motion_ok = load_polar_motion_model_all(
+        params.polar_motion.filename,
+        params.polar_motion,
+        params.polar_motion.model,
+        params.leap_seconds,
+        params.polar_motion.lineskips
+    );
+    stop = std::chrono::high_resolution_clock::now();
+    print_chrono(stop - start, UTime::millisecond);
+
+    start = std::chrono::high_resolution_clock::now();
+    bool nutation_ok = load_nutation_model(
+        params.nutation.filename,
+        params.nutation,
+        params.nutation.model,
+        params.nutation.precision,
+        params.nutation.lineskips,
+        params.nutation.approx
+    );
+    stop = std::chrono::high_resolution_clock::now();
+    print_chrono(stop - start, UTime::millisecond);
+
+    params.loaded = leap_seconds_ok && polar_motion_ok && nutation_ok;
+    return params.loaded;
 }
 
 inline mat3d rot_earth_precession(
@@ -242,11 +575,8 @@ inline mat3d rot_earth_nutation(
     const JulianDate& jd,
     // TODO: add eop parameters here or in scope
     EarthNutationParams params,
-    EarthNutationModel model = EarthNutationModel::IAU1980,
     TimeScale scale_in = TimeScale::tt,
-    TimeOffsets offsets = TimeOffsets{},
-    bool approx = true,
-    i32 precision = 106
+    TimeOffsets offsets = TimeOffsets{}
 ) {
     JulianDate jd_TT = jd;
     if (scale_in != TimeScale::tt) {
@@ -263,8 +593,8 @@ inline mat3d rot_earth_nutation(
     f64 delta_epsilon = 0.0;
 
     mat3d R = mat3d1;
-    if (model == EarthNutationModel::IAU1980) {
-        if (approx) {
+    if (params.model == EarthNutationModel::IAU1980) {
+        if (params.approx) {
             f64 l = 357.525 + 35999 * T;        // mean anomaly of the sun [deg]
             f64 F = 93.273 + 483202.019 * T;    // mean distance b/w nodes of moon [deg]
             f64 D = 297.850 + 445267.111 * T;   // mean distance b/w sun and moon [deg]
@@ -295,7 +625,7 @@ inline mat3d rot_earth_nutation(
             f64 Omega = DMS_to_deg(125, 2, 40.280) - DMS_to_deg(1934, 8, 10.539) * T
                         + DMS_to_deg(0, 0, 7.455) * T2 + DMS_to_deg(0, 0, 0.008) * T3;
 
-            for (i32 i = 0; i < precision; ++i) {
+            for (i32 i = 0; i < params.precision; ++i) {
                 f64 phi = params.lm(i) * l + params.ls(i) * l_prime + params.F(i) * F
                           + params.D(i) * D + params.Om(i) * Omega;
                 delta_Psi
@@ -313,40 +643,34 @@ inline mat3d rot_earth_nutation(
             * rot(-delta_Psi, RotAxis::z, UAngle::degree)
             * rot(epsilon, RotAxis::x, UAngle::degree);
 
-    } else if (model == EarthNutationModel::IAU1996) {
+    } else if (params.model == EarthNutationModel::IAU1996) {
+        // TODO: research 1996 model formula
         R = mat3d1;
     }
 
     return R;
 }
 
-inline f64 earth_rot_angle_from_jd(
-    const JulianDate& jd,
-    TimeScale scale_in = TimeScale::ut1,
-    TimeOffsets offsets = TimeOffsets{},
-    UAngle angle_out = UAngle::degree
-) {
-    // Just a wrapper for GMST
-    return gmst_from_jd(jd, scale_in, offsets, angle_out);
-}
-
-enum struct EarthFrame {
+enum struct EarthFrame : i32 {
+    // Ordered by frame heirarchy
     ICRF = 1,
     GCRF = 1,
-    J2000 = 1,
-    EME2000 = 1,
-    MOD = 2,
-    TOD = 3,
-    GTOD = 4,
-    PEF = 5,
-    TEME = 6,
-    ITRF = 7
+    J2000 = 2,
+    EME2000 = 2,
+    // ICRF/GCRF \approx J2000/EME2000
+    MOD = 3,
+    TOD = 4,
+    GTOD = 5,
+    PEF = 6,
+    TEME = 7,
+    ITRF = 8
 };
 
 inline mat3d rot_eci_to_ecef(
     const JulianDate& jd,
     EarthFrame frame_in,
     EarthFrame frame_out,
+    EarthOrientationParams params,
     TimeScale scale_in = TimeScale::ut1,
     TimeOffsets offsets = TimeOffsets{},
     bool approx = true
@@ -355,10 +679,12 @@ inline mat3d rot_eci_to_ecef(
     f64 theta
         = earth_rot_angle_from_jd(jd, scale_in, offsets, UAngle::degree); // in degrees
 
+    // TODO: switches
     // Precession
-    R = rot_earth_precession(jd, scale_in, offsets);
+    R = rot_earth_precession(jd, scale_in, offsets) * R;
 
     // Nutation
+    R = rot_earth_nutation(jd, params.nutation, scale_in, offsets) * R;
 
     // Sidereal Rotation
     R = rot(theta, RotAxis::z, UAngle::degree) * R;
@@ -372,10 +698,10 @@ inline mat3d rot_ecef_to_eci(
     const JulianDate& jd,
     EarthFrame frame_in,
     EarthFrame frame_out,
+    EarthOrientationParams params,
     TimeScale scale_in = TimeScale::ut1,
-    TimeOffsets offsets = TimeOffsets{},
-    bool approx = true
+    TimeOffsets offsets = TimeOffsets{}
 ) {
-    return rot_eci_to_ecef(jd, frame_in, frame_out, scale_in, offsets, approx)
+    return rot_eci_to_ecef(jd, frame_in, frame_out, params, scale_in, offsets)
         .transpose();
 }

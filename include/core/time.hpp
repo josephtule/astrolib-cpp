@@ -1,8 +1,11 @@
 #pragma once
 
 #include "util/typedefs.hpp"
+#include "util/units.hpp"
+#include "util/vecdefs.hpp"
+#include <chrono>
 #include <cmath>
-#include <memory>
+#include <print>
 
 enum struct TimeScale {
     utc, // coordinated universal time
@@ -191,11 +194,10 @@ struct TimeOffsets {
     // https://data.iana.org/time-zones/data/leap-seconds.list
     // contains leapseconds [TAI-UTC]
     f64 ut1_utc = 0.0;   // UT1 - UTC [s]
-    f64 tai_utc = 0.0;   // TAI - UTC [s]
+    f64 tai_utc = 0.0;   // TAI - UTC [s], leap seconds
     f64 tt_tai = 32.184; // TT - TAI [s]
     f64 tai_gps = 19.0;  // TAI - GPS [s]
 };
-
 
 inline f64 time_scale_convert(
     f64 t,
@@ -319,4 +321,99 @@ inline f64 cal_to_doy(const CalendarTime& cal) {
     doy += cal.day + hms_to_frac_day(hms_from_cal(cal));
 
     return doy;
+}
+
+inline i32 get_jd_index(const JulianDate& jd, ecref<vecX<JulianDate>> jds) {
+    i32 i = 0;
+    i32 n = jds.size();
+
+    f64 jd_scalar_curr = jd_to_scalar(jds(i));
+    f64 jd_scalar_next = 0.0;
+    if (i + 1 < n) {
+        jd_scalar_next = jd_to_scalar(jds(i + 1));
+    } else {
+        return i;
+    }
+
+    f64 jd_scalar = jd_to_scalar(jd);
+    while (jd_scalar >= jd_scalar_next) {
+        jd_scalar_curr = jd_to_scalar(jds(i));
+        if (i + 1 < n) {
+            jd_scalar_next = jd_to_scalar(jds(i + 1));
+        } else {
+            return i;
+        }
+        ++i;
+    }
+    f64 delta_curr = std::abs(jd_scalar - jd_scalar_curr);
+    f64 delta_next = std::abs(jd_scalar - jd_scalar_next);
+    if (delta_curr < delta_next) {
+        if (i == 0) {
+            return 0;
+        } else {
+            return i - 1;
+        }
+    } else {
+        return i;
+    }
+
+    return i;
+}
+
+inline void print_cal(const CalendarTime& cal, bool vert = false) {
+    if (vert) {
+        std::println(
+            "Year: {}\nMonth: {}\nDay: {}\nHour: {}\nMinute: {}\nSecond: {}",
+            cal.year,
+            cal.month,
+            cal.day,
+            cal.hour,
+            cal.minute,
+            cal.second
+        );
+    } else {
+        std::println(
+            "Year: {}, Month: {}, Day: {}, Hour: {}, Minute: {}, Second: {}",
+            cal.year,
+            cal.month,
+            cal.day,
+            cal.hour,
+            cal.minute,
+            cal.second
+        );
+    }
+}
+
+inline void print_chrono(auto duration, UTime units) {
+    switch (units) {
+    case UTime::minute:
+        std::println(
+            "Elapsed Time: {} min",
+            std::chrono::duration<f64>(duration).count() / 60.0
+        );
+
+        break;
+    case UTime::second:
+        std::println("Elapsed Time: {} s", std::chrono::duration<f64>(duration).count());
+        break;
+    case UTime::millisecond:
+        std::println(
+            "Elapsed Time: {} ms",
+            std::chrono::duration<f64, std::milli>(duration).count()
+        );
+        break;
+    case UTime::microsecond:
+        std::println(
+            "Elapsed Time: {} µs",
+            std::chrono::duration<f64, std::micro>(duration).count()
+        );
+        break;
+    case UTime::nanosecond:
+        std::println(
+            "Elapsed Time: {} ns",
+            std::chrono::duration<f64, std::nano>(duration).count()
+        );
+        break;
+    default: std::println("Wrong time units for duration"); break;
+    }
 }
