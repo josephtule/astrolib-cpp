@@ -31,7 +31,7 @@ struct HMSTime {
 };
 
 struct JulianDate { // split for precision
-    f64 day = 2451545.0;
+    f64 day = 2451545.0; // J2000
     f64 frac = 0.0;
 };
 

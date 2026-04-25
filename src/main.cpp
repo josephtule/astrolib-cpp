@@ -106,9 +106,10 @@ int main() {
         .lineskips = 85
     };
     EarthPolarMotionParams pmp{
-        .filename = pwd + "/scratch/assets/EOP2long.txt",
-        .lineskips = 20,
-        .model = EarthPolarMotionModel::JPLEOP2
+        .filename = pwd + "/scratch/assets/EOP_20u24_C04_one_file_1962-now.txt",
+        .lineskips = 6,
+        .model = EarthPolarMotionModel::IAU2000A,
+        .approx = false
     };
     EarthNutationParams enp{
         .filename = pwd + "/scratch/assets/nut_IAU1980.dat.txt",
@@ -118,11 +119,25 @@ int main() {
         .model = EarthNutationModel::IAU1980
     };
     EarthOrientationParams eop{.leap_seconds = lsp, .nutation = enp, .polar_motion = pmp};
+    bool eop_ok = load_all_eop(eop);
+
+    JulianDate jd; // j2000 utc
+    get_time_offsets(jd, eop);
 
     auto start = std::chrono::high_resolution_clock::now();
-    bool eop_ok = load_all_eop(eop);
+    mat3d R = mat3d1;
+    R = rot_eci_to_ecef(
+        jd,
+        EarthFrame(1),
+        EarthFrame(7),
+        eop,
+        eop.offsets,
+        TimeScale::utc
+    );
     auto stop = std::chrono::high_resolution_clock::now();
+
     std::println("EOP Loaded: {}", eop_ok);
+    std::cout << "ECI to ECEF (prolly wrong):\n" << R << std::endl;
     auto duration = (stop - start);
     print_chrono(duration, UTime::millisecond);
     return 0;

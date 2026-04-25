@@ -1,1 +1,36 @@
 # astrolib-cpp
+
+# Data
+
+## Spherical Harmonics: EGM2008
+
+## Leap Seconds
+
+https://data.iana.org/time-zones/data/leap-seconds.list
+
+## Nutation
+
+https://hpiers.obspm.fr/eop-pc/models/models.html
+https://hpiers.obspm.fr/eoppc/bul/bulb/explanatory.html
+
+### IAU 1980
+
+https://hpiers.obspm.fr/eop-pc/models/nutations/nut_IAU1980.dat
+
+### IERS 1996
+
+https://iers-conventions.obspm.fr/content/chapter5/additional_info/tab5.3a.txt
+
+## Polar Motion
+
+https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop
+https://datacenter.iers.org/data/latestVersion/EOP_C01_IAU1980_1846-now.txt
+
+### JPL EOP 2
+
+### IERS EOP C01 (IAU 1980 and IAU 2000)
+
+https://datacenter.iers.org/data/latestVersion/EOP_C01_IAU1980_1846-now.txt
+
+### IERS EOP C04 (IAU 2000A)
+
