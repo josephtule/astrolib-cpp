@@ -40,6 +40,11 @@ inline StateTr operator+(const StateTr& x, const DerivTr& mdx) {
     return StateTr{.r = x.r + mdx.dr, .v = x.v + mdx.dv};
 }
 inline StateTr operator+(const DerivTr& mdx, const StateTr& x) { return x + mdx; }
+inline StateTr& operator+=(StateTr& x1, const StateTr& x2) {
+    x1.r += x2.r;
+    x1.v += x2.v;
+    return x1;
+}
 inline StateTr& operator+=(StateTr& x, const DerivTr& dx) {
     x.r += dx.dr;
     x.v += dx.dv;

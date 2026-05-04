@@ -67,10 +67,10 @@ inline StateTr propagate_tr_od_rk4(
     return x;
 }
 
-// State and Derivatives for orbit determination (state + variance)
+// State and Derivatives for orbit determination (state + STM)
 struct VarStateTr {
     StateTr x;
-    mat6d Phi = mat6d::Identity();
+    mat6d Phi = mat6d::Identity(); // STM
 };
 struct VarDerivTr {
     DerivTr dx;

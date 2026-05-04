@@ -2,6 +2,7 @@
 #include "core/dynamics_rotational.hpp"
 #include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
+#include "core/estimation.hpp"
 #include "core/measurement.hpp"
 #include "core/observations.hpp"
 #include "core/od_dynamics.hpp"
@@ -23,6 +24,7 @@
 #include <limits>
 #include <print>
 
+void run_batch_od_diag(const Celestial& body);
 void run_gravity_diag(
     World& world,
     EntityId earth_id,
@@ -125,17 +127,17 @@ int main() {
     // run_epkde(world, earth_id, urath_id, sat_id, stat_id);
 
     LeapSecondParams lsp{
-        .filename = pwd + "/scratch/assets/leap-seconds.list.txt",
+        .filename = pwd + "/assets/leap-seconds.list.txt",
         .lineskips = 85
     };
     EarthPolarMotionParams pmp{
-        .filename = pwd + "/scratch/assets/EOP_20u24_C04_one_file_1962-now.txt",
+        .filename = pwd + "/assets/EOP_20u24_C04_one_file_1962-now.txt",
         .lineskips = 6,
         .model = EarthPolarMotionModel::IAU2000A,
         .approx = false
     };
     EarthNutationParams enp{
-        .filename = pwd + "/scratch/assets/nut_IAU1980.dat.txt",
+        .filename = pwd + "/assets/nut_IAU1980.dat.txt",
         .lineskips = 3,
         .precision = 106,
         .approx = false,
@@ -154,10 +156,11 @@ int main() {
     run_radec_diag();
     run_iod_diag(*earth);
     run_od_prop_diag(*earth);
+    run_measurement_jacobian_diag();
 
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_measurement_jacobian_diag();
+    run_batch_od_diag(*earth);
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
@@ -313,7 +316,7 @@ void run_spherical_harmonics_diag(
     earth->degree = degree;
     earth->order = 0;
     read_egm2008(
-        std::string(PROJECT_ROOT) + "/scratch/assets/egm2008_120.txt",
+        std::string(PROJECT_ROOT) + "/assets/egm2008_120.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -351,7 +354,7 @@ void run_sphh_longitude_diag(
     earth->degree = degree;
     earth->order = order;
     read_egm2008(
-        std::string(PROJECT_ROOT) + "/scratch/assets/egm2008_120.txt",
+        std::string(PROJECT_ROOT) + "/assets/egm2008_120.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -1008,4 +1011,68 @@ void run_measurement_jacobian_diag() {
 
     std::println("RA/Dec H deg fd/an error norm: {}", H_err_deg.norm());
     std::println("RA/Dec H deg fd/an max error: {}", H_err_deg.cwiseAbs().maxCoeff());
+}
+
+void run_batch_od_diag(const Celestial& body) {
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+
+    ODBatchInput input;
+    input.x0_guess = x0_truth;
+    input.dyn_config.model = ODDynamicsModel::two_body;
+    input.dyn_config.mu = body.mu;
+    input.t0 = 0.0;
+    input.max_iters = 10;
+    input.prop_steps = 100;
+    input.tol_dx = 1e-6;
+    input.tol_residual = 1e-8;
+
+    // add perturbations
+    input.x0_guess.r += vec3d{1.0, -1.0, 0.5};
+    input.x0_guess.v += vec3d{1e-3, -1e-3, 5e-4};
+
+    f64 t_meas0 = 0.0;
+    f64 t_measf = 600.0;
+    f64 N_meas = 30;
+    vecXd t_meas = vecXd::LinSpaced(N_meas, t_meas0, t_measf);
+    f64 sigma_rad = 1e-5;
+    for (i32 i = 0; i < N_meas; ++i) {
+        // propagate to get measurements
+        StateTr x_truth_i = propagate_tr_od_rk4(
+            0.0,
+            x0_truth,
+            t_meas(i),
+            input.prop_steps,
+            input.dyn_config
+        );
+        StateTr x_obs;
+        // use stationary observer for now
+        x_obs.r = vec3d{body.mean_radius, 0.0, 0.0};
+        x_obs.v = vec3d0;
+        input.observer_states.push_back(x_obs);
+
+        // get measurement
+        MeasurementContext ctx;
+        ctx.x_target = x_truth_i;
+        ctx.x_observer = x_obs;
+        Measurement meas;
+        meas.t = t_meas(i);
+        meas.type = ObservationType::radec;
+        meas.z = predict_measurement(ObservationType::radec, ctx);
+        meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+        input.measurements.push_back(meas);
+    }
+
+    // solve
+    ODBatchResult result = od_batch_lumve(input);
+    f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
+    f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
+    std::println("Initial Error = {}", initial_err);
+    std::println("Final Error = {}", final_err);
+    std::println("LUMVE Success = {}", result.success);
+    // std::println("LUMVE Status: {}",result.status); // TODO: do status print functions
+    std::println("iterations: {}", result.iterations);
+    std::println("Residual Norm = {}", result.residual_norm);
+    std::println("Delta x Norm = {}", result.dx_norm);
 }
