@@ -2,6 +2,7 @@
 #include "core/dynamics_rotational.hpp"
 #include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
+#include "core/measurement.hpp"
 #include "core/observations.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/orbit_determination.hpp"
@@ -75,6 +76,7 @@ void run_rv_coe_diag(const Celestial& body);
 void run_radec_diag();
 void run_iod_diag(const Celestial& body);
 void run_od_prop_diag(const Celestial& body);
+void run_measurement_jacobian_diag();
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
@@ -151,10 +153,11 @@ int main() {
     run_rv_coe_diag(*earth);
     run_radec_diag();
     run_iod_diag(*earth);
+    run_od_prop_diag(*earth);
 
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_od_prop_diag(*earth);
+    run_measurement_jacobian_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
@@ -947,7 +950,8 @@ void run_od_prop_diag(const Celestial& body) {
     mat6d Phi_fd;
     // Build each STM column by perturbing one initial state component,
     // propagating it, then differencing against the nominal final state
-    // forward finite difference: https://www.dam.brown.edu/people/alcyew/handouts/numdiff.pdf
+    // forward finite difference:
+    // https://www.dam.brown.edu/people/alcyew/handouts/numdiff.pdf
     // TODO: maybe add jacobian-free (use finite diff) version for od?
     for (i32 i = 0; i < 6; ++i) {
         f64 eps_i = (i < 3) ? eps_pos : eps_vel;
@@ -968,4 +972,40 @@ void run_od_prop_diag(const Celestial& body) {
 
     std::println("Phi norm = {}", yf.Phi.norm());
     std::println("Phi fd norm = {}", Phi_fd.norm());
+}
+
+void run_measurement_jacobian_diag() {
+    MeasurementContext ctx;
+    // zero observer state
+    ctx.x_observer.r = vec3d{0.0, 0.0, 0.0};
+    ctx.x_observer.v = vec3d{0.0, 0.0, 0.0};
+
+    // arbitrary target state
+    ctx.x_target.r = vec3d{7000.0, 1000.0, 1300.0};
+    ctx.x_target.v = vec3d{-0.5, 7.2, 1.0};
+
+    matXd H_fd = jacobian_fd_measurement(ObservationType::radec, ctx);
+    matXd H_an = jacobian_radec(ctx);
+
+    matXd H_err = H_fd - H_an;
+
+    std::println("RA/Dec H fd/an error norm: {}", H_err.norm());
+    std::println("RA/Dec H fd/an max error: {}", H_err.cwiseAbs().maxCoeff());
+
+    // should be zero
+    std::println("RA/Dec H fd velocity cols norm: {}", H_fd.block(0, 3, 2, 3).norm());
+
+    // degree output check
+    matXd H_fd_deg = jacobian_fd_measurement(
+        ObservationType::radec,
+        ctx,
+        UAngle::radian,
+        UAngle::degree
+    );
+
+    matXd H_an_deg = jacobian_radec(ctx, UAngle::degree);
+    matXd H_err_deg = H_fd_deg - H_an_deg;
+
+    std::println("RA/Dec H deg fd/an error norm: {}", H_err_deg.norm());
+    std::println("RA/Dec H deg fd/an max error: {}", H_err_deg.cwiseAbs().maxCoeff());
 }

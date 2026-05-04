@@ -151,10 +151,117 @@ inline vecXd measurement_residual(
 
     if (type == ObservationType::radec || type == ObservationType::azel) {
         i32 i_max = std::min(2, static_cast<i32>(residual.size()));
+        f64 wrap_min = convert_angle(-pi, UAngle::radian, angle_in);
+        f64 wrap_max = convert_angle(pi, UAngle::radian, angle_in);
         for (i32 i = 0; i < i_max; ++i) {
-            residual(i) = wrap_angle(residual(i), -pi, pi, angle_in, angle_in);
+            residual(i) = wrap_angle(residual(i), wrap_min, wrap_max, angle_in, angle_in);
         }
     }
 
     return residual;
+}
+
+inline matXd jacobian_fd_measurement(
+    ObservationType type,
+    const MeasurementContext& ctx,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 eps_pos = 1e-3,
+    f64 eps_vel = 1e-6,
+    f64 tol = tol_strict
+) {
+    i32 rows = measurement_dim(type);
+    i32 cols = 6;
+    matXd H(rows, cols);
+
+    vecXd z0 = predict_measurement(type, ctx, angle_in, angle_out, tol);
+    if (z0.size() != rows) return matXd{};
+
+    MeasurementContext ctx_pert = ctx;
+    for (i32 i = 0; i < cols; ++i) {
+        f64 eps_i = i < 3 ? eps_pos : eps_vel;
+
+        vec6d x_target_pert_vec = statetr_to_vec6d(ctx.x_target);
+        x_target_pert_vec(i) += eps_i;
+        StateTr x_target_pert = vec6_to_statetr(x_target_pert_vec);
+        ctx_pert.x_target = x_target_pert;
+        vecXd z_pert = predict_measurement(type, ctx_pert, angle_in, angle_out, tol);
+        if (z_pert.size() != rows) return matXd{};
+        vecXd residual = measurement_residual(type, z_pert, z0, angle_out);
+        H.col(i) = residual / eps_i;
+    }
+
+    return H;
+}
+
+inline matXd jacobian_radec(
+    const MeasurementContext& ctx,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol_strict
+) {
+    vec3d r_rel = ctx.x_target.r - ctx.x_observer.r;
+    f64 rho2 = r_rel.squaredNorm();
+    f64 rho = std::sqrt(rho2);
+    f64 rhoxy2 = r_rel.segment<2>(0).squaredNorm();
+    f64 rhoxy = std::sqrt(rhoxy2);
+    f64 denom = rhoxy * rho2;
+
+    if (rho <= tol || rhoxy <= tol || denom <= tol) return matXd{};
+
+    matd<2, 6> H;
+    H.row(0) = vec6d{-r_rel(1) / rhoxy2, r_rel(0) / rhoxy2, 0.0, 0.0, 0.0, 0.0};
+    H.row(1) = vec6d{
+        -r_rel(2) * r_rel(0) / denom,
+        -r_rel(2) * r_rel(1) / denom,
+        rhoxy / rho2,
+        0.0,
+        0.0,
+        0.0
+    };
+    f64 converter = convert_angle(1.0, UAngle::radian, angle_out);
+    H *= converter;
+
+    return H;
+}
+
+inline matXd measurement_jacobian(
+    ObservationType type,
+    const MeasurementContext& ctx,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 eps_pos = 1e-3,
+    f64 eps_vel = 1e-6,
+    f64 tol = tol_strict
+) {
+    i32 rows = measurement_dim(type);
+    i32 cols = 6;
+    if (rows == 0) return matXd{};
+
+    matXd H(rows, cols);
+
+    switch (type) {
+    case ObservationType::radec: {
+        H = jacobian_radec(ctx, angle_out, tol);
+    } break;
+
+    // TODO: add jacobians for the below if possible
+    case ObservationType::azel: [[fallthrough]];
+    case ObservationType::range: [[fallthrough]];
+    case ObservationType::range_rate: [[fallthrough]];
+    case ObservationType::pos: [[fallthrough]];
+    case ObservationType::pos_vel: [[fallthrough]];
+    case ObservationType::rel_pos: [[fallthrough]];
+    case ObservationType::rel_pos_vel: [[fallthrough]];
+    default:
+        H = jacobian_fd_measurement(
+            type,
+            ctx,
+            angle_in,
+            angle_out,
+            eps_pos,
+            eps_vel,
+            tol
+        );
+    }
+    return H;
 }

@@ -127,6 +127,7 @@ inline mat6d jacobian_tr_two_body(const StateTr& x_rel, f64 mu, f64 tol = tol_st
 // TODO: add jacobians for other perturbations
 
 inline mat6d jacobian_tr_od(f64 t, const StateTr& x, const ODDynamicsConfig& cfg) {
+    // jacobian dispatcher
     switch (cfg.model) {
     case ODDynamicsModel::two_body: return jacobian_tr_two_body(x, cfg.mu);
     default:
