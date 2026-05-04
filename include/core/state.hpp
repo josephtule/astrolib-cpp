@@ -61,4 +61,25 @@ inline DerivTr operator-(const DerivTr& dx) {
     return DerivTr{.dr = -dx.dr, .dv = -dx.dv};
 }
 
+inline vec6d statetr_to_vec6d(const StateTr& x) {
+    vec6d out;
+    out << x.r, x.v;
+    return out;
+}
+inline vec6d derivtr_to_vec6d(const DerivTr& x) {
+    vec6d out;
+    out << x.dr, x.dv;
+    return out;
+}
+inline vec7d stateatt_to_vec7d(const StateAtt& x) {
+    vec7d out;
+    out << x.q, x.w;
+    return out;
+}
+inline vec7d derivatt_to_vec7d(const DerivAtt& x) {
+    vec7d out;
+    out << x.dq, x.dw;
+    return out;
+}
+
 // Attitude Operations

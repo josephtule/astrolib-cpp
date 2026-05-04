@@ -1,3 +1,160 @@
 #pragma once
 
+#include "core/entity.hpp"
+#include "core/observations.hpp"
+#include "core/state.hpp"
+#include "core/station_geometry.hpp"
+#include "util/constants.hpp"
+#include "util/typedefs.hpp"
+#include "util/units.hpp"
+#include "util/vecdefs.hpp"
 
+enum struct ObservationType : i32 {
+    radec,
+    azel,
+    range,
+    range_rate,
+    // in estimation frame (not observer relative)
+    pos,
+    pos_vel,
+    // relative
+    rel_pos,
+    rel_pos_vel,
+};
+
+struct Measurement {
+    f64 t = 0.0;
+    ObservationType type = ObservationType::radec;
+    EntityId observer_id = kInvalidEntityId;
+    EntityId target_id = kInvalidEntityId;
+    vecXd z; // measured value
+    matXd R; // measurement covariance
+};
+
+enum struct AzelInputFrame : i32 { enu, bcbf };
+struct MeasurementContext {
+    StateTr x_observer;
+    StateTr x_target;
+
+    // local station geometry, used only for azel
+    bool has_station_local = false;
+    AzelInputFrame azel_frame = AzelInputFrame::bcbf;
+
+    vec3d station_llh = vec3d0; // [lat, lon, h], angle units from angle_in
+};
+
+inline i32 measurement_dim(ObservationType type) {
+    switch (type) {
+    case ObservationType::radec: return 2;
+    case ObservationType::azel: return 2;
+    case ObservationType::range: return 1;
+    case ObservationType::range_rate: return 1;
+    case ObservationType::rel_pos: [[fallthrough]];
+    case ObservationType::pos: return 3;
+    case ObservationType::rel_pos_vel: [[fallthrough]];
+    case ObservationType::pos_vel: return 6;
+    default: return 0;
+    }
+}
+
+inline vecXd predict_measurement(
+    ObservationType type,
+    const MeasurementContext& ctx,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol_strict
+) {
+    const StateTr& x_target = ctx.x_target;
+    const StateTr& x_observer = ctx.x_observer;
+    i32 dim = measurement_dim(type);
+    vecXd measurement(dim);
+
+    switch (type) {
+    case ObservationType::radec: {
+        vec3d radec = radec_from_pos(x_target.r, x_observer.r, angle_out, tol);
+        measurement = radec.segment(0, dim);
+    } break;
+    case ObservationType::azel: {
+        // NOTE
+        if (!ctx.has_station_local) {
+            measurement.resize(0);
+            return vecXd{};
+        }
+        switch (ctx.azel_frame) {
+        case AzelInputFrame::enu: {
+            vec3d azel = azel_from_enu(ctx.x_target.r - ctx.x_observer.r, angle_out, tol);
+            measurement = azel.segment(0, dim);
+        } break;
+        case AzelInputFrame::bcbf: {
+            vec3d azel = azel_from_bcbf(
+                ctx.x_target.r,
+                ctx.x_observer.r,
+                ctx.station_llh(0),
+                ctx.station_llh(1),
+                angle_in,
+                angle_out,
+                tol
+            );
+            measurement = azel.segment(0, dim);
+        } break;
+        }
+
+    } break;
+    case ObservationType::range: {
+        measurement << (x_target.r - x_observer.r).norm();
+    } break;
+    case ObservationType::range_rate: {
+        StateTr x_rel = x_target - x_observer;
+        f64 rho = x_rel.r.norm();
+        if (rho <= tol) return measurement.setZero();
+        measurement << x_rel.r.dot(x_rel.v) / rho;
+    } break;
+    case ObservationType::pos: {
+        measurement = x_target.r;
+    } break;
+    case ObservationType::pos_vel: {
+        measurement = statetr_to_vec6d(x_target);
+    } break;
+    case ObservationType::rel_pos: {
+        measurement = x_target.r - x_observer.r;
+    } break;
+    case ObservationType::rel_pos_vel:
+        measurement = statetr_to_vec6d(x_target - x_observer);
+    }
+
+    return measurement;
+}
+
+inline vecXd predict_measurement(
+    ObservationType type,
+    const StateTr& x_target,
+    const StateTr& x_observer,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol_strict
+) {
+    if (type == ObservationType::azel)
+        return vecXd{}; // NOTE: azel unsupported in this overload
+
+    MeasurementContext ctx;
+    ctx.x_target = x_target;
+    ctx.x_observer = x_observer;
+    return predict_measurement(type, ctx, UAngle::degree, angle_out, tol);
+}
+
+inline vecXd measurement_residual(
+    ObservationType type,
+    ecref<vecXd> z_obs,
+    ecref<vecXd> z_pred,
+    UAngle angle_in = UAngle::radian
+) {
+    vecXd residual = z_obs - z_pred;
+
+    if (type == ObservationType::radec || type == ObservationType::azel) {
+        i32 i_max = std::min(2, static_cast<i32>(residual.size()));
+        for (i32 i = 0; i < i_max; ++i) {
+            residual(i) = wrap_angle(residual(i), -pi, pi, angle_in, angle_in);
+        }
+    }
+
+    return residual;
+}

@@ -28,10 +28,11 @@ https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop
 https://datacenter.iers.org/data/latestVersion/EOP_C01_IAU1980_1846-now.txt
 
 ### JPL EOP 2
+https://eop2-external.jpl.nasa.gov/
 
 ### IERS EOP C01 (IAU 1980 and IAU 2000)
 
 https://datacenter.iers.org/data/latestVersion/EOP_C01_IAU1980_1846-now.txt
 
 ### IERS EOP C04 (IAU 2000A)
-
+https://datacenter.iers.org/data/latestVersion/EOP_20u24_C04_one_file_1962-now.txt
