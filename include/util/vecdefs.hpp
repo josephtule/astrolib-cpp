@@ -17,6 +17,7 @@ constexpr auto eSLo = eig::StrictlyLower;
 
 template <typename T, int N, int M> using mat = eig::Matrix<T, N, M>;
 template <int N, int M> using matd = eig::Matrix<f64, N, M>;
+template <int N, int M> using matd = eig::Matrix<f64, N, M>;
 template <int N, int M> using matf = eig::Matrix<f32, N, M>;
 template <typename T> using matX = eig::MatrixX<T>;
 using matXd = eig::MatrixXd;

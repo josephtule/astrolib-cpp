@@ -3,6 +3,7 @@
 #include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
 #include "core/observations.hpp"
+#include "core/orbit_determination.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
 #include "core/state.hpp"
@@ -17,6 +18,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <print>
 
 void run_gravity_diag(
@@ -70,6 +72,7 @@ void run_station_obs_geom_diag(
 );
 void run_rv_coe_diag(const Celestial& body);
 void run_radec_diag();
+void run_iod_diag(const Celestial& body);
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
@@ -144,10 +147,11 @@ int main() {
     run_earth_rot_diag(jd, eop);
     run_station_obs_geom_diag(*earth, jd, eop);
     run_rv_coe_diag(*earth);
+    run_radec_diag();
 
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_radec_diag();
+    run_iod_diag(*earth);
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
@@ -765,4 +769,123 @@ void run_radec_diag() {
         radec_dot(0),
         radec_dot(1)
     );
+}
+
+f64 tof_elliptic_ta(
+    f64 sma,
+    f64 ecc,
+    f64 ta1,
+    f64 ta2,
+    f64 mu,
+    UAngle angle_in = UAngle::radian,
+    i32 n_rev = 0,
+    f64 tol = tol_strict
+) {
+    // temp, for diags only
+    if (mu <= 0.0 || sma <= 0.0 || ecc < 0.0 || ecc >= 1.0 || n_rev < 0) {
+        return std::numeric_limits<f64>::quiet_NaN();
+    }
+
+    if (angle_in != UAngle::radian) {
+        ta1 = convert_angle(ta1, angle_in, UAngle::radian);
+        ta2 = convert_angle(ta2, angle_in, UAngle::radian);
+    }
+
+    auto mean_anomaly_from_ta = [ecc](f64 ta) {
+        f64 half_ta = 0.5 * ta;
+        f64 E = 2.0
+                * std::atan2(
+                    std::sqrt(1.0 - ecc) * std::sin(half_ta),
+                    std::sqrt(1.0 + ecc) * std::cos(half_ta)
+                );
+        E = wrap_angle(E, 0.0, twopi);
+        return E - ecc * std::sin(E);
+    };
+
+    f64 M1 = mean_anomaly_from_ta(ta1);
+    f64 M2 = mean_anomaly_from_ta(ta2);
+    f64 dM = wrap_angle(M2 - M1, 0.0, twopi) + static_cast<f64>(n_rev) * twopi;
+    f64 n = std::sqrt(mu / (sma * sma * sma));
+    if (n <= tol) return std::numeric_limits<f64>::quiet_NaN();
+
+    return dM / n;
+}
+
+void run_iod_diag(const Celestial& body) {
+    OEClassical coes{
+        .sma = body.mean_radius * 2.0,
+        .ecc = 0.1,
+        .inc = pio4,
+        .raan = 0.0,
+        .aop = 0.0
+    };
+
+    f64 ta1 = 0.0;
+    f64 ta2 = 0.2;
+    f64 ta3 = 0.4;
+
+    coes.ta = ta1;
+    StateTr x1 = classical_to_rv(coes, body.mu, UAngle::radian);
+    coes.ta = ta2;
+    StateTr x2 = classical_to_rv(coes, body.mu, UAngle::radian);
+    coes.ta = ta3;
+    StateTr x3 = classical_to_rv(coes, body.mu, UAngle::radian);
+
+    f64 t1 = 0.0;
+    f64 t2 = tof_elliptic_ta(coes.sma, coes.ecc, ta1, ta2, body.mu);
+    f64 t3 = tof_elliptic_ta(coes.sma, coes.ecc, ta1, ta3, body.mu);
+
+    vec3d R1{0.0, 0.0, body.mean_radius};
+    vec3d R2 = R1;
+    vec3d R3 = R1;
+
+    // relative positions
+    vec3d r_rel1 = x1.r - R1;
+    vec3d r_rel2 = x2.r - R2;
+    vec3d r_rel3 = x3.r - R3;
+
+    vec3d radec1 = radec_from_rel(r_rel1);
+    vec3d radec2 = radec_from_rel(r_rel2);
+    vec3d radec3 = radec_from_rel(r_rel3);
+
+    vec3d t{t1, t2, t3};
+
+    vec3d ra{radec1(0), radec2(0), radec3(0)};
+    vec3d dec{radec1(1), radec2(1), radec3(1)};
+
+    mat3d R;
+    R.col(0) = R1;
+    R.col(1) = R2;
+    R.col(2) = R3;
+
+    IODAnglesObs3 arc = iod_angles3_from_radec(t, ra, dec, R);
+
+    // Gauss
+    IODResult result_gauss = iod_gauss(arc, body.mu);
+    std::println("Gauss success = {}", result_gauss.success);
+    if (result_gauss.success) {
+        std::println("Gauss status = {}", i32(result_gauss.status));
+        std::println("Gauss iterations = {}", result_gauss.iterations);
+        std::println("r2 error = {}", (result_gauss.x.r - x2.r).norm());
+        std::println("v2 error = {}", (result_gauss.x.v - x2.v).norm());
+    }
+
+    // Gibbs
+    IODResult result_gibbs = iod_gibbs(x1.r, x2.r, x3.r, body.mu);
+    if (result_gibbs.success) {
+        std::println("Gibbs success = {}", result_gibbs.success);
+        std::println("Gibbs status = {}", i32(result_gibbs.status));
+        std::println("r2 error = {}", (result_gibbs.x.r - x2.r).norm());
+        std::println("v2 error = {}", (result_gibbs.x.v - x2.v).norm());
+    }
+
+    // Herrick-Gibbs
+    IODResult result_herrickgibbs
+        = iod_herrickgibbs(t1, t2, t3, x1.r, x2.r, x3.r, body.mu);
+    if (result_herrickgibbs.success) {
+        std::println("Herrick-Gibbs success = {}", result_herrickgibbs.success);
+        std::println("Herrick-Gibbs status = {}", i32(result_herrickgibbs.status));
+        std::println("r2 error = {}", (result_herrickgibbs.x.r - x2.r).norm());
+        std::println("v2 error = {}", (result_herrickgibbs.x.v - x2.v).norm());
+    }
 }

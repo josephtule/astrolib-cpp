@@ -94,6 +94,20 @@ inline vec3d radec_rates_from_state(
     );
 }
 
+inline vec3d los_from_radec(const vec2d& radec, UAngle angle_in = UAngle::radian) {
+    f64 ra = radec(0);
+    f64 dec = radec(1);
+    if (angle_in != UAngle::radian) {
+        ra = convert_angle(ra, angle_in, UAngle::radian);
+        dec = convert_angle(dec, angle_in, UAngle::radian);
+    }
+    return {std::cos(dec) * std::cos(ra), std::cos(dec) * std::sin(ra), std::sin(dec)};
+}
+
+inline vec3d los_from_radec(const vec3d& radec, UAngle angle_in = UAngle::radian) {
+    return los_from_radec(vec2d{radec(0), radec(1)}, angle_in);
+}
+
 // inline vec3d radec_to_azel(vec3d radec, vec3d stat_geod, f64 theta) {
 // TODO: do later
 // }
