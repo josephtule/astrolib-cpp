@@ -52,17 +52,18 @@ inline StateTr rk4_steptr_od(
 inline StateTr propagate_tr_od_rk4(
     f64 t0,
     const StateTr& x0,
-    f64 dt,
+    f64 t_inverval,
     i32 n_steps,
     const ODDynamicsConfig& cfg
 ) {
     StateTr x = x0;
-    if (n_steps <= 0 || dt == 0) return x;
+    if (n_steps <= 0 || t_inverval == 0) return x;
 
+    f64 dt_step = t_inverval / static_cast<f64>(n_steps);
     f64 t = t0;
     for (i32 i = 0; i < n_steps; ++i) {
-        x = rk4_steptr_od(t, x, dt, cfg);
-        t += dt;
+        x = rk4_steptr_od(t, x, dt_step, cfg);
+        t += dt_step;
     }
     return x;
 }
@@ -168,17 +169,18 @@ inline VarStateTr rk4_step_var_tr_od(
 inline VarStateTr propagate_var_tr_od_rk4(
     f64 t0,
     const VarStateTr& y0,
-    f64 dt,
+    f64 t_interval,
     i32 n_steps,
     const ODDynamicsConfig& cfg
 ) {
     VarStateTr x = y0;
-    if (n_steps <= 0 || dt == 0) return x;
+    if (n_steps <= 0 || t_interval == 0) return x;
 
+    f64 dt_step = t_interval / static_cast<f64>(n_steps);
     f64 t = t0;
     for (i32 i = 0; i < n_steps; ++i) {
-        x = rk4_step_var_tr_od(t, x, dt, cfg);
-        t += dt;
+        x = rk4_step_var_tr_od(t, x, dt_step, cfg);
+        t += dt_step;
     }
     return x;
 }

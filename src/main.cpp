@@ -24,7 +24,9 @@
 #include <limits>
 #include <print>
 
-void run_batch_od_diag(const Celestial& body);
+void run_batch_od_radec_diag(const Celestial& body);
+void run_batch_od_pos_diag(const Celestial& body);
+void run_batch_od_posvel_diag(const Celestial& body);
 void run_gravity_diag(
     World& world,
     EntityId earth_id,
@@ -150,17 +152,19 @@ int main() {
     JulianDate jd; // j2000 utc
     get_time_offsets(jd, eop);
 
-    run_earth_rot_diag(jd, eop);
-    run_station_obs_geom_diag(*earth, jd, eop);
-    run_rv_coe_diag(*earth);
-    run_radec_diag();
-    run_iod_diag(*earth);
-    run_od_prop_diag(*earth);
-    run_measurement_jacobian_diag();
+    // run_earth_rot_diag(jd, eop);
+    // run_station_obs_geom_diag(*earth, jd, eop);
+    // run_rv_coe_diag(*earth);
+    // run_radec_diag();
+    // run_iod_diag(*earth);
+    // run_od_prop_diag(*earth);
+    // run_measurement_jacobian_diag();
 
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_batch_od_diag(*earth);
+    run_batch_od_radec_diag(*earth);
+    run_batch_od_pos_diag(*earth);
+    run_batch_od_posvel_diag(*earth);
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
@@ -1013,7 +1017,7 @@ void run_measurement_jacobian_diag() {
     std::println("RA/Dec H deg fd/an max error: {}", H_err_deg.cwiseAbs().maxCoeff());
 }
 
-void run_batch_od_diag(const Celestial& body) {
+void run_batch_od_radec_diag(const Celestial& body) {
     StateTr x0_truth;
     x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
     x0_truth.v = vec3d{-0.5, 7.2, 1.0};
@@ -1024,7 +1028,7 @@ void run_batch_od_diag(const Celestial& body) {
     input.dyn_config.mu = body.mu;
     input.t0 = 0.0;
     input.max_iters = 10;
-    input.prop_steps = 100;
+    input.prop_steps = 200;
     input.tol_dx = 1e-6;
     input.tol_residual = 1e-8;
 
@@ -1068,11 +1072,144 @@ void run_batch_od_diag(const Celestial& body) {
     ODBatchResult result = od_batch_lumve(input);
     f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
     f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
-    std::println("Initial Error = {}", initial_err);
-    std::println("Final Error = {}", final_err);
-    std::println("LUMVE Success = {}", result.success);
-    // std::println("LUMVE Status: {}",result.status); // TODO: do status print functions
-    std::println("iterations: {}", result.iterations);
-    std::println("Residual Norm = {}", result.residual_norm);
-    std::println("Delta x Norm = {}", result.dx_norm);
+    std::println("RADEC Initial Error = {}", initial_err);
+    std::println("RADEC Final Error = {}", final_err);
+    std::println("RADEC LUMVE Success = {}", result.success);
+    // std::println("RADEC LUMVE Status: {}",result.status); // TODO: do status print functions
+    std::println("RADEC iterations: {}", result.iterations);
+    std::println("RADEC Residual Norm = {}", result.residual_norm);
+    std::println("RADEC Delta x Norm = {}", result.dx_norm);
 }
+
+void run_batch_od_pos_diag(const Celestial& body) {
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+
+    ODBatchInput input;
+    input.x0_guess = x0_truth;
+    input.dyn_config.model = ODDynamicsModel::two_body;
+    input.dyn_config.mu = body.mu;
+    input.t0 = 0.0;
+    input.max_iters = 10;
+    input.prop_steps = 200;
+    input.tol_dx = 1e-6;
+    input.tol_residual = 1e-8;
+
+    // add perturbations
+    input.x0_guess.r += vec3d{1.0, -1.0, 0.5};
+    input.x0_guess.v += vec3d{1e-3, -1e-3, 5e-4};
+
+    f64 t_meas0 = 0.0;
+    f64 t_measf = 600.0;
+    f64 N_meas = 30;
+    vecXd t_meas = vecXd::LinSpaced(N_meas, t_meas0, t_measf);
+    f64 sigma_r = 1e-3;
+    for (i32 i = 0; i < N_meas; ++i) {
+        // propagate to get measurements
+        StateTr x_truth_i = propagate_tr_od_rk4(
+            0.0,
+            x0_truth,
+            t_meas(i),
+            input.prop_steps,
+            input.dyn_config
+        );
+        StateTr x_obs;
+        // use stationary observer for now
+        x_obs.r = vec3d{body.mean_radius, 0.0, 0.0};
+        x_obs.v = vec3d0;
+        input.observer_states.push_back(x_obs);
+
+        // get measurement
+        MeasurementContext ctx;
+        ctx.x_target = x_truth_i;
+        ctx.x_observer = x_obs;
+        Measurement meas;
+        meas.t = t_meas(i);
+        meas.type = ObservationType::pos;
+        meas.z = predict_measurement(ObservationType::pos, ctx);
+        meas.R = matXd::Identity(3, 3) * sigma_r * sigma_r;
+        input.measurements.push_back(meas);
+    }
+
+    // solve
+    ODBatchResult result = od_batch_lumve(input);
+    f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
+    f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
+    std::println("POS Initial Error = {}", initial_err);
+    std::println("POS Final Error = {}", final_err);
+    std::println("POS LUMVE Success = {}", result.success);
+    // std::println("LUMVE Status: {}",result.status); // TODO: do status print functions
+    std::println("POS iterations: {}", result.iterations);
+    std::println("POS Residual Norm = {}", result.residual_norm);
+    std::println("POS Delta x Norm = {}", result.dx_norm);
+}
+
+void run_batch_od_posvel_diag(const Celestial& body) {
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+
+    ODBatchInput input;
+    input.x0_guess = x0_truth;
+    input.dyn_config.model = ODDynamicsModel::two_body;
+    input.dyn_config.mu = body.mu;
+    input.t0 = 0.0;
+    input.max_iters = 10;
+    input.prop_steps = 200;
+    input.tol_dx = 1e-6;
+    input.tol_residual = 1e-8;
+
+    // add perturbations
+    input.x0_guess.r += vec3d{1.0, -1.0, 0.5};
+    input.x0_guess.v += vec3d{1e-3, -1e-3, 5e-4};
+
+    f64 t_meas0 = 0.0;
+    f64 t_measf = 600.0;
+    f64 N_meas = 30;
+    vecXd t_meas = vecXd::LinSpaced(N_meas, t_meas0, t_measf);
+    f64 sigma_r = 1e-3;
+    f64 sigma_v = 1e-6;
+    for (i32 i = 0; i < N_meas; ++i) {
+        // propagate to get measurements
+        StateTr x_truth_i = propagate_tr_od_rk4(
+            0.0,
+            x0_truth,
+            t_meas(i),
+            input.prop_steps,
+            input.dyn_config
+        );
+        StateTr x_obs;
+        // use stationary observer for now
+        x_obs.r = vec3d{body.mean_radius, 0.0, 0.0};
+        x_obs.v = vec3d0;
+        input.observer_states.push_back(x_obs);
+
+        // get measurement
+        MeasurementContext ctx;
+        ctx.x_target = x_truth_i;
+        ctx.x_observer = x_obs;
+        Measurement meas;
+        meas.t = t_meas(i);
+        meas.type = ObservationType::pos_vel;
+        meas.z = predict_measurement(ObservationType::pos_vel, ctx);
+        meas.R = matXd::Zero(6, 6);
+        meas.R.block(0, 0, 3, 3) = mat3d::Identity() * sigma_r * sigma_r;
+        meas.R.block(3, 3, 3, 3) = mat3d::Identity() * sigma_v * sigma_v;
+        input.measurements.push_back(meas);
+    }
+
+    // solve
+    ODBatchResult result = od_batch_lumve(input);
+    f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
+    f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
+    std::println("POSVEL Initial Error = {}", initial_err);
+    std::println("POSVEL Final Error = {}", final_err);
+    std::println("POSVEL LUMVE Success = {}", result.success);
+    // std::println("LUMVE Status: {}",result.status); // TODO: do status print functions
+    std::println("POSVEL iterations: {}", result.iterations);
+    std::println("POSVEL Residual Norm = {}", result.residual_norm);
+    std::println("POSVEL Delta x Norm = {}", result.dx_norm);
+}
+
+// TODO: consolidate batch OD diags

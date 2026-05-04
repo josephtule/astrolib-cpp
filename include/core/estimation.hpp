@@ -184,18 +184,18 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             // H.block(row0, 0, dim, 6) = H_i;
             row0 += dim;
         } // end measurement loop
-        
+
         if (row0 != total_dim) {
             result.status = ODBatchStatus::invalid_input;
             return result;
         }
-        
+
         // normal matrices
         if (!Lambda.allFinite() || Lambda.diagonal().cwiseAbs().minCoeff() <= tol_tight) {
             result.status = ODBatchStatus::singular_normal_matrix;
             return result;
         }
-        
+
         // TODO: use CompleteOrthogonalDecomposition later for robustness
         // use ldlh decomp for solving (see sOPT)
         Eigen::LDLT<mat6d> ldlt(Lambda);
@@ -208,9 +208,13 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             result.status = ODBatchStatus::singular_normal_matrix;
             return result;
         }
-        
+
+        // TODO: add line search
+        // f64 alpha = 0.25;
+        // StateTr x0_cand = x0_ref + alpha * vec6_to_derivtr(dx);
+        // x0_ref = x0_cand;
         x0_ref += vec6_to_statetr(dx);
-        
+
         // store result
         result.iterations = iter + 1;
         result.dx_norm = dx.norm();
