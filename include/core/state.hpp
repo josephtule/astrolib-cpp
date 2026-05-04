@@ -71,6 +71,19 @@ inline vec6d derivtr_to_vec6d(const DerivTr& x) {
     out << x.dr, x.dv;
     return out;
 }
+inline StateTr vec6_to_statetr(const vec6d& x) {
+    StateTr out;
+    out.r = x.segment<3>(0);
+    out.v = x.segment<3>(3);
+    return out;
+};
+inline DerivTr vec6_to_derivtr(const vec6d& dx) {
+    DerivTr out;
+    out.dr = dx.segment<3>(0);
+    out.dv = dx.segment<3>(3);
+    return out;
+};
+
 inline vec7d stateatt_to_vec7d(const StateAtt& x) {
     vec7d out;
     out << x.q, x.w;

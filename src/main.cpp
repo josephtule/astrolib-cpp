@@ -3,6 +3,7 @@
 #include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
 #include "core/observations.hpp"
+#include "core/od_dynamics.hpp"
 #include "core/orbit_determination.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
@@ -73,6 +74,7 @@ void run_station_obs_geom_diag(
 void run_rv_coe_diag(const Celestial& body);
 void run_radec_diag();
 void run_iod_diag(const Celestial& body);
+void run_od_prop_diag(const Celestial& body);
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
@@ -148,10 +150,11 @@ int main() {
     run_station_obs_geom_diag(*earth, jd, eop);
     run_rv_coe_diag(*earth);
     run_radec_diag();
+    run_iod_diag(*earth);
 
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_iod_diag(*earth);
+    run_od_prop_diag(*earth);
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
@@ -888,4 +891,81 @@ void run_iod_diag(const Celestial& body) {
         std::println("r2 error = {}", (result_herrickgibbs.x.r - x2.r).norm());
         std::println("v2 error = {}", (result_herrickgibbs.x.v - x2.v).norm());
     }
+}
+
+void run_od_prop_diag(const Celestial& body) {
+    OEClassical coes{
+        .sma = body.mean_radius * 2.0,
+        .ecc = 0.1,
+        .inc = pio4,
+        .raan = 0.0,
+        .aop = 0.0
+    };
+
+    f64 ta1 = 0.0;
+    f64 ta2 = 0.2;
+
+    coes.ta = ta1;
+    StateTr x1 = classical_to_rv(coes, body.mu, UAngle::radian);
+    coes.ta = ta2;
+    StateTr x2_truth = classical_to_rv(coes, body.mu, UAngle::radian);
+    f64 tof = tof_elliptic_ta(coes.sma, coes.ecc, ta1, ta2, body.mu);
+
+    i32 n_steps = 100;
+    f64 dt = tof / n_steps;
+
+    ODDynamicsConfig cfg{.model = ODDynamicsModel::two_body, .mu = body.mu};
+    StateTr x2_prop = propagate_tr_od_rk4(0.0, x1, dt, n_steps, cfg);
+
+    std::println("OD Propagation Error");
+    StateTr x2_err = x2_truth - x2_prop;
+    std::println("Position error = {}", x2_err.r.norm());
+    std::println("Velocity error = {}", x2_err.v.norm());
+
+    // STM propagation
+
+    std::println("STM Propagation Error");
+    StateTr x0 = x1;
+    VarStateTr y0;
+    y0.x = x0;
+    y0.Phi = mat6d1;
+
+    VarStateTr yf = propagate_var_tr_od_rk4(0.0, y0, dt, n_steps, cfg);
+    StateTr xf = propagate_tr_od_rk4(0.0, x0, dt, n_steps, cfg);
+
+    std::println("State/var position error = {}", (yf.x.r - xf.r).norm());
+    std::println("State/var velocity error = {}", (yf.x.v - xf.v).norm());
+
+    vec6d x0_vec = statetr_to_vec6d(x0);
+    vec6d xf_vec = statetr_to_vec6d(xf);
+
+    f64 eps_pos = 1e-3; // km
+    f64 eps_vel = 1e-6; // km/s
+    std::println("FD eps position = {}", eps_pos);
+    std::println("FD eps velocity = {}", eps_vel);
+
+    mat6d Phi_fd;
+    // Build each STM column by perturbing one initial state component,
+    // propagating it, then differencing against the nominal final state
+    // forward finite difference: https://www.dam.brown.edu/people/alcyew/handouts/numdiff.pdf
+    // TODO: maybe add jacobian-free (use finite diff) version for od?
+    for (i32 i = 0; i < 6; ++i) {
+        f64 eps_i = (i < 3) ? eps_pos : eps_vel;
+
+        vec6d x0_pert_vec = x0_vec;
+        x0_pert_vec(i) += eps_i;
+        StateTr x0_pert = vec6_to_statetr(x0_pert_vec);
+        StateTr xf_pert = propagate_tr_od_rk4(0.0, x0_pert, dt, n_steps, cfg);
+        vec6d xf_pert_vec = statetr_to_vec6d(xf_pert);
+        Phi_fd.col(i) = (xf_pert_vec - xf_vec) / eps_i;
+    }
+
+    mat6d Phi_err = yf.Phi - Phi_fd;
+    f64 Phi_err_rel = Phi_err.norm() / yf.Phi.norm();
+    std::println("STM fd error norm = {}", Phi_err.norm());
+    std::println("STM fd max error = {}", Phi_err.cwiseAbs().maxCoeff());
+    std::println("STM fd relative error = {}", Phi_err_rel);
+
+    std::println("Phi norm = {}", yf.Phi.norm());
+    std::println("Phi fd norm = {}", Phi_fd.norm());
 }
