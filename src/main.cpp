@@ -1075,7 +1075,7 @@ void run_batch_od_radec_diag(const Celestial& body) {
     std::println("RADEC Initial Error = {}", initial_err);
     std::println("RADEC Final Error = {}", final_err);
     std::println("RADEC LUMVE Success = {}", result.success);
-    // std::println("RADEC LUMVE Status: {}",result.status); // TODO: do status print functions
+    std::println("RADEC LUMVE Status: {}", od_batch_status_string(result.status));
     std::println("RADEC iterations: {}", result.iterations);
     std::println("RADEC Residual Norm = {}", result.residual_norm);
     std::println("RADEC Delta x Norm = {}", result.dx_norm);
@@ -1139,7 +1139,7 @@ void run_batch_od_pos_diag(const Celestial& body) {
     std::println("POS Initial Error = {}", initial_err);
     std::println("POS Final Error = {}", final_err);
     std::println("POS LUMVE Success = {}", result.success);
-    // std::println("LUMVE Status: {}",result.status); // TODO: do status print functions
+    std::println("POS LUMVE Status: {}", od_batch_status_string(result.status));
     std::println("POS iterations: {}", result.iterations);
     std::println("POS Residual Norm = {}", result.residual_norm);
     std::println("POS Delta x Norm = {}", result.dx_norm);
@@ -1206,7 +1206,7 @@ void run_batch_od_posvel_diag(const Celestial& body) {
     std::println("POSVEL Initial Error = {}", initial_err);
     std::println("POSVEL Final Error = {}", final_err);
     std::println("POSVEL LUMVE Success = {}", result.success);
-    // std::println("LUMVE Status: {}",result.status); // TODO: do status print functions
+    std::println("POSVEL LUMVE Status: {}", od_batch_status_string(result.status));
     std::println("POSVEL iterations: {}", result.iterations);
     std::println("POSVEL Residual Norm = {}", result.residual_norm);
     std::println("POSVEL Delta x Norm = {}", result.dx_norm);

@@ -8,6 +8,6 @@
 **/__pycache__
 **/legacy/
 **/ref/
-**/external/
+# **/external/
 **/scratch/
 **/assets/

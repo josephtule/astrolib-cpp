@@ -1,0 +1,6 @@
+[submodule "external/sOPT"]
+	path = external/sOPT
+	url = https://github.com/josephtule/sOPT
+[submodule "external/eigen"]
+	path = external/eigen
+	url = https://gitlab.com/libeigen/eigen.git

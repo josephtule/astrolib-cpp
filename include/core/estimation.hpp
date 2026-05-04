@@ -17,6 +17,35 @@ enum struct ODBatchStatus {
     max_iters_reached,
 };
 
+inline std::string od_batch_status_string(ODBatchStatus status) {
+    std::string str;
+    switch (status) {
+    case ODBatchStatus::ok: {
+        str = "Ok";
+    } break;
+    case ODBatchStatus::invalid_input: {
+        str = "Invalid Input";
+    } break;
+    case ODBatchStatus::empty_measurements: {
+        str = "Empty Measurements";
+    } break;
+    case ODBatchStatus::size_mismatch: {
+        str = "Size Mismatch";
+    } break;
+    case ODBatchStatus::propagation_failed: {
+        str = "Propagation Failed";
+    } break;
+    case ODBatchStatus::singular_normal_matrix: {
+        str = "Singular Normal Matrix";
+    } break;
+    case ODBatchStatus::max_iters_reached:
+        break;
+        { str = "Max Iterations reached"; }
+        break;
+    }
+    return str;
+}
+
 struct ODBatchInput {
     StateTr x0_guess;
     svec<Measurement> measurements;
@@ -203,21 +232,22 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             result.status = ODBatchStatus::singular_normal_matrix;
             return result;
         }
-        vec6d dx = ldlt.solve(lambda);
-        if (!dx.allFinite()) {
+        vec6d dx_vec = ldlt.solve(lambda);
+        if (!dx_vec.allFinite()) {
             result.status = ODBatchStatus::singular_normal_matrix;
             return result;
         }
+        StateTr dx = vec6_to_statetr(dx_vec);
 
         // TODO: add line search
         // f64 alpha = 0.25;
         // StateTr x0_cand = x0_ref + alpha * vec6_to_derivtr(dx);
         // x0_ref = x0_cand;
-        x0_ref += vec6_to_statetr(dx);
+        x0_ref += dx;
 
         // store result
         result.iterations = iter + 1;
-        result.dx_norm = dx.norm();
+        result.dx_norm = dx_vec.norm();
         result.x0_est = x0_ref;
         result.residual_norm = sqrt(residual_norm2);
         result.normal_inv = Lambda.inverse();
