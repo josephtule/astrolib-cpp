@@ -55,10 +55,6 @@ enum struct RotAxis : i32 { x = 1, y = 2, z = 3 };
 
 template <typename T>
 inline mat3<T> rot(T angle, RotAxis axis, UAngle uin = UAngle::radian) {
-    angle = convert_angle(angle, uin, UAngle::radian);
-    T c = std::cos(angle);
-    T s = std::sin(angle);
-
     mat3<T> R;
     switch (axis) {
     case RotAxis::x: R = rotX(angle, uin); break;
@@ -69,10 +65,6 @@ inline mat3<T> rot(T angle, RotAxis axis, UAngle uin = UAngle::radian) {
 }
 template <typename T>
 inline mat3<T> rot_active(T angle, RotAxis axis, UAngle uin = UAngle::radian) {
-    angle = convert_angle(angle, uin, UAngle::radian);
-    T c = std::cos(angle);
-    T s = std::sin(angle);
-
     mat3<T> R;
     switch (axis) {
     case RotAxis::x: R = rotX(angle, uin).transpose(); break;
@@ -99,12 +91,12 @@ inline mat3<T> ea_to_dcm(
 
 // Euler-Parameters / Unit-Quaternions
 template <typename T>
-inline mat3<T> ep_to_dcm(ecref<vec4d> q) {
+inline mat3<T> ep_to_dcm(const vec4<T>& q) {
     mat3<T> R;
-    T q1 = q( 0 );
-    T q2 = q( 1 );
-    T q3 = q( 2 );
-    T q4 = q( 3 );
+    T q1 = q(0);
+    T q2 = q(1);
+    T q3 = q(2);
+    T q4 = q(3);
 
     T q11 = q1 * q1;
     T q22 = q2 * q2;
@@ -131,11 +123,11 @@ inline mat3<T> ep_to_dcm(ecref<vec4d> q) {
 }
 
 template <typename T>
-inline vec4<T> ep_mult(vec4<T> a, vec4<T> b) {
+inline vec4<T> ep_mult(const vec4<T>& a, const vec4<T>& b) {
     vec3<T> av = a.template segment<3>(0);
     vec3<T> bv = b.template segment<3>(0);
-    T as = a( 3 );
-    T bs = b( 3 );
+    T as = a(3);
+    T bs = b(3);
 
     T qs = as * bs - av.dot(bv);
     vec3<T> qv = as * bv + bs * av + av.cross(bv);
@@ -145,27 +137,27 @@ inline vec4<T> ep_mult(vec4<T> a, vec4<T> b) {
 }
 
 template <typename T>
-inline vec4<T> ep_conj(vec4<T> q) {
-    vec4<T> qc = {-q( 0 ), -q( 1 ), -q( 2 ), q( 3 )};
+inline vec4<T> ep_conj(const vec4<T>& q) {
+    vec4<T> qc = {-q(0), -q(1), -q(2), q(3)};
     return qc;
 }
 
 template <typename T>
-inline vec3<T> ep_rotate_active(vec4<T> q, vec3<T> v) {
+inline vec3<T> ep_rotate_active(const vec4<T>& q, const vec3<T>& v) {
     // this is an active rotation B -> N
     // assume q is normalized
-    vec4<T> vq = {v( 0 ), v( 1 ), v( 2 ), static_cast<T>(0)};
+    vec4<T> vq = {v(0), v(1), v(2), static_cast<T>(0)};
     vec4<T> qc = ep_conj(q);
-    vec3<T> vp = ep_mult(ep_mult(q, vq), qc);
+    vec4<T> vp = ep_mult(ep_mult(q, vq), qc);
 
-    return vp;
+    return vec3<T>{vp(0), vp(1), vp(2)};
 }
 template <typename T>
-inline vec3<T> ep_rotate_fast_active(vec4<T> q, vec3<T> v) {
+inline vec3<T> ep_rotate_fast_active(const vec4<T>& q, const vec3<T>& v) {
     // this is an active rotation [NB]: B -> N
     // assume q is normalized
     vec3<T> u = q.template segment<3>(0);
-    T s = q( 3 );
+    T s = q(3);
     vec3<T> uxv = u.cross(v);
     vec3<T> vp = v + 2 * s * uxv + 2 * (u.dot(v) * u - u.dot(u) * v);
 
@@ -173,20 +165,20 @@ inline vec3<T> ep_rotate_fast_active(vec4<T> q, vec3<T> v) {
 }
 
 template <typename T>
-inline vec3<T> ep_rotate_passive(vec4<T> q, vec3<T> v) {
+inline vec3<T> ep_rotate_passive(const vec4<T>& q, const vec3<T>& v) {
     // this is an passive rotation [BN]: N -> B
     // assume q is normalized
     return ep_rotate_active(ep_conj(q), v);
 }
 template <typename T>
-inline vec3<T> ep_rotate_fast_passive(vec4<T> q, vec3<T> v) {
+inline vec3<T> ep_rotate_fast_passive(const vec4<T>& q, const vec3<T>& v) {
     // this is an passive rotation [BN]: N -> B
     // assume q is normalized
     return ep_rotate_fast_active(ep_conj(q), v);
 }
 
 template <typename T>
-inline vec4<T> dcm_to_ep(mat3<T> R) {
+inline vec4<T> dcm_to_ep(const mat3<T>& R) {
     T Rtr = R.trace();
     T q1, q2, q3, q4;
     // Shepperd's Selection Algorithm
@@ -217,14 +209,14 @@ inline vec4<T> dcm_to_ep(mat3<T> R) {
     return q;
 }
 
-inline vec3d body_to_centric(vec3d r_body, UAngle u_out = UAngle::degree) {
+inline vec3d bcbf_to_centric(ecref<vec3d> r_bcbf, UAngle u_out = UAngle::degree) {
     vec3d llr = vec3d::Zero();
 
-    f64 x = r_body(0);
-    f64 y = r_body(1);
-    f64 z = r_body(2);
+    f64 x = r_bcbf(0);
+    f64 y = r_bcbf(1);
+    f64 z = r_bcbf(2);
 
-    f64 r = r_body.norm();
+    f64 r = r_bcbf.norm();
     f64 r_tilde = std::sqrt(x * x + y * y);
 
     // Planetocentric latitude/longitude (radians)
@@ -241,8 +233,8 @@ inline vec3d body_to_centric(vec3d r_body, UAngle u_out = UAngle::degree) {
     return llr;
 }
 
-inline vec3d centric_to_body(vec3d llr, UAngle u_in = UAngle::degree) {
-    vec3d r_body = vec3d::Zero();
+inline vec3d centric_to_bcbf(ecref<vec3d> llr, UAngle u_in = UAngle::degree) {
+    vec3d r_bcbf = vec3d::Zero();
 
     f64 latitude = llr(0);
     f64 longitude = llr(1);
@@ -258,22 +250,22 @@ inline vec3d centric_to_body(vec3d llr, UAngle u_in = UAngle::degree) {
     f64 slon = std::sin(longitude);
     f64 clon = std::cos(longitude);
 
-    r_body = vec3d{r * clat * clon, r * clat * slon, r * slat};
+    r_bcbf = vec3d{r * clat * clon, r * clat * slon, r * slat};
 
-    return r_body;
+    return r_bcbf;
 }
 
-inline vec3d body_to_detic(
-    vec3d r_body,
+inline vec3d bcbf_to_detic(
+    ecref<vec3d> r_bcbf,
     Celestial& body,
     UAngle u_out = UAngle::degree,
     f64 tol = tol_strict
 ) {
     vec3d llh = vec3d::Zero();
 
-    f64 x = r_body(0);
-    f64 y = r_body(1);
-    f64 z = r_body(2);
+    f64 x = r_bcbf(0);
+    f64 y = r_bcbf(1);
+    f64 z = r_bcbf(2);
 
     f64 r_tilde2 = x * x + y * y;
     f64 r_tilde = std::sqrt(r_tilde2);
@@ -328,12 +320,12 @@ inline vec3d body_to_detic(
     return llh;
 }
 
-inline vec3d detic_to_body(
-    vec3d llh,
+inline vec3d detic_to_bcbf(
+    ecref<vec3d> llh,
     const Celestial& body,
     UAngle u_in = UAngle::degree
 ) {
-    vec3d r_body = vec3d::Zero();
+    vec3d r_bcbf = vec3d::Zero();
 
     f64 latitude = llh(0);
     f64 longitude = llh(1);
@@ -356,44 +348,12 @@ inline vec3d detic_to_body(
 
     f64 N = a / std::sqrt(1.0 - e2 * slat * slat);
 
-    r_body = vec3d{
+    r_bcbf = vec3d{
         (N + h) * clat * clon,
         (N + h) * clat * slon,
         (N * (1.0 - e2) + h) * slat
     };
 
-    return r_body;
+    return r_bcbf;
 }
 
-inline vec3d get_radec(
-    ecref<vec3d> r_obj,
-    ecref<vec3d> r_stat,
-    UAngle u_out = UAngle::degree
-) {
-    // r_obj and r_stat must be in the same inertial frame
-    vec3d radec;
-
-    // Topocentric (station relative position of obj)
-    vec3d r_topo = r_obj - r_stat;
-    f64 x = r_topo(0);
-    f64 y = r_topo(1);
-    f64 z = r_topo(2);
-    f64 rho = r_topo.norm();
-
-    // Compute right ascension and declination
-    f64 ra = atan2(y, x);
-    f64 dec = atan2(z, std::sqrt(x * x + y * y));
-
-    if (u_out == UAngle::degree) {
-        ra *= rad_to_deg;
-        dec *= rad_to_deg;
-    }
-
-    radec = vec3d{ra, dec, rho};
-
-    return radec;
-}
-
-// inline vec3d radec_to_azel(vec3d radec, vec3d stat_geod, f64 theta) {
-// TODO: do later
-// }

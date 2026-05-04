@@ -5,12 +5,15 @@
 #include "util/vecdefs.hpp"
 
 inline StateTr iod_gauss(
+    // times
     f64 t1,
     f64 t2,
     f64 t3,
+    // observation directions in BCI?
     ecref<vec3d> L1,
     ecref<vec3d> L2,
     ecref<vec3d> L3,
+    // observation station vectors in body-centered inertial (BCI)
     ecref<vec3d> R1,
     ecref<vec3d> R2,
     ecref<vec3d> R3,
@@ -363,7 +366,7 @@ struct StatAzElMeas : public StatMeas {
 enum struct VehicleObservationModel {};
 
 inline void LUMVEstat(
-    StateTr x_0,                 // initial guess
+    StateTr x_0,          // initial guess
     svec<StatMeas>& meas, // vector of measurements
     StatMeasModel obs_model = StatMeasModel::topo_inertial_cart,
     i32 max_iter = 10
@@ -371,5 +374,4 @@ inline void LUMVEstat(
     // Nonlinear Least Squares / Linear, Unbiased, Minimum Variance Estimate (NLS/LUMVE)
     // This is a nonlinear least squares iterative batch estimator for ground station
     // observers to perform orbit determination corrections
-
 }

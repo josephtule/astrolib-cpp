@@ -38,3 +38,6 @@ inline vec7d d_rigidbody_PA(f64 t, StateAtt& x, ecref<mat3d> I) {
 
     return dxdt;
 }
+
+// TODO: add override for rotation of celestial bodies (With Earth Orientation
+// Parameters/etc.)

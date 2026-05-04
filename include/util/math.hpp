@@ -151,3 +151,5 @@ template <typename T>
 inline T cosd(T val) {
     return std::cos(val * deg_to_rad);
 }
+
+inline f64 clamp_unit(f64 x) { return std::clamp(x, -1.0, 1.0); }
