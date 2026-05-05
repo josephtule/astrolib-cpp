@@ -9,6 +9,37 @@
 
 class SystemStepper;
 
+struct BodySnapshot {
+    EntityId id = kInvalidEntityId;
+    std::string name;
+    BodyType body_type = BodyType::unknown;
+
+    StateTr x_tr;
+    StateAtt x_att;
+
+    bool propagate_tr = true;
+    bool propagate_att = false;
+
+    bool emits_gravity = false;
+    bool emits_radiation = false;
+};
+
+struct WorldStateSnapshot {
+    // Entity storage
+    EntityId next_id = 1;
+    svec<EntityId> active_ids;
+    svec<BodySnapshot> bodies;
+
+    // Simulation state
+    f64 t_sim_ = 0.0;
+};
+
+// void capture_body(BodySnapshot& snapshot, const Body& body);
+// void restore_body(Body& body, const BodySnapshot& snapshot);
+// void capture_celestial();
+// void capture_satellite();
+// void capture_station();
+
 class World {
   private:
     // Entity storage
@@ -26,6 +57,11 @@ class World {
   public:
     f64 t_sim() const;
     void reset_time(f64 t0 = 0.0);
+
+    // World Snapshot saving and loading
+    WorldStateSnapshot capture_checkpoint() const;
+    bool restore_checkpoint_state(const WorldStateSnapshot& snapshot); // soft restore
+    // bool restore_checkpoint(const WorldStateSnapshot& snapshot); // hard restore
 
     // Entity lifecycle and roles
     bool is_active(EntityId id) const;

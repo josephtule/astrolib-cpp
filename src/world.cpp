@@ -5,6 +5,7 @@
 #include "core/state.hpp"
 #include "core/transform.hpp"
 #include "util/vecdefs.hpp"
+
 #include <cstddef>
 #include <memory>
 
@@ -12,11 +13,73 @@ f64 World::t_sim() const { return t_sim_; }
 
 void World::reset_time(f64 t0) { t_sim_ = t0; }
 
+WorldStateSnapshot World::capture_checkpoint() const {
+    WorldStateSnapshot snapshot;
+    snapshot.next_id = this->next_id;
+    snapshot.active_ids = active_ids;
+    snapshot.t_sim_ = t_sim_;
+    snapshot.bodies.reserve(bodies.size());
+    for (const i32 id : active_ids) {
+        const Body* body = this->body(id);
+        if (body != nullptr) {
+            BodySnapshot body_snapshot;
+            body_snapshot.id = body->id;
+            body_snapshot.name = body->name;
+            body_snapshot.body_type = body->body_type;
+            body_snapshot.x_tr = body->x_tr;
+            body_snapshot.x_att = body->x_att;
+            body_snapshot.propagate_tr = body->propagate_tr;
+            body_snapshot.propagate_att = body->propagate_att;
+            body_snapshot.emits_gravity = body->emits_gravity;
+            body_snapshot.emits_radiation = body->emits_radiation;
+            snapshot.bodies.push_back(body_snapshot);
+        }
+    }
+    return snapshot;
+}
+
+bool World::restore_checkpoint_state(const WorldStateSnapshot& snapshot) {
+    // this is a soft restore, only restores the states of the bodies
+    // does not support adding/removing bodies in between capture point and restore point
+
+    if (active_ids.size() != snapshot.active_ids.size() || next_id != snapshot.next_id) {
+        return false;
+    }
+    for (i32 i = 0; i < active_ids.size(); ++i) {
+        if (active_ids[i] != snapshot.active_ids[i]) return false;
+    }
+
+    // validate bodies
+    for (const BodySnapshot& body_snapshot : snapshot.bodies) {
+        Body* temp = body(body_snapshot.id);
+        if (temp == nullptr) return false;
+        if (body_snapshot.body_type != temp->body_type) return false;
+    }
+
+    this->next_id = snapshot.next_id;
+    this->active_ids = snapshot.active_ids;
+    this->t_sim_ = snapshot.t_sim_;
+
+    for (const BodySnapshot& body_snapshot : snapshot.bodies) {
+        Body* temp = body(body_snapshot.id);
+        temp->id = body_snapshot.id;
+        temp->name = body_snapshot.name;
+        temp->body_type = body_snapshot.body_type;
+        temp->x_tr = body_snapshot.x_tr;
+        temp->x_att = body_snapshot.x_att;
+        temp->propagate_tr = body_snapshot.propagate_tr;
+        temp->propagate_att = body_snapshot.propagate_att;
+        temp->emits_gravity = body_snapshot.emits_gravity;
+        temp->emits_radiation = body_snapshot.emits_radiation;
+    }
+
+    return true;
+}
+
 bool World::is_active(EntityId id) const {
     for (auto temp_id : active_ids) {
         if (id == temp_id) return true;
     }
-
     return false;
 }
 

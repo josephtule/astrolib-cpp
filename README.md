@@ -42,13 +42,18 @@ https://datacenter.iers.org/data/latestVersion/EOP_C01_IAU1980_1846-now.txt
 
 https://datacenter.iers.org/data/latestVersion/EOP_20u24_C04_one_file_1962-now.txt
 
-
 # NASA SPICE
 
-# Documentation
-## Planetary Positions
+## Documentation
+
+### Planetary Positions
+
 https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkpos_c.html
-## Target IDs
+
+### Target IDs
+
 https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/naif_ids.html
-## Frame IDs 
+
+### Frame IDs
+
 https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/frames.html

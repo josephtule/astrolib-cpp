@@ -74,7 +74,7 @@ int main() {
     };
     EarthOrientationParams eop{.leap_seconds = lsp, .nutation = enp, .polar_motion = pmp};
     bool eop_ok = load_all_eop(eop);
-    std::println("EOP Loaded: {}", eop_ok);
+    // std::println("EOP Loaded: {}", eop_ok);
 
     JulianDate jd; // j2000 utc
     get_time_offsets(jd, eop);
@@ -86,11 +86,12 @@ int main() {
     // run_iod_diag(*earth);
     // run_od_prop_diag(*earth);
     // run_measurement_jacobian_diag();
+    // run_batch_od_diag(*earth);
+    // run_ekf_mixed_measurement_diag(*earth);
 
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_batch_od_diag(*earth);
-    run_ekf_mixed_measurement_diag(*earth);
+    run_checkpoint_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

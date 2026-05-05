@@ -1,5 +1,6 @@
 #include "core/diagnostics.hpp"
 #include "core/dynamics_rotational.hpp"
+#include "core/entity.hpp"
 #include "core/estimation_batch.hpp"
 #include "core/estimation_recursive.hpp"
 #include "core/measurement.hpp"
@@ -9,6 +10,7 @@
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
 #include "core/station_geometry.hpp"
+#include "core/world.hpp"
 #include <random>
 
 void run_gravity_diag(
@@ -1228,4 +1230,34 @@ void run_ekf_mixed_measurement_diag(const Celestial& body) {
     for (const EKFDiagCase& diag_case : cases) {
         run_case(diag_case);
     }
+}
+
+void run_checkpoint_diag() {
+    World world;
+    EntityId cel_id = world.spawn_celestial();
+    EntityId sat_id = world.spawn_satellite();
+    EntityId stat_id = world.spawn_station();
+    world.reset_time(0.0);
+    Satellite* sat = world.satellite(sat_id);
+    sat->x_tr.r = vec3d{1.0, 1.0, 1.0} * 7000;
+    sat->x_tr.v = vec3d{0.0, 7.5, 0.0};
+    std::println("Initial World:");
+    std::println("Sim Time: {}", world.t_sim());
+    std::println("Sat Pos = {}", sat->x_tr.r);
+    std::println("Sat Vel = {}", sat->x_tr.v);
+    WorldStateSnapshot world_state_snapshot = world.capture_checkpoint();
+
+    world.reset_time(100.0);
+    sat->x_tr.r = vec3d{1.0, 1.0, 1.0} * 1000;
+    sat->x_tr.v = vec3d{0.0, 0.0, 0.0};
+    std::println("Mutated World:");
+    std::println("Sim Time: {}", world.t_sim());
+    std::println("Sat Pos = {}", sat->x_tr.r);
+    std::println("Sat Vel = {}", sat->x_tr.v);
+
+    bool restored = world.restore_checkpoint_state(world_state_snapshot);
+    std::println("Restored World: {}", restored);
+    std::println("Sim Time: {}", world.t_sim());
+    std::println("Sat Pos = {}", sat->x_tr.r);
+    std::println("Sat Vel = {}", sat->x_tr.v);
 }

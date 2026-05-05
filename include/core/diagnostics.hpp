@@ -61,3 +61,4 @@ void run_iod_diag(const Celestial& body);
 void run_od_prop_diag(const Celestial& body);
 void run_measurement_jacobian_diag();
 void run_ekf_mixed_measurement_diag(const Celestial& body);
+void run_checkpoint_diag();
