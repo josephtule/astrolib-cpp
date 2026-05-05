@@ -2,7 +2,7 @@
 #include "core/dynamics_rotational.hpp"
 #include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
-#include "core/estimation.hpp"
+#include "core/estimation_batch.hpp"
 #include "core/measurement.hpp"
 #include "core/observations.hpp"
 #include "core/od_dynamics.hpp"
@@ -1078,6 +1078,7 @@ void run_batch_od_radec_diag(const Celestial& body) {
     std::println("RADEC LUMVE Status: {}", od_batch_status_string(result.status));
     std::println("RADEC iterations: {}", result.iterations);
     std::println("RADEC Residual Norm = {}", result.residual_norm);
+    std::println("RADEC Raw Residual Norm = {}", result.raw_residual_norm);
     std::println("RADEC Delta x Norm = {}", result.dx_norm);
 }
 
@@ -1142,6 +1143,7 @@ void run_batch_od_pos_diag(const Celestial& body) {
     std::println("POS LUMVE Status: {}", od_batch_status_string(result.status));
     std::println("POS iterations: {}", result.iterations);
     std::println("POS Residual Norm = {}", result.residual_norm);
+    std::println("POS Raw Residual Norm = {}", result.raw_residual_norm);
     std::println("POS Delta x Norm = {}", result.dx_norm);
 }
 
@@ -1209,6 +1211,7 @@ void run_batch_od_posvel_diag(const Celestial& body) {
     std::println("POSVEL LUMVE Status: {}", od_batch_status_string(result.status));
     std::println("POSVEL iterations: {}", result.iterations);
     std::println("POSVEL Residual Norm = {}", result.residual_norm);
+    std::println("POSVEL Raw Residual Norm = {}", result.raw_residual_norm);
     std::println("POSVEL Delta x Norm = {}", result.dx_norm);
 }
 
