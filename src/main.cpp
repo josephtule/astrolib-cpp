@@ -3,6 +3,7 @@
 #include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_batch.hpp"
+#include "core/estimation_recursive.hpp"
 #include "core/measurement.hpp"
 #include "core/observations.hpp"
 #include "core/od_dynamics.hpp"
@@ -81,6 +82,7 @@ void run_radec_diag();
 void run_iod_diag(const Celestial& body);
 void run_od_prop_diag(const Celestial& body);
 void run_measurement_jacobian_diag();
+void run_ekf_mixed_measurement_diag(const Celestial& body);
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
@@ -159,26 +161,18 @@ int main() {
     // run_iod_diag(*earth);
     // run_od_prop_diag(*earth);
     // run_measurement_jacobian_diag();
+    // run_batch_od_radec_diag(*earth);
+    // run_batch_od_pos_diag(*earth);
+    // run_batch_od_posvel_diag(*earth);
 
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_batch_od_radec_diag(*earth);
-    run_batch_od_pos_diag(*earth);
-    run_batch_od_posvel_diag(*earth);
+    run_ekf_mixed_measurement_diag(*earth);
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
     auto duration = (stop - start);
     print_chrono(duration, UTime::millisecond);
-
-    // NOTE: quick todo list
-    // - get measurement model started
-    // - get IOD running
-    // - get 2 body propagator (for estimation and perturbations, sim will use nbody
-    // integrator (coupled simulation))
-    // - create jacobians
-    // - get batch estimator running (LUMVE)
-    // - get ekf running
 
     return 0;
 }
@@ -946,8 +940,8 @@ void run_od_prop_diag(const Celestial& body) {
     std::println("State/var position error = {}", (yf.x.r - xf.r).norm());
     std::println("State/var velocity error = {}", (yf.x.v - xf.v).norm());
 
-    vec6d x0_vec = statetr_to_vec6d(x0);
-    vec6d xf_vec = statetr_to_vec6d(xf);
+    vec6d x0_vec = statetr_to_vec6(x0);
+    vec6d xf_vec = statetr_to_vec6(xf);
 
     f64 eps_pos = 1e-3; // km
     f64 eps_vel = 1e-6; // km/s
@@ -967,7 +961,7 @@ void run_od_prop_diag(const Celestial& body) {
         x0_pert_vec(i) += eps_i;
         StateTr x0_pert = vec6_to_statetr(x0_pert_vec);
         StateTr xf_pert = propagate_tr_od_rk4(0.0, x0_pert, dt, n_steps, cfg);
-        vec6d xf_pert_vec = statetr_to_vec6d(xf_pert);
+        vec6d xf_pert_vec = statetr_to_vec6(xf_pert);
         Phi_fd.col(i) = (xf_pert_vec - xf_vec) / eps_i;
     }
 
@@ -1070,12 +1064,12 @@ void run_batch_od_radec_diag(const Celestial& body) {
 
     // solve
     ODBatchResult result = od_batch_lumve(input);
-    f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
-    f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
+    f64 initial_err = (statetr_to_vec6(input.x0_guess - x0_truth)).norm();
+    f64 final_err = (statetr_to_vec6(result.x0_est - x0_truth)).norm();
     std::println("RADEC Initial Error = {}", initial_err);
     std::println("RADEC Final Error = {}", final_err);
     std::println("RADEC LUMVE Success = {}", result.success);
-    std::println("RADEC LUMVE Status: {}", od_batch_status_string(result.status));
+    std::println("RADEC LUMVE Status: {}", od_status_string(result.status));
     std::println("RADEC iterations: {}", result.iterations);
     std::println("RADEC Residual Norm = {}", result.residual_norm);
     std::println("RADEC Raw Residual Norm = {}", result.raw_residual_norm);
@@ -1135,12 +1129,12 @@ void run_batch_od_pos_diag(const Celestial& body) {
 
     // solve
     ODBatchResult result = od_batch_lumve(input);
-    f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
-    f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
+    f64 initial_err = (statetr_to_vec6(input.x0_guess - x0_truth)).norm();
+    f64 final_err = (statetr_to_vec6(result.x0_est - x0_truth)).norm();
     std::println("POS Initial Error = {}", initial_err);
     std::println("POS Final Error = {}", final_err);
     std::println("POS LUMVE Success = {}", result.success);
-    std::println("POS LUMVE Status: {}", od_batch_status_string(result.status));
+    std::println("POS LUMVE Status: {}", od_status_string(result.status));
     std::println("POS iterations: {}", result.iterations);
     std::println("POS Residual Norm = {}", result.residual_norm);
     std::println("POS Raw Residual Norm = {}", result.raw_residual_norm);
@@ -1203,12 +1197,12 @@ void run_batch_od_posvel_diag(const Celestial& body) {
 
     // solve
     ODBatchResult result = od_batch_lumve(input);
-    f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
-    f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
+    f64 initial_err = (statetr_to_vec6(input.x0_guess - x0_truth)).norm();
+    f64 final_err = (statetr_to_vec6(result.x0_est - x0_truth)).norm();
     std::println("POSVEL Initial Error = {}", initial_err);
     std::println("POSVEL Final Error = {}", final_err);
     std::println("POSVEL LUMVE Success = {}", result.success);
-    std::println("POSVEL LUMVE Status: {}", od_batch_status_string(result.status));
+    std::println("POSVEL LUMVE Status: {}", od_status_string(result.status));
     std::println("POSVEL iterations: {}", result.iterations);
     std::println("POSVEL Residual Norm = {}", result.residual_norm);
     std::println("POSVEL Raw Residual Norm = {}", result.raw_residual_norm);
@@ -1216,3 +1210,93 @@ void run_batch_od_posvel_diag(const Celestial& body) {
 }
 
 // TODO: consolidate batch OD diags
+
+void run_ekf_mixed_measurement_diag(const Celestial& body) {
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+
+    ODEKFInput input;
+    input.initial_filter.x = x0_truth;
+    input.initial_filter.t = 0.0;
+    input.initial_filter.P = mat6d1;
+    input.dyn_config.model = ODDynamicsModel::two_body;
+    input.dyn_config.mu = body.mu;
+    input.prop_steps = 200;
+    input.Q = mat6d1 * 1e-4;
+
+    // add perturbations
+    input.initial_filter.x.r += vec3d{1.0, -1.0, 0.5};
+    input.initial_filter.x.v += vec3d{1e-3, -1e-3, 5e-4};
+
+    f64 t_meas0 = 0.0;
+    f64 t_measf = 600.0;
+    f64 N_meas = 30;
+    vecXd t_meas = vecXd::LinSpaced(N_meas, t_meas0, t_measf);
+    f64 sigma_range = 1e-3;
+    f64 sigma_rad = 1e-5;
+    bool sensor_fusion = true;
+    for (i32 i = 0; i < N_meas; ++i) {
+        // propagate to get measurements
+        StateTr x_truth_i = propagate_tr_od_rk4(
+            0.0,
+            x0_truth,
+            t_meas(i),
+            input.prop_steps,
+            input.dyn_config
+        );
+        StateTr x_obs;
+        // use stationary observer for now
+        x_obs.r = vec3d{body.mean_radius, 0.0, 0.0};
+        x_obs.v = vec3d0;
+
+        MeasurementContext ctx;
+        // get measurement (RADec)
+        ctx.x_target = x_truth_i;
+        ctx.x_observer = x_obs;
+        Measurement meas;
+        meas.t = t_meas(i);
+        meas.type = ObservationType::radec;
+        meas.z = predict_measurement(meas.type, ctx);
+        meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+        input.measurements.push_back(meas);
+        input.observer_states.push_back(x_obs);
+
+        // get measurement (range)
+        if (sensor_fusion) {
+            ctx.x_target = x_truth_i;
+            ctx.x_observer = x_obs;
+            meas.t = t_meas(i);
+            meas.type = ObservationType::range;
+            meas.z = predict_measurement(meas.type, ctx);
+            meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+            input.measurements.push_back(meas);
+            input.observer_states.push_back(x_obs);
+        }
+    }
+
+    ODEKFResult result = od_ekf_offline(input);
+    StateTr xf_truth = propagate_tr_od_rk4(
+        0.0,
+        x0_truth,
+        result.filter.t,
+        input.prop_steps,
+        input.dyn_config
+    );
+    f64 initial_err = (statetr_to_vec6(input.initial_filter.x - x0_truth)).norm();
+    f64 final_err = (statetr_to_vec6(result.filter.x - xf_truth)).norm();
+    f64 final_r_err = (result.filter.x.r - xf_truth.r).norm();
+    f64 final_v_err = (result.filter.x.v - xf_truth.v).norm();
+    std::println("MIXED EKF Initial Error = {}", initial_err);
+    std::println("MIXED EKF Final Error = {}", final_err);
+    std::println("MIXED EKF Final Position Error = {}", final_r_err);
+    std::println("MIXED EKF Final Velocity Error = {}", final_v_err);
+    std::println("MIXED EKF Final Time = {}", result.filter.t);
+    std::println("MIXED EKF Success = {}", result.success);
+    std::println("MIXED EKF Status: {}", od_status_string(result.status));
+    std::println("MIXED EKF Processed Measurements = {}", result.processed_measurements);
+    std::println("MIXED EKF Total Measurements = {}", input.measurements.size());
+    std::println("MIXED EKF Residual Norm = {}", result.residual_norm);
+    std::println("MIXED EKF Raw Residual Norm = {}", result.raw_residual_norm);
+    std::println("MIXED EKF Final Covariance Norm = {}", result.filter.P.norm());
+}

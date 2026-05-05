@@ -1,57 +1,12 @@
 #pragma once
 
 #include "Eigen/Core"
+#include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/state.hpp"
 #include "util/constants.hpp"
 #include "util/vecdefs.hpp"
-
-enum struct ODBatchStatus {
-    ok,
-    invalid_input,
-    empty_measurements,
-    size_mismatch,
-    propagation_failed,
-    singular_normal_matrix,
-    max_iters_reached,
-    correction_rejected,
-    invalid_covariance,
-};
-
-inline std::string od_batch_status_string(ODBatchStatus status) {
-    std::string str;
-    switch (status) {
-    case ODBatchStatus::ok: {
-        str = "Ok";
-    } break;
-    case ODBatchStatus::invalid_input: {
-        str = "Invalid Input";
-    } break;
-    case ODBatchStatus::empty_measurements: {
-        str = "Empty Measurements";
-    } break;
-    case ODBatchStatus::size_mismatch: {
-        str = "Size Mismatch";
-    } break;
-    case ODBatchStatus::propagation_failed: {
-        str = "Propagation Failed";
-    } break;
-    case ODBatchStatus::singular_normal_matrix: {
-        str = "Singular Normal Matrix";
-    } break;
-    case ODBatchStatus::max_iters_reached: {
-        str = "Max Iterations reached";
-    } break;
-    case ODBatchStatus::correction_rejected: {
-        str = "Correction Rejected";
-    } break;
-    case ODBatchStatus::invalid_covariance: {
-        str = "Invalid Covariance";
-    } break;
-    }
-    return str;
-}
 
 struct ODBatchInput {
     StateTr x0_guess;
@@ -71,7 +26,7 @@ struct ODBatchInput {
 
 struct ODBatchResult {
     bool success = false;
-    ODBatchStatus status = ODBatchStatus::invalid_input;
+    ODStatus status = ODStatus::invalid_input;
     StateTr x0_est;
     mat6d covariance = mat6d0;
     mat6d normal_inv = mat6d0;
@@ -81,18 +36,19 @@ struct ODBatchResult {
     i32 iterations = 0;
 };
 
-inline ODBatchStatus od_batch_validate_input(const ODBatchInput& input) {
-    if (input.measurements.size() == 0) return ODBatchStatus::empty_measurements;
-    if (input.measurements.size() != input.observer_states.size())
-        return ODBatchStatus::size_mismatch;
+inline ODStatus od_batch_validate_input(const ODBatchInput& input) {
+    if (input.measurements.size() == 0) return ODStatus::empty_measurements;
+    if (input.measurements.size() != input.observer_states.size()) {
+        return ODStatus::size_mismatch;
+    }
     if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0 || input.max_iters <= 0)
-        return ODBatchStatus::invalid_input;
-    return ODBatchStatus::ok;
+        return ODStatus::invalid_input;
+    return ODStatus::ok;
 }
 
 struct ODBatchResidualEval {
     bool success = false;
-    ODBatchStatus status = ODBatchStatus::invalid_input;
+    ODStatus status = ODStatus::invalid_input;
     f64 weighted_norm = 0.0;
     f64 raw_norm = 0.0;
 };
@@ -104,7 +60,7 @@ inline ODBatchResidualEval od_batch_eval_residual_norm(
     // helper to compute residual norms (weighted & raw)
     ODBatchResidualEval eval;
     eval.status = od_batch_validate_input(input);
-    if (eval.status != ODBatchStatus::ok) {
+    if (eval.status != ODStatus::ok) {
         return eval;
     }
     f64 weighted_norm2 = 0.0;
@@ -115,16 +71,16 @@ inline ODBatchResidualEval od_batch_eval_residual_norm(
         const StateTr& x_obs = input.observer_states[i];
         i32 dim = measurement_dim(meas.type);
         if (dim <= 0 || meas.z.size() != dim) {
-            eval.status = ODBatchStatus::invalid_input;
+            eval.status = ODStatus::invalid_input;
             return eval;
         }
 
         if (meas.R.size() != 0 && (meas.R.cols() != dim || meas.R.rows() != dim)) {
-            eval.status = ODBatchStatus::invalid_covariance;
+            eval.status = ODStatus::invalid_covariance;
             return eval;
         }
         if (!meas.R.allFinite()) {
-            eval.status = ODBatchStatus::invalid_covariance;
+            eval.status = ODStatus::invalid_covariance;
             return eval;
         }
 
@@ -137,8 +93,8 @@ inline ODBatchResidualEval od_batch_eval_residual_norm(
             input.prop_steps,
             input.dyn_config
         );
-        if (!statetr_to_vec6d(x_pred_i).allFinite()) {
-            eval.status = ODBatchStatus::propagation_failed;
+        if (!statetr_to_vec6(x_pred_i).allFinite()) {
+            eval.status = ODStatus::propagation_failed;
             return eval;
         }
 
@@ -148,14 +104,14 @@ inline ODBatchResidualEval od_batch_eval_residual_norm(
         ctx.x_observer = x_obs;
         vecXd z_pred = predict_measurement(meas.type, ctx);
         if (z_pred.size() != dim) {
-            eval.status = ODBatchStatus::invalid_input;
+            eval.status = ODStatus::invalid_input;
             return eval;
         }
 
         // residuals
         vecXd res_i = measurement_residual(meas.type, meas.z, z_pred);
         if (!res_i.allFinite()) {
-            eval.status = ODBatchStatus::invalid_input;
+            eval.status = ODStatus::invalid_input;
             return eval;
         }
 
@@ -168,19 +124,19 @@ inline ODBatchResidualEval od_batch_eval_residual_norm(
         } else {
             Eigen::LDLT<matXd> R_ldlt(meas.R);
             if (R_ldlt.info() != Eigen::Success) {
-                eval.status = ODBatchStatus::invalid_covariance;
+                eval.status = ODStatus::invalid_covariance;
                 return eval;
             }
 
             vecXd weighted_res = R_ldlt.solve(res_i);
             if (!weighted_res.allFinite()) {
-                eval.status = ODBatchStatus::invalid_covariance;
+                eval.status = ODStatus::invalid_covariance;
                 return eval;
             }
 
             f64 weighted_norm2_i = res_i.dot(weighted_res);
             if (weighted_norm2_i < 0.0) {
-                eval.status = ODBatchStatus::invalid_covariance;
+                eval.status = ODStatus::invalid_covariance;
                 return eval;
             }
             weighted_norm2 += weighted_norm2_i;
@@ -190,7 +146,7 @@ inline ODBatchResidualEval od_batch_eval_residual_norm(
     eval.weighted_norm = std::sqrt(weighted_norm2);
     eval.raw_norm = std::sqrt(raw_norm2);
     eval.success = true;
-    eval.status = ODBatchStatus::ok;
+    eval.status = ODStatus::ok;
     return eval;
 }
 
@@ -200,21 +156,20 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
     result.x0_est = input.x0_guess;
 
     result.status = od_batch_validate_input(input);
-    if (result.status != ODBatchStatus::ok) {
+    if (result.status != ODStatus::ok) {
         result.success = false;
         return result;
     } else {
-        result.success = true;
-        result.status = ODBatchStatus::ok;
-        result.iterations = 0;
-        result.residual_norm = 0;
-        result.dx_norm = 0;
+        result.status = ODStatus::ok;
+        result.iterations = 0.0;
+        result.residual_norm = 0.0;
+        result.dx_norm = 0.0;
     }
 
     // iteration variables
     StateTr x0_ref = input.x0_guess;
     result.x0_est = x0_ref;
-    result.status = ODBatchStatus::max_iters_reached;
+    result.status = ODStatus::max_iters_reached;
     result.success = false;
 
     for (i32 iter = 0; iter < input.max_iters; ++iter) {
@@ -224,29 +179,29 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
         i32 total_dim = 0;
 
         for (i32 i = 0; i < input.measurements.size(); ++i) {
-            Measurement meas = input.measurements[i];
+            const Measurement& meas = input.measurements[i];
             i32 dim = measurement_dim(meas.type);
             if (dim <= 0) {
-                result.status = ODBatchStatus::invalid_input;
+                result.status = ODStatus::invalid_input;
                 return result;
             }
             if (meas.z.size() != dim) {
-                result.status = ODBatchStatus::invalid_input;
+                result.status = ODStatus::invalid_input;
                 return result;
             }
             // measurement covariance guards
             if (meas.R.size() != 0 && (meas.R.cols() != dim || meas.R.rows() != dim)) {
-                result.status = ODBatchStatus::invalid_input;
+                result.status = ODStatus::invalid_input;
                 return result;
             }
             if (!meas.R.allFinite()) {
-                result.status = ODBatchStatus::invalid_input;
+                result.status = ODStatus::invalid_input;
                 return result;
             }
             total_dim += dim;
         }
         if (total_dim < 6) { // less than state size
-            result.status = ODBatchStatus::singular_normal_matrix;
+            result.status = ODStatus::singular_normal_matrix;
             return result;
         } // end measurement dimension loop
 
@@ -274,9 +229,9 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 input.dyn_config
             );
 
-            vec6d xf_vec = statetr_to_vec6d(yf.x);
+            vec6d xf_vec = statetr_to_vec6(yf.x);
             if (!xf_vec.allFinite() || !yf.Phi.allFinite()) {
-                result.status = ODBatchStatus::propagation_failed;
+                result.status = ODStatus::propagation_failed;
                 return result;
             }
 
@@ -286,14 +241,14 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             ctx.x_observer = x_obsv;
             vecXd z_pred = predict_measurement(meas.type, ctx);
             if (z_pred.size() != dim) {
-                result.status = ODBatchStatus::invalid_input;
+                result.status = ODStatus::invalid_input;
                 return result;
             }
 
             // residuals
             vecXd res_i = measurement_residual(meas.type, meas.z, z_pred);
             if (!res_i.allFinite()) {
-                result.status = ODBatchStatus::invalid_input;
+                result.status = ODStatus::invalid_input;
                 return result;
             }
 
@@ -301,7 +256,7 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             matXd G_i = measurement_jacobian(meas.type, ctx);
             // Htilde in matlab code (see scratch/homework 06)
             if (G_i.rows() != dim || G_i.cols() != 6 || !G_i.allFinite()) {
-                result.status = ODBatchStatus::invalid_input;
+                result.status = ODStatus::invalid_input;
                 return result;
             }
             matXd H_i = G_i * yf.Phi;
@@ -314,19 +269,19 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             } else {
                 Eigen::LDLT<matXd> R_ldlt(meas.R);
                 if (R_ldlt.info() != Eigen::Success) {
-                    result.status = ODBatchStatus::invalid_covariance;
+                    result.status = ODStatus::invalid_covariance;
                     return result;
                 }
                 weighted_res = R_ldlt.solve(res_i);
                 weighted_H = R_ldlt.solve(H_i);
             }
             if (!weighted_res.allFinite() || !weighted_H.allFinite()) {
-                result.status = ODBatchStatus::invalid_covariance;
+                result.status = ODStatus::invalid_covariance;
                 return result;
             }
             f64 weighted_norm2_i = res_i.dot(weighted_res);
             if (weighted_norm2_i < 0.0) {
-                result.status = ODBatchStatus::invalid_covariance;
+                result.status = ODStatus::invalid_covariance;
                 return result;
             }
 
@@ -341,7 +296,7 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
         } // end measurement loop
 
         if (row0 != total_dim) {
-            result.status = ODBatchStatus::invalid_input;
+            result.status = ODStatus::invalid_input;
             return result;
         }
 
@@ -350,7 +305,7 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
 
         // normal matrices
         if (!Lambda.allFinite() || Lambda.diagonal().cwiseAbs().minCoeff() <= tol_tight) {
-            result.status = ODBatchStatus::singular_normal_matrix;
+            result.status = ODStatus::singular_normal_matrix;
             return result;
         }
 
@@ -358,24 +313,24 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
         // use ldlh decomp for solving (see sOPT)
         Eigen::LDLT<mat6d> ldlt(Lambda);
         if (ldlt.info() != Eigen::Success) {
-            result.status = ODBatchStatus::singular_normal_matrix;
+            result.status = ODStatus::singular_normal_matrix;
             return result;
         }
         vec6d dx_vec = ldlt.solve(lambda);
         if (!dx_vec.allFinite()) {
-            result.status = ODBatchStatus::singular_normal_matrix;
+            result.status = ODStatus::singular_normal_matrix;
             return result;
         }
         StateTr dx = vec6_to_statetr(dx_vec);
         if (dx.r.norm() > input.max_dx_r_norm || dx.v.norm() > input.max_dx_v_norm) {
-            result.status = ODBatchStatus::correction_rejected;
+            result.status = ODStatus::correction_rejected;
             return result;
         }
 
         StateTr x0_next = x0_ref;
         ODBatchResidualEval next_eval{
             .success = true,
-            .status = ODBatchStatus::ok,
+            .status = ODStatus::ok,
             .weighted_norm = current_weighted_norm,
             .raw_norm = current_raw_norm
         };
@@ -386,7 +341,8 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 f64 alpha = 1.0 / std::pow(2.0, attempt);
                 vec6d dx_cand_vec = alpha * dx_vec;
                 StateTr x0_cand = x0_ref + vec6_to_statetr(dx_cand_vec);
-                ODBatchResidualEval cand_eval = od_batch_eval_residual_norm(input, x0_cand);
+                ODBatchResidualEval cand_eval
+                    = od_batch_eval_residual_norm(input, x0_cand);
                 if (!cand_eval.success) {
                     continue;
                 }
@@ -399,7 +355,7 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 }
             }
             if (!accepted) {
-                result.status = ODBatchStatus::correction_rejected;
+                result.status = ODStatus::correction_rejected;
                 result.residual_norm = current_weighted_norm;
                 result.raw_residual_norm = current_raw_norm;
                 result.x0_est = x0_ref;
@@ -422,14 +378,14 @@ inline ODBatchResult od_batch_lumve(const ODBatchInput& input) {
         if (result.dx_norm < input.tol_dx || result.residual_norm < input.tol_residual) {
             // tolerances should be looser for angle-only measurements
             result.success = true;
-            result.status = ODBatchStatus::ok;
+            result.status = ODStatus::ok;
             return result;
         }
 
     } // end lumve iterations
 
     // max iterations reached
-    result.status = ODBatchStatus::max_iters_reached;
+    result.status = ODStatus::max_iters_reached;
     result.x0_est = x0_ref;
 
     return result;

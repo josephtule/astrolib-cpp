@@ -75,7 +75,7 @@ inline vecXd predict_measurement(
         measurement = radec.segment(0, dim);
     } break;
     case ObservationType::azel: {
-        // NOTE
+        // NOTE: requires local context
         if (!ctx.has_station_local) {
             measurement.resize(0);
             return vecXd{};
@@ -113,13 +113,13 @@ inline vecXd predict_measurement(
         measurement = x_target.r;
     } break;
     case ObservationType::pos_vel: {
-        measurement = statetr_to_vec6d(x_target);
+        measurement = statetr_to_vec6(x_target);
     } break;
     case ObservationType::rel_pos: {
         measurement = x_target.r - x_observer.r;
     } break;
     case ObservationType::rel_pos_vel:
-        measurement = statetr_to_vec6d(x_target - x_observer);
+        measurement = statetr_to_vec6(x_target - x_observer);
     }
 
     return measurement;
@@ -181,7 +181,7 @@ inline matXd jacobian_fd_measurement(
     for (i32 i = 0; i < cols; ++i) {
         f64 eps_i = i < 3 ? eps_pos : eps_vel;
 
-        vec6d x_target_pert_vec = statetr_to_vec6d(ctx.x_target);
+        vec6d x_target_pert_vec = statetr_to_vec6(ctx.x_target);
         x_target_pert_vec(i) += eps_i;
         StateTr x_target_pert = vec6_to_statetr(x_target_pert_vec);
         ctx_pert.x_target = x_target_pert;

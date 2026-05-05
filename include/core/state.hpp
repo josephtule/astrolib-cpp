@@ -66,12 +66,12 @@ inline DerivTr operator-(const DerivTr& dx) {
     return DerivTr{.dr = -dx.dr, .dv = -dx.dv};
 }
 
-inline vec6d statetr_to_vec6d(const StateTr& x) {
+inline vec6d statetr_to_vec6(const StateTr& x) {
     vec6d out;
     out << x.r, x.v;
     return out;
 }
-inline vec6d derivtr_to_vec6d(const DerivTr& x) {
+inline vec6d derivtr_to_vec6(const DerivTr& x) {
     vec6d out;
     out << x.dr, x.dv;
     return out;
