@@ -67,6 +67,8 @@ struct Celestial : public Body {
 struct Satellite : public Body {
     // Mass Properties
     f64 mass = 0.0;
+
+    bool principal_axes = false;
     mat3d I = mat3d::Identity();
     mat3d I_inv = mat3d::Identity();
 

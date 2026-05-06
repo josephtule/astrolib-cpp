@@ -93,7 +93,7 @@ inline std::pair<f64, State> step_integrator(
         break;
     case IntegratorType::rk3: tx = step_rk3<State, Deriv>(f, t, x, dt); break;
     case IntegratorType::rk4: tx = step_rk4<State, Deriv>(f, t, x, dt); break;
-    default: tx = step_rk4<State, Deriv, Func>(f, t, x, dt); break;
+    default: tx = step_rk4<State, Deriv>(f, t, x, dt); break;
     }
     return tx;
 }

@@ -29,6 +29,8 @@ inline DerivTr derivtr_two_body(const StateTr& x_rel, f64 mu) {
 
 inline DerivTr derivtr_od(f64 t, const StateTr& x, const ODDynamicsConfig& cfg) {
     switch (cfg.model) {
+        // NOTE: OD only considers a two body problem, third bodies are considered
+        // perturbations (no staging used)
     case ODDynamicsModel::two_body: return derivtr_two_body(x, cfg.mu);
     default: return DerivTr{};
     }
@@ -52,14 +54,14 @@ inline StateTr rk4_steptr_od(
 inline StateTr propagate_tr_od(
     f64 t0,
     const StateTr& x0,
-    f64 t_interval,
+    f64 t_span,
     i32 n_steps,
     const ODDynamicsConfig& cfg
 ) {
     StateTr x = x0;
-    if (n_steps <= 0 || t_interval == 0) return x;
+    if (n_steps <= 0 || t_span == 0) return x;
 
-    f64 dt_step = t_interval / static_cast<f64>(n_steps);
+    f64 dt_step = t_span / static_cast<f64>(n_steps);
     f64 t = t0;
     auto f = [&cfg](f64 t, const StateTr& x) -> DerivTr { return derivtr_od(t, x, cfg); };
     for (i32 i = 0; i < n_steps; ++i) {

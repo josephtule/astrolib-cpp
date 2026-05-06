@@ -90,12 +90,13 @@ int main() {
     // run_checkpoint_diag();
     // run_station_anchor_diag();
     // run_world_measurement_diag();
+    // run_batch_od_diag();
+    // run_ekf_world_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    // run_batch_od_diag();
-    run_ekf_world_diag();
+    run_world_stepper_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

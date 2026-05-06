@@ -3,6 +3,7 @@
 #include "core/entity.hpp"
 #include "core/estimation_batch.hpp"
 #include "core/estimation_recursive.hpp"
+#include "core/integrator.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
 #include "core/observations.hpp"
@@ -10,10 +11,22 @@
 #include "core/orbit_determination.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
+#include "core/state.hpp"
 #include "core/station_geometry.hpp"
 #include "core/world.hpp"
+#include "core/world_stepper.hpp"
 #include "util/units.hpp"
 #include <random>
+
+void print_diag_title(const std::string& title) {
+    std::string line = "-----------------------------------------------------------";
+    size_t width = line.size();
+
+    std::string withSpace = title + " ";
+    std::string trimmed = withSpace.substr(0, width);
+    line.replace(0, trimmed.size(), trimmed);
+    std::println("{}", line);
+}
 
 void run_gravity_diag(
     World& world,
@@ -1567,4 +1580,61 @@ void run_ekf_world_diag() {
     for (const EKFDiagCase& diag_case : cases) {
         run_case(diag_case);
     }
+}
+
+void run_world_stepper_diag() {
+    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId sat_id = scenario.sat_id;
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
+
+    StateTr x0;
+    x0.r = vec3d{7000.0, 0.0, 0.0};
+    x0.v = vec3d{0.0, 7.546053290107541, 0.0};
+    sat->x_tr = x0;
+
+    sat->propagate_tr = true;
+    WorldStepperConfig cfg;
+    cfg.step_translation = true;
+    cfg.step_attitude = false;
+    cfg.substeps = 1;
+    cfg.ticks = 10;
+    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.integrator = IntegratorType::rk1;
+
+    f64 t_span = 100.0;
+    f64 t0 = 0.0;
+    i32 n_steps = 1000;
+    f64 dt = t_span / n_steps;
+    world.reset_time(t0);
+
+    ODDynamicsConfig ODcfg;
+    ODcfg.body_radius = earth->mean_radius;
+    ODcfg.integrator = IntegratorType::rk1;
+    ODcfg.mu = earth->mu;
+    ODcfg.model = ODDynamicsModel::two_body;
+
+    // "truth"
+    i32 n_ref_steps = n_steps * cfg.ticks * cfg.substeps;
+    StateTr x_OD = propagate_tr_od(t0, x0, t_span, n_ref_steps, ODcfg);
+
+    // world stepper
+    WorldStepperStats stats;
+    for (i32 i = 0; i < n_steps; ++i) {
+        stats = step_world(world, dt, cfg);
+        if (!stats.success) break;
+    }
+
+    StateTr x_err = x_OD - sat->x_tr;
+
+    print_diag_title("World Stepper");
+    std::println("Stepper Success: {}", stats.success);
+    std::println("Final Position (World Stepper)= {}", sat->x_tr.r);
+    std::println("Final Position (OD) = {}", x_OD.r);
+    std::println("Position Error = {}", x_err.r.norm());
+    std::println("Velocity Error = {}", x_err.v.norm());
+    std::println("Final Time = {}", world.t_sim());
 }

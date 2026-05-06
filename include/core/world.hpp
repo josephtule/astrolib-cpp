@@ -26,8 +26,9 @@ struct BodySnapshot {
 };
 
 struct WorldStateSnapshot {
-    // State-only checkpoint: typed body config/geometry is intentionally not captured yet.
-    // Full hard restore later needs derived body snapshots and exact body storage rebuilds.
+    // State-only checkpoint: typed body config/geometry is intentionally not captured
+    // yet. Full hard restore later needs derived body snapshots and exact body storage
+    // rebuilds.
 
     // Entity storage
     EntityId next_id = 1;
@@ -55,6 +56,7 @@ class World {
   public:
     f64 t_sim() const;
     void reset_time(f64 t0 = 0.0);
+    void advance_time(f64 dt);
 
     // World Snapshot saving and loading
     WorldStateSnapshot capture_checkpoint() const;
@@ -63,6 +65,7 @@ class World {
 
     // Entity lifecycle and roles
     bool is_active(EntityId id) const;
+    const svec<EntityId>& active_entity_ids() const;
 
     // Entity getters
     Body* body(EntityId id);
