@@ -844,23 +844,40 @@ void run_measurement_jacobian_diag() {
     std::println("RA/Dec H deg fd/an max error: {}", H_err_deg.cwiseAbs().maxCoeff());
 }
 
-void run_batch_od_diag() {
+struct EarthStationSatScenario {
     World world;
-
-    EntityId earth_id = wgs84(world);
-    EntityId stat_id = world.spawn_station();
-    EntityId sat_id = world.spawn_satellite();
-
-    Celestial* earth = world.celestial(earth_id);
-    Satellite* sat = world.satellite(sat_id);
-
-    // station
-    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
-    world.set_stat_anchor_detic(stat_id, earth_id, llh);
+    EntityId earth_id = kInvalidEntityId;
+    EntityId stat_id = kInvalidEntityId;
+    EntityId sat_id = kInvalidEntityId;
+};
+static EarthStationSatScenario make_earth_station_sat_scenario(const vec3d& station_llh) {
+    EarthStationSatScenario scenario;
+    scenario.earth_id = wgs84(scenario.world);
+    scenario.stat_id = scenario.world.spawn_station();
+    scenario.sat_id = scenario.world.spawn_satellite();
+    Celestial* earth = scenario.world.celestial(scenario.earth_id);
 
     // earth
     earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
     earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+
+    // station
+    scenario.world
+        .set_stat_anchor_detic(scenario.stat_id, scenario.earth_id, station_llh);
+
+    return scenario;
+}
+
+void run_batch_od_diag() {
+
+    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId stat_id = scenario.stat_id;
+    EntityId sat_id = scenario.sat_id;
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
 
     StateTr x0_truth;
     x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
@@ -1106,20 +1123,17 @@ void run_checkpoint_diag() {
 }
 
 void run_station_anchor_diag() {
-    World world;
-    EntityId earth_id = wgs84(world);
-    EntityId stat_id = world.spawn_station();
-    EntityId sat_id = world.spawn_satellite();
-
-    Celestial* earth = world.celestial(earth_id);
-    Station* stat = world.station(stat_id);
-    Satellite* sat = world.satellite(sat_id);
-
     vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
-    bool set_stat = world.set_stat_anchor_detic(stat_id, earth_id, llh);
+    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId stat_id = scenario.stat_id;
+    EntityId sat_id = scenario.sat_id;
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
 
     std::println("Station Anchor Diagnostic -------------------------------");
-    std::println("set station = {}", set_stat);
     std::println("station anchor id = {}", stat->anchor_id);
     std::println("station r_body_BCBF = {}", stat->r_body_BCBF);
     std::println("station llh_BCBF = {}", stat->llh_BCBF);
@@ -1214,23 +1228,14 @@ void run_station_anchor_diag() {
 }
 
 void run_world_measurement_diag() {
-    World world;
-
-    EntityId earth_id = wgs84(world);
-    EntityId stat_id = world.spawn_station();
-    EntityId sat_id = world.spawn_satellite();
-
-    Celestial* earth = world.celestial(earth_id);
-    Station* stat = world.station(stat_id);
-    Satellite* sat = world.satellite(sat_id);
-
-    // station
     vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
-    bool set_stat = world.set_stat_anchor_detic(stat_id, earth_id, llh);
-
-    // earth
-    earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
-    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId stat_id = scenario.stat_id;
+    EntityId sat_id = scenario.sat_id;
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
 
     // satellite + measurements
     sat->x_tr.v = earth->x_tr.v + vec3d{0.1, 0.2, 0.3};
@@ -1266,7 +1271,6 @@ void run_world_measurement_diag() {
     f64 rho_dot_over_expected = x_rel_over.r.dot(x_rel_over.v) / x_rel_over.r.norm();
 
     std::println("World Measurement Diagnostic ------------------------------");
-    std::println("set station = {}", set_stat);
     std::println("overhead azel = {}", z_azel_over);
     std::println("overhead elevation error = {}", std::abs(z_azel_over(1) - 90.0));
     std::println("overhead range = {}", z_range_over);
@@ -1338,21 +1342,14 @@ void run_world_measurement_diag() {
 }
 
 void run_ekf_world_diag() {
-    World world;
-
-    EntityId earth_id = wgs84(world);
-    EntityId stat_id = world.spawn_station();
-    EntityId sat_id = world.spawn_satellite();
-
+    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId stat_id = scenario.stat_id;
+    EntityId sat_id = scenario.sat_id;
     Celestial* earth = world.celestial(earth_id);
     Satellite* sat = world.satellite(sat_id);
-
-    // station
-    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
-
-    // earth
-    earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
-    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
 
     StateTr x0_truth;
     x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};

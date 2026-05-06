@@ -15,6 +15,8 @@ f64 World::t_sim() const { return t_sim_; }
 
 void World::reset_time(f64 t0) { t_sim_ = t0; }
 
+void World::advance_time(f64 dt) { t_sim_ += dt; }
+
 WorldStateSnapshot World::capture_checkpoint() const {
     WorldStateSnapshot snapshot;
     snapshot.next_id = this->next_id;
@@ -84,6 +86,8 @@ bool World::is_active(EntityId id) const {
     }
     return false;
 }
+
+const svec<EntityId>& World::active_entity_ids() const { return this->active_ids; }
 
 Body* World::body(EntityId id) {
     auto it = bodies.find(id);
