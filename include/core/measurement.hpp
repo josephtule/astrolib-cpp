@@ -39,7 +39,6 @@ struct MeasurementContext {
     // local station geometry, used only for azel
     bool has_station_local = false;
     AzelInputFrame azel_frame = AzelInputFrame::bcbf;
-
     vec3d station_llh = vec3d0; // [lat, lon, h], angle units from angle_in
 };
 

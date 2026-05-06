@@ -254,10 +254,12 @@ vec3d World::gravity_accel_on(EntityId target_id) const {
 }
 
 vec3d World::stat_r_inertial(EntityId station_id) const {
+    // gets absolute inertial position
+    // (anchored stations not propagated, free stations return internal state)
     vec3d r_inertial = vec3d::Zero();
     const Station* stat = station(station_id);
     if (stat == nullptr) return r_inertial;
-    if (!stat->anchored) return r_inertial;
+    if (!stat->anchored) return stat->x_tr.r;
     if (stat->anchor_id == kInvalidEntityId) return r_inertial;
 
     const Body* anchor = body(stat->anchor_id);
@@ -275,7 +277,7 @@ vec3d World::stat_v_inertial(EntityId station_id) const {
     vec3d v_inertial = vec3d::Zero();
     const Station* stat = station(station_id);
     if (stat == nullptr) return v_inertial;
-    if (!stat->anchored) return v_inertial;
+    if (!stat->anchored) return stat->x_tr.v;
     if (stat->anchor_id == kInvalidEntityId) return v_inertial;
 
     const Body* anchor = body(stat->anchor_id);
@@ -292,7 +294,7 @@ StateTr World::stat_x_tr_inertial(EntityId station_id) const {
     StateTr x_tr;
     const Station* stat = station(station_id);
     if (stat == nullptr) return x_tr;
-    if (!stat->anchored) return x_tr;
+    if (!stat->anchored) return stat->x_tr;
     if (stat->anchor_id == kInvalidEntityId) return x_tr;
 
     const Body* anchor = body(stat->anchor_id);

@@ -5,13 +5,13 @@
 #include "core/time.hpp"
 #include "core/world.hpp"
 
-void run_batch_od_diag(const Celestial& body);
+void run_batch_od_diag();
 void run_gravity_diag(
     World& world,
     EntityId earth_id,
     EntityId urath_id,
     EntityId sat_id,
-    EntityId stat_id
+    EntityId id
 );
 void run_station_geo_diag(
     World& world,
@@ -60,6 +60,7 @@ void run_radec_diag();
 void run_iod_diag(const Celestial& body);
 void run_od_prop_diag(const Celestial& body);
 void run_measurement_jacobian_diag();
-void run_ekf_mixed_measurement_diag(const Celestial& body);
 void run_checkpoint_diag();
 void run_station_anchor_diag();
+void run_world_measurement_diag();
+void run_ekf_world_diag();

@@ -35,11 +35,14 @@ inline StateTr operator*(const StateTr& x, f64 scalar) {
     return StateTr{.r = x.r * scalar, .v = x.v * scalar};
 }
 inline StateTr operator*(f64 scalar, const StateTr& x) { return x * scalar; }
-
-inline StateTr operator+(const StateTr& x, const DerivTr& mdx) {
-    return StateTr{.r = x.r + mdx.dr, .v = x.v + mdx.dv};
+inline StateTr operator/(const StateTr& x, f64 scalar) { return x * (1.0 / scalar); }
+inline StateTr operator+(const StateTr& x, const DerivTr& dx) {
+    return StateTr{.r = x.r + dx.dr, .v = x.v + dx.dv};
 }
-inline StateTr operator+(const DerivTr& mdx, const StateTr& x) { return x + mdx; }
+inline StateTr operator+(const DerivTr& dx, const StateTr& x) { return x + dx; }
+inline StateTr operator-(const StateTr& x, const DerivTr& dx) {
+    return {.r = x.r - dx.dr, .v = x.v - dx.dv};
+}
 inline StateTr& operator+=(StateTr& x1, const StateTr& x2) {
     x1.r += x2.r;
     x1.v += x2.v;
@@ -62,6 +65,7 @@ inline DerivTr operator*(const DerivTr& dx, f64 scalar) {
     return DerivTr{.dr = dx.dr * scalar, .dv = dx.dv * scalar};
 }
 inline DerivTr operator*(f64 scalar, const DerivTr& dx) { return dx * scalar; }
+inline DerivTr operator/(const DerivTr& dx, f64 scalar) { return dx * (1.0 / scalar); }
 inline DerivTr operator-(const DerivTr& dx) {
     return DerivTr{.dr = -dx.dr, .dv = -dx.dv};
 }

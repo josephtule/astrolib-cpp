@@ -46,7 +46,7 @@ ODBatchResidualEval od_batch_eval_residual_norm(
 
         // propagate candidate state to measurement time
         f64 dt = meas.t - input.t0;
-        StateTr x_pred_i = propagate_tr_od_rk4(
+        StateTr x_pred_i = propagate_tr_od(
             input.t0,
             x0_ref,
             dt,
@@ -181,7 +181,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             VarStateTr y0;
             y0.x = x0_ref;
             y0.Phi = mat6d::Identity();
-            VarStateTr yf = propagate_var_tr_od_rk4(
+            VarStateTr yf = propagate_var_tr_od(
                 input.t0,
                 y0,
                 dt,

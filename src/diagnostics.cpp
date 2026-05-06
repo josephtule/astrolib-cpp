@@ -4,6 +4,7 @@
 #include "core/estimation_batch.hpp"
 #include "core/estimation_recursive.hpp"
 #include "core/measurement.hpp"
+#include "core/measurement_world.hpp"
 #include "core/observations.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/orbit_determination.hpp"
@@ -11,6 +12,7 @@
 #include "core/planets.hpp"
 #include "core/station_geometry.hpp"
 #include "core/world.hpp"
+#include "util/units.hpp"
 #include <random>
 
 void run_gravity_diag(
@@ -750,7 +752,7 @@ void run_od_prop_diag(const Celestial& body) {
     f64 dt = tof / n_steps;
 
     ODDynamicsConfig cfg{.model = ODDynamicsModel::two_body, .mu = body.mu};
-    StateTr x2_prop = propagate_tr_od_rk4(0.0, x1, dt, n_steps, cfg);
+    StateTr x2_prop = propagate_tr_od(0.0, x1, dt, n_steps, cfg);
 
     std::println("OD Propagation Error");
     StateTr x2_err = x2_truth - x2_prop;
@@ -765,8 +767,8 @@ void run_od_prop_diag(const Celestial& body) {
     y0.x = x0;
     y0.Phi = mat6d1;
 
-    VarStateTr yf = propagate_var_tr_od_rk4(0.0, y0, dt, n_steps, cfg);
-    StateTr xf = propagate_tr_od_rk4(0.0, x0, dt, n_steps, cfg);
+    VarStateTr yf = propagate_var_tr_od(0.0, y0, dt, n_steps, cfg);
+    StateTr xf = propagate_tr_od(0.0, x0, dt, n_steps, cfg);
 
     std::println("State/var position error = {}", (yf.x.r - xf.r).norm());
     std::println("State/var velocity error = {}", (yf.x.v - xf.v).norm());
@@ -791,7 +793,7 @@ void run_od_prop_diag(const Celestial& body) {
         vec6d x0_pert_vec = x0_vec;
         x0_pert_vec(i) += eps_i;
         StateTr x0_pert = vec6_to_statetr(x0_pert_vec);
-        StateTr xf_pert = propagate_tr_od_rk4(0.0, x0_pert, dt, n_steps, cfg);
+        StateTr xf_pert = propagate_tr_od(0.0, x0_pert, dt, n_steps, cfg);
         vec6d xf_pert_vec = statetr_to_vec6(xf_pert);
         Phi_fd.col(i) = (xf_pert_vec - xf_vec) / eps_i;
     }
@@ -842,10 +844,28 @@ void run_measurement_jacobian_diag() {
     std::println("RA/Dec H deg fd/an max error: {}", H_err_deg.cwiseAbs().maxCoeff());
 }
 
-void run_batch_od_diag(const Celestial& body) {
+void run_batch_od_diag() {
+    World world;
+
+    EntityId earth_id = wgs84(world);
+    EntityId stat_id = world.spawn_station();
+    EntityId sat_id = world.spawn_satellite();
+
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
+
+    // station
+    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    world.set_stat_anchor_detic(stat_id, earth_id, llh);
+
+    // earth
+    earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
+    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+
     StateTr x0_truth;
     x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
     x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+    sat->x_tr = x0_truth;
 
     f64 t_meas0 = 0.0;
     f64 t_measf = 600.0;
@@ -870,7 +890,7 @@ void run_batch_od_diag(const Celestial& body) {
         ODBatchInput input;
         input.x0_guess = x0_truth;
         input.dyn_config.model = ODDynamicsModel::two_body;
-        input.dyn_config.mu = body.mu;
+        input.dyn_config.mu = earth->mu;
         input.t0 = 0.0;
         input.max_iters = 10;
         input.prop_steps = 200;
@@ -886,28 +906,30 @@ void run_batch_od_diag(const Celestial& body) {
 
         for (i32 i = 0; i < N_meas; ++i) {
             // propagate to get measurements
-            StateTr x_truth_i = propagate_tr_od_rk4(
+            sat->x_tr = propagate_tr_od(
                 0.0,
                 x0_truth,
                 t_meas(i),
                 input.prop_steps,
                 input.dyn_config
             );
-            StateTr x_obs;
-            // use stationary observer for now
-            x_obs.r = vec3d{body.mean_radius, 0.0, 0.0};
-            x_obs.v = vec3d0;
+            world.set_stat_anchor_detic(stat_id, earth_id, llh);
+            StateTr x_obs = world.stat_x_tr_inertial(stat_id);
 
-            MeasurementContext ctx;
             Measurement meas;
 
             if (diag_case.use_radec) {
                 // get measurement (RADec)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
                 meas.t = t_meas(i);
                 meas.type = ObservationType::radec;
-                meas.z = predict_measurement(meas.type, ctx);
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
                 meas.z(0) += noise_unit(rng) * sigma_rad;
                 meas.z(1) += noise_unit(rng) * sigma_rad;
                 meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
@@ -916,11 +938,16 @@ void run_batch_od_diag(const Celestial& body) {
             }
             if (diag_case.use_range) {
                 // get measurement (range)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
                 meas.t = t_meas(i);
                 meas.type = ObservationType::range;
-                meas.z = predict_measurement(meas.type, ctx);
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
                 meas.z(0) += noise_unit(rng) * sigma_range;
                 meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
                 input.measurements.push_back(meas);
@@ -928,11 +955,16 @@ void run_batch_od_diag(const Celestial& body) {
             }
             if (diag_case.use_range_rate) {
                 // get measurement (range_rate)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
                 meas.t = t_meas(i);
                 meas.type = ObservationType::range_rate;
-                meas.z = predict_measurement(meas.type, ctx);
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
                 meas.z(0) += noise_unit(rng) * sigma_range_rate;
                 meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
                 input.measurements.push_back(meas);
@@ -940,11 +972,16 @@ void run_batch_od_diag(const Celestial& body) {
             }
             if (diag_case.use_pos) {
                 // get measurement (pos)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
                 meas.t = t_meas(i);
                 meas.type = ObservationType::pos;
-                meas.z = predict_measurement(meas.type, ctx);
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
                 meas.z(0) += noise_unit(rng) * sigma_r;
                 meas.z(1) += noise_unit(rng) * sigma_r;
                 meas.z(2) += noise_unit(rng) * sigma_r;
@@ -954,11 +991,16 @@ void run_batch_od_diag(const Celestial& body) {
             }
             if (diag_case.use_pos_vel) {
                 // get measurement (posvel)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
                 meas.t = t_meas(i);
                 meas.type = ObservationType::pos_vel;
-                meas.z = predict_measurement(meas.type, ctx);
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
                 meas.z(0) += noise_unit(rng) * sigma_r;
                 meas.z(1) += noise_unit(rng) * sigma_r;
                 meas.z(2) += noise_unit(rng) * sigma_r;
@@ -1029,205 +1071,6 @@ void run_batch_od_diag(const Celestial& body) {
     };
 
     for (const BatchDiagCase& diag_case : cases) {
-        run_case(diag_case);
-    }
-}
-
-void run_ekf_mixed_measurement_diag(const Celestial& body) {
-    StateTr x0_truth;
-    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
-    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
-
-    f64 t_meas0 = 0.0;
-    f64 t_measf = 600.0;
-    f64 N_meas = 50;
-    vecXd t_meas = vecXd::LinSpaced(N_meas, t_meas0, t_measf);
-    f64 sigma_rad = 1e-6;
-    f64 sigma_range = 1e-3;
-    f64 sigma_range_rate = 1e-6;
-    f64 sigma_r = 1e-3;
-    f64 sigma_v = 1e-6;
-
-    struct EKFDiagCase {
-        const char* name = "";
-        bool use_radec = false;
-        bool use_range = false;
-        bool use_range_rate = false;
-        bool use_pos = false;
-        bool use_pos_vel = false;
-    };
-
-    auto run_case = [&](const EKFDiagCase& diag_case) {
-        ODEKFInput input;
-        input.initial_filter.x = x0_truth;
-        input.initial_filter.t = 0.0;
-        input.initial_filter.P = mat6d1;
-        input.dyn_config.model = ODDynamicsModel::two_body;
-        input.dyn_config.mu = body.mu;
-        input.prop_steps = 200;
-        input.Q = mat6d1 * 1e-4;
-
-        // add perturbations
-        input.initial_filter.x.r += vec3d{1.0, -1.0, 0.5};
-        input.initial_filter.x.v += vec3d{1e-3, -1e-3, 5e-4};
-
-        std::mt19937_64 rng(12345);
-        std::normal_distribution<f64> noise_unit(0.0, 1.0);
-
-        for (i32 i = 0; i < N_meas; ++i) {
-            // propagate to get measurements
-            StateTr x_truth_i = propagate_tr_od_rk4(
-                0.0,
-                x0_truth,
-                t_meas(i),
-                input.prop_steps,
-                input.dyn_config
-            );
-            StateTr x_obs;
-            // use stationary observer for now
-            x_obs.r = vec3d{body.mean_radius, 0.0, 0.0};
-            x_obs.v = vec3d0;
-
-            MeasurementContext ctx;
-            Measurement meas;
-
-            if (diag_case.use_radec) {
-                // get measurement (RADec)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
-                meas.t = t_meas(i);
-                meas.type = ObservationType::radec;
-                meas.z = predict_measurement(meas.type, ctx);
-                meas.z(0) += noise_unit(rng) * sigma_rad;
-                meas.z(1) += noise_unit(rng) * sigma_rad;
-                meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
-                input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
-            }
-            if (diag_case.use_range) {
-                // get measurement (range)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
-                meas.t = t_meas(i);
-                meas.type = ObservationType::range;
-                meas.z = predict_measurement(meas.type, ctx);
-                meas.z(0) += noise_unit(rng) * sigma_range;
-                meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
-                input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
-            }
-            if (diag_case.use_range_rate) {
-                // get measurement (range_rate)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
-                meas.t = t_meas(i);
-                meas.type = ObservationType::range_rate;
-                meas.z = predict_measurement(meas.type, ctx);
-                meas.z(0) += noise_unit(rng) * sigma_range_rate;
-                meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
-                input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
-            }
-            if (diag_case.use_pos) {
-                // get measurement (pos)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
-                meas.t = t_meas(i);
-                meas.type = ObservationType::pos;
-                meas.z = predict_measurement(meas.type, ctx);
-                meas.z(0) += noise_unit(rng) * sigma_r;
-                meas.z(1) += noise_unit(rng) * sigma_r;
-                meas.z(2) += noise_unit(rng) * sigma_r;
-                meas.R = matXd::Identity(3, 3) * sigma_r * sigma_r;
-                input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
-            }
-            if (diag_case.use_pos_vel) {
-                // get measurement (posvel)
-                ctx.x_target = x_truth_i;
-                ctx.x_observer = x_obs;
-                meas.t = t_meas(i);
-                meas.type = ObservationType::pos_vel;
-                meas.z = predict_measurement(meas.type, ctx);
-                meas.z(0) += noise_unit(rng) * sigma_r;
-                meas.z(1) += noise_unit(rng) * sigma_r;
-                meas.z(2) += noise_unit(rng) * sigma_r;
-                meas.z(3) += noise_unit(rng) * sigma_v;
-                meas.z(4) += noise_unit(rng) * sigma_v;
-                meas.z(5) += noise_unit(rng) * sigma_v;
-                meas.R = matXd::Zero(6, 6);
-                meas.R.block(0, 0, 3, 3) = mat3d::Identity() * sigma_r * sigma_r;
-                meas.R.block(3, 3, 3, 3) = mat3d::Identity() * sigma_v * sigma_v;
-                input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
-            }
-        }
-
-        ODEKFResult result = od_ekf_offline(input);
-        StateTr xf_truth = propagate_tr_od_rk4(
-            0.0,
-            x0_truth,
-            result.filter.t,
-            input.prop_steps,
-            input.dyn_config
-        );
-        f64 initial_err = (statetr_to_vec6(input.initial_filter.x - x0_truth)).norm();
-        f64 final_err = (statetr_to_vec6(result.filter.x - xf_truth)).norm();
-        f64 final_r_err = (result.filter.x.r - xf_truth.r).norm();
-        f64 final_v_err = (result.filter.x.v - xf_truth.v).norm();
-        i32 meas_per_epoch = static_cast<i32>(diag_case.use_radec)
-                             + static_cast<i32>(diag_case.use_range)
-                             + static_cast<i32>(diag_case.use_range_rate)
-                             + static_cast<i32>(diag_case.use_pos)
-                             + static_cast<i32>(diag_case.use_pos_vel);
-
-        std::println("-----------------------------------------------------------");
-        std::println("MIXED EKF Case: {}", diag_case.name);
-        std::println(
-            "RADec: {}, Range: {}, Range Rate: {}, Position: {}, State: {}",
-            diag_case.use_radec,
-            diag_case.use_range,
-            diag_case.use_range_rate,
-            diag_case.use_pos,
-            diag_case.use_pos_vel
-        );
-        std::println("MIXED EKF Epochs = {}", N_meas);
-        std::println("MIXED EKF Measurements Per Epoch = {}", meas_per_epoch);
-        std::println("MIXED EKF Initial Error = {}", initial_err);
-        std::println("MIXED EKF Final Error = {}", final_err);
-        std::println("MIXED EKF Final Position Error = {}", final_r_err);
-        std::println("MIXED EKF Final Velocity Error = {}", final_v_err);
-        std::println("MIXED EKF Final Time = {}", result.filter.t);
-        std::println("MIXED EKF Success = {}", result.success);
-        std::println("MIXED EKF Status: {}", od_status_string(result.status));
-        std::println(
-            "MIXED EKF Processed Measurements = {}",
-            result.processed_measurements
-        );
-        std::println("MIXED EKF Total Measurements = {}", input.measurements.size());
-        std::println("MIXED EKF Residual Norm = {}", result.residual_norm);
-        std::println("MIXED EKF Raw Residual Norm = {}", result.raw_residual_norm);
-        std::println("MIXED EKF Final Covariance Norm = {}", result.filter.P.norm());
-    };
-
-    svec<EKFDiagCase> cases{
-        {.name = "RADec Only", .use_radec = true},
-        {.name = "RADec + Range", .use_radec = true, .use_range = true},
-        {.name = "RADec + Range + Range Rate",
-         .use_radec = true,
-         .use_range = true,
-         .use_range_rate = true},
-        {.name = "Position Only", .use_pos = true},
-        {.name = "State Only", .use_pos_vel = true},
-        {.name = "All Measurements",
-         .use_radec = true,
-         .use_range = true,
-         .use_range_rate = true,
-         .use_pos = true,
-         .use_pos_vel = true}
-    };
-
-    for (const EKFDiagCase& diag_case : cases) {
         run_case(diag_case);
     }
 }
@@ -1367,5 +1210,364 @@ void run_station_anchor_diag() {
     std::println("target east azelrho = {}", azel_east);
     std::println("target east azimuth error = {}", std::abs(azel_east(0) - 90.0));
     std::println("target east elevation error = {}", std::abs(azel_east(1)));
-    std::println("----------------------------------------------------------");
+    std::println("-----------------------------------------------------------");
+}
+
+void run_world_measurement_diag() {
+    World world;
+
+    EntityId earth_id = wgs84(world);
+    EntityId stat_id = world.spawn_station();
+    EntityId sat_id = world.spawn_satellite();
+
+    Celestial* earth = world.celestial(earth_id);
+    Station* stat = world.station(stat_id);
+    Satellite* sat = world.satellite(sat_id);
+
+    // station
+    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    bool set_stat = world.set_stat_anchor_detic(stat_id, earth_id, llh);
+
+    // earth
+    earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
+    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+
+    // satellite + measurements
+    sat->x_tr.v = earth->x_tr.v + vec3d{0.1, 0.2, 0.3};
+
+    // overhead
+    sat->x_tr.r = earth->x_tr.r + vec3d{earth->semimajor_axis + 1000.0, 0.0, 0.0};
+    vecXd z_azel_over = world_predict_measurement(
+        world,
+        ObservationType::azel,
+        stat_id,
+        sat_id,
+        UAngle::radian,
+        UAngle::degree
+    );
+    vecXd z_range_over = world_predict_measurement(
+        world,
+        ObservationType::range,
+        stat_id,
+        sat_id,
+        UAngle::radian,
+        UAngle::degree
+    );
+    vecXd z_range_rate_over = world_predict_measurement(
+        world,
+        ObservationType::range_rate,
+        stat_id,
+        sat_id,
+        UAngle::radian,
+        UAngle::degree
+    );
+    StateTr x_stat_over = world.stat_x_tr_inertial(stat_id);
+    StateTr x_rel_over = sat->x_tr - x_stat_over;
+    f64 rho_dot_over_expected = x_rel_over.r.dot(x_rel_over.v) / x_rel_over.r.norm();
+
+    std::println("World Measurement Diagnostic ------------------------------");
+    std::println("set station = {}", set_stat);
+    std::println("overhead azel = {}", z_azel_over);
+    std::println("overhead elevation error = {}", std::abs(z_azel_over(1) - 90.0));
+    std::println("overhead range = {}", z_range_over);
+    std::println("overhead range error = {}", std::abs(z_range_over(0) - 1000.0));
+    std::println("overhead range-rate = {}", z_range_rate_over);
+    std::println(
+        "overhead range-rate error = {}",
+        std::abs(z_range_rate_over(0) - rho_dot_over_expected)
+    );
+
+    sat->x_tr.r = earth->x_tr.r + vec3d{earth->semimajor_axis, 1000.0, 0.0};
+    vecXd z_azel_east = world_predict_measurement(
+        world,
+        ObservationType::azel,
+        stat_id,
+        sat_id,
+        UAngle::radian,
+        UAngle::degree
+    );
+    vecXd z_range_east = world_predict_measurement(
+        world,
+        ObservationType::range,
+        stat_id,
+        sat_id,
+        UAngle::radian,
+        UAngle::degree
+    );
+    vecXd z_range_rate_east = world_predict_measurement(
+        world,
+        ObservationType::range_rate,
+        stat_id,
+        sat_id,
+        UAngle::radian,
+        UAngle::degree
+    );
+    StateTr x_stat_east = world.stat_x_tr_inertial(stat_id);
+    StateTr x_rel_east = sat->x_tr - x_stat_east;
+    f64 rho_dot_east_expected = x_rel_east.r.dot(x_rel_east.v) / x_rel_east.r.norm();
+
+    std::println("east azel = {}", z_azel_east);
+    std::println("east azimuth error = {}", std::abs(z_azel_east(0) - 90.0));
+    std::println("east elevation error = {}", std::abs(z_azel_east(1)));
+    std::println("east range = {}", z_range_east);
+    std::println("east range error = {}", std::abs(z_range_east(0) - 1000.0));
+    std::println("east range-rate = {}", z_range_rate_east);
+    std::println(
+        "east range-rate error = {}",
+        std::abs(z_range_rate_east(0) - rho_dot_east_expected)
+    );
+
+    vecXd z_radec_world = world_predict_measurement(
+        world,
+        ObservationType::radec,
+        stat_id,
+        sat_id,
+        UAngle::radian,
+        UAngle::degree
+    );
+    vecXd z_radec_explicit = predict_measurement(
+        ObservationType::radec,
+        sat->x_tr,
+        world.stat_x_tr_inertial(stat_id),
+        UAngle::degree
+    );
+    std::println("east radec world = {}", z_radec_world);
+    std::println("east radec explicit = {}", z_radec_explicit);
+    std::println("east radec error = {}", (z_radec_world - z_radec_explicit).norm());
+    std::println("-----------------------------------------------------------");
+}
+
+void run_ekf_world_diag() {
+    World world;
+
+    EntityId earth_id = wgs84(world);
+    EntityId stat_id = world.spawn_station();
+    EntityId sat_id = world.spawn_satellite();
+
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
+
+    // station
+    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+
+    // earth
+    earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
+    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+    sat->x_tr = x0_truth;
+
+    f64 t_meas0 = 0.0;
+    f64 t_measf = 600.0;
+    f64 N_meas = 50;
+    vecXd t_meas = vecXd::LinSpaced(N_meas, t_meas0, t_measf);
+    f64 sigma_rad = 1e-6;
+    f64 sigma_range = 1e-3;
+    f64 sigma_range_rate = 1e-6;
+    f64 sigma_r = 1e-3;
+    f64 sigma_v = 1e-6;
+
+    struct EKFDiagCase {
+        const char* name = "";
+        bool use_radec = false;
+        bool use_range = false;
+        bool use_range_rate = false;
+        bool use_pos = false;
+        bool use_pos_vel = false;
+    };
+
+    auto run_case = [&](const EKFDiagCase& diag_case) {
+        ODEKFInput input;
+        input.initial_filter.x = x0_truth;
+        input.initial_filter.t = 0.0;
+        input.initial_filter.P = mat6d1;
+        input.dyn_config.model = ODDynamicsModel::two_body;
+        input.dyn_config.mu = earth->mu;
+        input.prop_steps = 200;
+        input.Q = mat6d1 * 1e-4;
+
+        // add perturbations
+        input.initial_filter.x.r += vec3d{1.0, -1.0, 0.5};
+        input.initial_filter.x.v += vec3d{1e-3, -1e-3, 5e-4};
+
+        std::mt19937_64 rng(12345);
+        std::normal_distribution<f64> noise_unit(0.0, 1.0);
+
+        for (i32 i = 0; i < N_meas; ++i) {
+            // propagate to get measurements
+            sat->x_tr = propagate_tr_od(
+                0.0,
+                x0_truth,
+                t_meas(i),
+                input.prop_steps,
+                input.dyn_config
+            );
+
+            // use stationary observer for now
+            world.set_stat_anchor_detic(stat_id, earth_id, llh);
+            StateTr x_obs = world.stat_x_tr_inertial(stat_id);
+
+            Measurement meas;
+
+            if (diag_case.use_radec) {
+                // get measurement (RADec)
+                meas.t = t_meas(i);
+                meas.type = ObservationType::radec;
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
+                meas.z(0) += noise_unit(rng) * sigma_rad;
+                meas.z(1) += noise_unit(rng) * sigma_rad;
+                meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+                input.measurements.push_back(meas);
+                input.observer_states.push_back(x_obs);
+            }
+            if (diag_case.use_range) {
+                // get measurement (range)
+                meas.t = t_meas(i);
+                meas.type = ObservationType::range;
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
+                meas.z(0) += noise_unit(rng) * sigma_range;
+                meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+                input.measurements.push_back(meas);
+                input.observer_states.push_back(x_obs);
+            }
+            if (diag_case.use_range_rate) {
+                // get measurement (range_rate)
+                meas.t = t_meas(i);
+                meas.type = ObservationType::range_rate;
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
+                meas.z(0) += noise_unit(rng) * sigma_range_rate;
+                meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
+                input.measurements.push_back(meas);
+                input.observer_states.push_back(x_obs);
+            }
+            if (diag_case.use_pos) {
+                // get measurement (pos)
+                meas.t = t_meas(i);
+                meas.type = ObservationType::pos;
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
+                meas.z(0) += noise_unit(rng) * sigma_r;
+                meas.z(1) += noise_unit(rng) * sigma_r;
+                meas.z(2) += noise_unit(rng) * sigma_r;
+                meas.R = matXd::Identity(3, 3) * sigma_r * sigma_r;
+                input.measurements.push_back(meas);
+                input.observer_states.push_back(x_obs);
+            }
+            if (diag_case.use_pos_vel) {
+                // get measurement (posvel)
+                meas.t = t_meas(i);
+                meas.type = ObservationType::pos_vel;
+                meas.z = world_predict_measurement(
+                    world,
+                    meas.type,
+                    stat_id,
+                    sat_id,
+                    UAngle::radian,
+                    UAngle::radian
+                );
+                meas.z(0) += noise_unit(rng) * sigma_r;
+                meas.z(1) += noise_unit(rng) * sigma_r;
+                meas.z(2) += noise_unit(rng) * sigma_r;
+                meas.z(3) += noise_unit(rng) * sigma_v;
+                meas.z(4) += noise_unit(rng) * sigma_v;
+                meas.z(5) += noise_unit(rng) * sigma_v;
+                meas.R = matXd::Zero(6, 6);
+                meas.R.block(0, 0, 3, 3) = mat3d::Identity() * sigma_r * sigma_r;
+                meas.R.block(3, 3, 3, 3) = mat3d::Identity() * sigma_v * sigma_v;
+                input.measurements.push_back(meas);
+                input.observer_states.push_back(x_obs);
+            }
+        }
+
+        // run ekf
+        ODEKFResult result = od_ekf_offline(input);
+
+        f64 initial_err = (statetr_to_vec6(input.initial_filter.x - x0_truth)).norm();
+        f64 final_err = (statetr_to_vec6(result.filter.x - sat->x_tr)).norm();
+        f64 final_r_err = (result.filter.x.r - sat->x_tr.r).norm();
+        f64 final_v_err = (result.filter.x.v - sat->x_tr.v).norm();
+        i32 meas_per_epoch = static_cast<i32>(diag_case.use_radec)
+                             + static_cast<i32>(diag_case.use_range)
+                             + static_cast<i32>(diag_case.use_range_rate)
+                             + static_cast<i32>(diag_case.use_pos)
+                             + static_cast<i32>(diag_case.use_pos_vel);
+
+        std::println("-----------------------------------------------------------");
+        std::println("MIXED EKF Case: {}", diag_case.name);
+        std::println(
+            "RADec: {}, Range: {}, Range Rate: {}, Position: {}, State: {}",
+            diag_case.use_radec,
+            diag_case.use_range,
+            diag_case.use_range_rate,
+            diag_case.use_pos,
+            diag_case.use_pos_vel
+        );
+        std::println("MIXED EKF Epochs = {}", N_meas);
+        std::println("MIXED EKF Measurements Per Epoch = {}", meas_per_epoch);
+        std::println("MIXED EKF Initial Error = {}", initial_err);
+        std::println("MIXED EKF Final Error = {}", final_err);
+        std::println("MIXED EKF Final Position Error = {}", final_r_err);
+        std::println("MIXED EKF Final Velocity Error = {}", final_v_err);
+        std::println("MIXED EKF Final Time = {}", result.filter.t);
+        std::println("MIXED EKF Success = {}", result.success);
+        std::println("MIXED EKF Status: {}", od_status_string(result.status));
+        std::println(
+            "MIXED EKF Processed Measurements = {}",
+            result.processed_measurements
+        );
+        std::println("MIXED EKF Total Measurements = {}", input.measurements.size());
+        std::println("MIXED EKF Residual Norm = {}", result.residual_norm);
+        std::println("MIXED EKF Raw Residual Norm = {}", result.raw_residual_norm);
+        std::println("MIXED EKF Final Covariance Norm = {}", result.filter.P.norm());
+    };
+
+    svec<EKFDiagCase> cases{
+        {.name = "RADec Only", .use_radec = true},
+        {.name = "RADec + Range", .use_radec = true, .use_range = true},
+        {.name = "RADec + Range + Range Rate",
+         .use_radec = true,
+         .use_range = true,
+         .use_range_rate = true},
+        {.name = "Position Only", .use_pos = true},
+        {.name = "State Only", .use_pos_vel = true},
+        {.name = "All Measurements",
+         .use_radec = true,
+         .use_range = true,
+         .use_range_rate = true,
+         .use_pos = true,
+         .use_pos_vel = true}
+    };
+
+    for (const EKFDiagCase& diag_case : cases) {
+        run_case(diag_case);
+    }
 }

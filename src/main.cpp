@@ -86,15 +86,16 @@ int main() {
     // run_iod_diag(*earth);
     // run_od_prop_diag(*earth);
     // run_measurement_jacobian_diag();
-    // run_batch_od_diag(*earth);
-    // run_ekf_mixed_measurement_diag(*earth);
+    // run_batch_od_diag();
     // run_checkpoint_diag();
     // run_station_anchor_diag();
-
+    // run_world_measurement_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
+    // run_batch_od_diag();
+    run_ekf_world_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

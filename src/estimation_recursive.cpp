@@ -100,7 +100,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // propagate prediction state and STM
     VarStateTr yf;
     if (propagate) {
-        yf = propagate_var_tr_od_rk4(
+        yf = propagate_var_tr_od(
             filter.t,
             y0,
             dt,

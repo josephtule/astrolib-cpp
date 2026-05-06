@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/dynamics_translational.hpp"
+#include "core/integrator.hpp"
 #include "core/state.hpp"
 #include "util/typedefs.hpp"
 
@@ -15,6 +16,7 @@ struct ODDynamicsConfig {
     f64 mu = 0.0;
     f64 body_radius = 0.0;
     i32 zonal_degree = 0;
+    IntegratorType integrator = IntegratorType::rk4;
 };
 
 inline DerivTr derivtr_two_body(const StateTr& x_rel, f64 mu) {
@@ -32,7 +34,6 @@ inline DerivTr derivtr_od(f64 t, const StateTr& x, const ODDynamicsConfig& cfg) 
     }
 }
 
-// TODO: add other integrators (create arbitrary system?), rk4 only for now
 inline StateTr rk4_steptr_od(
     f64 t,
     const StateTr& x,
@@ -48,22 +49,24 @@ inline StateTr rk4_steptr_od(
     return x_next;
 }
 
-// TODO: add other integrators, rk4 only for now
-inline StateTr propagate_tr_od_rk4(
+inline StateTr propagate_tr_od(
     f64 t0,
     const StateTr& x0,
-    f64 t_inverval,
+    f64 t_interval,
     i32 n_steps,
     const ODDynamicsConfig& cfg
 ) {
     StateTr x = x0;
-    if (n_steps <= 0 || t_inverval == 0) return x;
+    if (n_steps <= 0 || t_interval == 0) return x;
 
-    f64 dt_step = t_inverval / static_cast<f64>(n_steps);
+    f64 dt_step = t_interval / static_cast<f64>(n_steps);
     f64 t = t0;
+    auto f = [&cfg](f64 t, const StateTr& x) -> DerivTr { return derivtr_od(t, x, cfg); };
     for (i32 i = 0; i < n_steps; ++i) {
-        x = rk4_steptr_od(t, x, dt_step, cfg);
-        t += dt_step;
+        // x = rk4_steptr_od(t, x, dt_step, cfg);
+        auto tx = step_integrator<StateTr, DerivTr>(f, t, x, dt_step, cfg.integrator);
+        t = tx.first;
+        x = tx.second;
     }
     return x;
 }
@@ -81,6 +84,9 @@ inline VarStateTr operator+(const VarStateTr& y, const VarDerivTr& dy) {
     return VarStateTr{.x = y.x + dy.dx, .Phi = y.Phi + dy.dPhi};
 }
 inline VarStateTr operator+(const VarDerivTr& dy, const VarStateTr& y) { return y + dy; }
+inline VarStateTr operator-(const VarStateTr& y, const VarDerivTr& dy) {
+    return {.x = y.x - dy.dx, .Phi = y.Phi - dy.dPhi};
+}
 inline VarStateTr& operator+=(VarStateTr& y, const VarDerivTr& dy) {
     y.x += dy.dx;
     y.Phi += dy.dPhi;
@@ -99,6 +105,9 @@ inline VarDerivTr operator*(const VarDerivTr& dy, f64 scalar) {
     return VarDerivTr{.dx = dy.dx * scalar, .dPhi = dy.dPhi * scalar};
 }
 inline VarDerivTr operator*(f64 scalar, const VarDerivTr& dy) { return dy * scalar; }
+inline VarDerivTr operator/(const VarDerivTr& dy, f64 scalar) {
+    return dy * (1.0 / scalar);
+}
 inline VarDerivTr operator-(const VarDerivTr& dy) {
     return VarDerivTr{.dx = -dy.dx, .dPhi = -dy.dPhi};
 }
@@ -166,21 +175,27 @@ inline VarStateTr rk4_step_var_tr_od(
     return x_next;
 }
 
-inline VarStateTr propagate_var_tr_od_rk4(
+inline VarStateTr propagate_var_tr_od(
     f64 t0,
     const VarStateTr& y0,
     f64 t_interval,
     i32 n_steps,
     const ODDynamicsConfig& cfg
 ) {
-    VarStateTr x = y0;
-    if (n_steps <= 0 || t_interval == 0) return x;
+    VarStateTr y = y0;
+    if (n_steps <= 0 || t_interval == 0) return y;
 
     f64 dt_step = t_interval / static_cast<f64>(n_steps);
     f64 t = t0;
+    auto f = [&cfg](f64 t, const VarStateTr& y) -> VarDerivTr {
+        return deriv_var_tr_od(t, y, cfg);
+    };
     for (i32 i = 0; i < n_steps; ++i) {
-        x = rk4_step_var_tr_od(t, x, dt_step, cfg);
-        t += dt_step;
+        // y = rk4_step_var_tr_od(t, y, dt_step, cfg);
+        auto ty
+            = step_integrator<VarStateTr, VarDerivTr>(f, t, y, dt_step, cfg.integrator);
+        t = ty.first;
+        y = ty.second;
     }
-    return x;
+    return y;
 }
