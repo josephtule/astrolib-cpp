@@ -3,7 +3,9 @@
 #include "core/dynamics_translational.hpp"
 #include "core/entity.hpp"
 #include "core/state.hpp"
+#include "core/station_geometry.hpp"
 #include "core/transform.hpp"
+#include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
 #include <cstddef>
@@ -264,11 +266,12 @@ vec3d World::stat_r_inertial(EntityId station_id) const {
     // r_inertial = anchor->x_tr.r + ep_to_dcm<f64>(anchor->x_att.q).transpose() *
     // stat->r_body;
     vec4d q_NB = ep_conj(anchor->x_att.q);
-    r_inertial = anchor->x_tr.r + ep_rotate_fast_passive(q_NB, stat->r_body);
+    r_inertial = anchor->x_tr.r + ep_rotate_fast_passive(q_NB, stat->r_body_BCBF);
     return r_inertial;
 }
 
 vec3d World::stat_v_inertial(EntityId station_id) const {
+    // inertial velocity of station
     vec3d v_inertial = vec3d::Zero();
     const Station* stat = station(station_id);
     if (stat == nullptr) return v_inertial;
@@ -279,7 +282,7 @@ vec3d World::stat_v_inertial(EntityId station_id) const {
     if (anchor == nullptr) return v_inertial;
 
     vec4d q_NB = ep_conj(anchor->x_att.q);
-    vec3d r_offset_inertial = ep_rotate_fast_passive(q_NB, stat->r_body);
+    vec3d r_offset_inertial = ep_rotate_fast_passive(q_NB, stat->r_body_BCBF);
     vec3d w_inertial = ep_rotate_fast_passive(q_NB, anchor->x_att.w);
     v_inertial = anchor->x_tr.v + w_inertial.cross(r_offset_inertial);
     return v_inertial;
@@ -298,6 +301,65 @@ StateTr World::stat_x_tr_inertial(EntityId station_id) const {
     x_tr.r = stat_r_inertial(station_id);
     x_tr.v = stat_v_inertial(station_id);
     return x_tr;
+}
+
+bool World::set_stat_anchor_detic(
+    EntityId station_id,
+    EntityId anchor_id,
+    const vec3d& llh,
+    UAngle angle_in
+) {
+    Station* stat = station(station_id);
+    const Celestial* cel = celestial(anchor_id);
+    if (stat == nullptr || cel == nullptr) return false;
+    if (cel->semimajor_axis <= 0.0 || cel->semiminor_axis <= 0.0) return false;
+
+    vec3d r_body = stat_r_bcbf_from_detic(llh, *cel, angle_in);
+    if (!r_body.allFinite()) return false;
+
+    stat->anchored = true;
+    stat->anchor_id = anchor_id;
+    stat->r_body_BCBF = r_body;
+    f64 lat = llh(0), lon = llh(1);
+    if (angle_in != UAngle::radian) {
+        lat = convert_angle(lat, angle_in, UAngle::radian);
+        lon = convert_angle(lon, angle_in, UAngle::radian);
+    }
+    stat->llh_BCBF = vec3d{lat, lon, llh(2)};
+    // don't propagate anchored stations, just assign
+    stat->propagate_tr = false;
+    stat->propagate_att = false;
+
+    return true;
+}
+
+mat3d World::stat_rot_enu_from_body(EntityId station_id) const {
+    const Station* stat = station(station_id);
+    if (stat == nullptr) return mat3d1; // safe fallback
+    return stat_rot_enu_from_detic(stat->llh_BCBF, UAngle::radian);
+}
+
+vec3d World::stat_rel_enu(EntityId station_id, EntityId target_id) const {
+    const Station* stat = station(station_id);
+    if (stat == nullptr) return vec3d0;
+    if (!stat->anchored) return vec3d0;
+    if (stat->anchor_id == kInvalidEntityId) return vec3d0;
+
+    const Body* target = body(target_id);
+    if (target == nullptr) return vec3d0;
+
+    const Body* anchor = body(stat->anchor_id);
+    if (anchor == nullptr) return vec3d0;
+
+    // target relative to body, inertial then bcbf
+    vec3d r_target_body_BCI = target->x_tr.r - anchor->x_tr.r;
+    vec3d r_target_body_BCBF = ep_rotate_fast_passive(anchor->x_att.q, r_target_body_BCI);
+
+    // target relative to station
+    vec3d r_rel_bcbf = r_target_body_BCBF - stat->r_body_BCBF;
+    mat3d R_ENU_BCBF = stat_rot_enu_from_body(station_id);
+
+    return R_ENU_BCBF * r_rel_bcbf;
 }
 
 vec3d World::body_z_inertial(EntityId body_id) const {

@@ -6,6 +6,7 @@
 #include "core/entity.hpp"
 #include "core/state.hpp"
 #include "util/typedefs.hpp"
+#include "util/units.hpp"
 
 class SystemStepper;
 
@@ -25,6 +26,9 @@ struct BodySnapshot {
 };
 
 struct WorldStateSnapshot {
+    // State-only checkpoint: typed body config/geometry is intentionally not captured yet.
+    // Full hard restore later needs derived body snapshots and exact body storage rebuilds.
+
     // Entity storage
     EntityId next_id = 1;
     svec<EntityId> active_ids;
@@ -33,12 +37,6 @@ struct WorldStateSnapshot {
     // Simulation state
     f64 t_sim_ = 0.0;
 };
-
-// void capture_body(BodySnapshot& snapshot, const Body& body);
-// void restore_body(Body& body, const BodySnapshot& snapshot);
-// void capture_celestial();
-// void capture_satellite();
-// void capture_station();
 
 class World {
   private:
@@ -99,6 +97,14 @@ class World {
     vec3d stat_r_inertial(EntityId station_id) const;
     vec3d stat_v_inertial(EntityId station_id) const;
     StateTr stat_x_tr_inertial(EntityId station_id) const;
+    bool set_stat_anchor_detic(
+        EntityId station_id,
+        EntityId anchor_id,
+        const vec3d& llh,
+        UAngle angle_in = UAngle::degree
+    );
+    mat3d stat_rot_enu_from_body(EntityId station_id) const;
+    vec3d stat_rel_enu(EntityId station_id, EntityId target_id) const;
 
     // Inertial frame helpers
     vec3d body_z_inertial(EntityId body_id) const;

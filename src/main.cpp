@@ -45,7 +45,7 @@ int main() {
     Station* stat = world.station(stat_id);
     stat->anchored = true;
     stat->anchor_id = earth_id;
-    stat->r_body = {earth->mean_radius, 0, 0};
+    stat->r_body_BCBF = {earth->mean_radius, 0, 0};
     // earth rotated only about x-axis, station still on x-axis
 
     // run_gravity_diag(world, earth_id, urath_id, sat_id, stat_id);
@@ -88,10 +88,13 @@ int main() {
     // run_measurement_jacobian_diag();
     // run_batch_od_diag(*earth);
     // run_ekf_mixed_measurement_diag(*earth);
+    // run_checkpoint_diag();
+    // run_station_anchor_diag();
 
+
+    // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_checkpoint_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

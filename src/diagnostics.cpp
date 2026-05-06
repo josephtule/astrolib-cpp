@@ -1261,3 +1261,111 @@ void run_checkpoint_diag() {
     std::println("Sat Pos = {}", sat->x_tr.r);
     std::println("Sat Vel = {}", sat->x_tr.v);
 }
+
+void run_station_anchor_diag() {
+    World world;
+    EntityId earth_id = wgs84(world);
+    EntityId stat_id = world.spawn_station();
+    EntityId sat_id = world.spawn_satellite();
+
+    Celestial* earth = world.celestial(earth_id);
+    Station* stat = world.station(stat_id);
+    Satellite* sat = world.satellite(sat_id);
+
+    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    bool set_stat = world.set_stat_anchor_detic(stat_id, earth_id, llh);
+
+    std::println("Station Anchor Diagnostic -------------------------------");
+    std::println("set station = {}", set_stat);
+    std::println("station anchor id = {}", stat->anchor_id);
+    std::println("station r_body_BCBF = {}", stat->r_body_BCBF);
+    std::println("station llh_BCBF = {}", stat->llh_BCBF);
+
+    vec3d r_stat_expected_BCBF = vec3d{earth->semimajor_axis, 0.0, 0.0};
+    vec3d r_stat_BCI = world.stat_r_inertial(stat_id);
+    std::println("station inertial pos = {}", r_stat_BCI);
+    std::println(
+        "station inertial pos error = {}",
+        (r_stat_BCI - r_stat_expected_BCBF).norm()
+    );
+
+    mat3d R_ENU_BCBF = world.stat_rot_enu_from_body(stat_id);
+    vec3d y_BCBF_to_ENU = R_ENU_BCBF * axis_y;
+    vec3d z_BCBF_to_ENU = R_ENU_BCBF * axis_z;
+    vec3d x_BCBF_to_ENU = R_ENU_BCBF * axis_x;
+    std::println(
+        "+Y_BCBF -> ENU = {}, error = {}",
+        y_BCBF_to_ENU,
+        (y_BCBF_to_ENU - axis_x).norm()
+    );
+    std::println(
+        "+Z_BCBF -> ENU = {}, error = {}",
+        z_BCBF_to_ENU,
+        (z_BCBF_to_ENU - axis_y).norm()
+    );
+    std::println(
+        "+X_BCBF -> ENU = {}, error = {}",
+        x_BCBF_to_ENU,
+        (x_BCBF_to_ENU - axis_z).norm()
+    );
+
+    sat->x_tr.r = earth->x_tr.r + vec3d{earth->semimajor_axis + 1000.0, 0.0, 0.0};
+    vec3d r_rel_up_ENU = world.stat_rel_enu(stat_id, sat_id);
+    std::println("target overhead ENU = {}", r_rel_up_ENU);
+    std::println(
+        "target overhead ENU error = {}",
+        (r_rel_up_ENU - 1000.0 * axis_z).norm()
+    );
+
+    sat->x_tr.r = earth->x_tr.r + vec3d{earth->semimajor_axis, 1000.0, 0.0};
+    vec3d r_rel_east_ENU = world.stat_rel_enu(stat_id, sat_id);
+    std::println("target east ENU = {}", r_rel_east_ENU);
+    std::println("target east ENU error = {}", (r_rel_east_ENU - 1000.0 * axis_x).norm());
+
+    // different cases for llh
+    const svec<vec3d> llh_cases = {
+        vec3d{0.0, 90.0, 0.0}, // equator
+        vec3d{45.0, 0.0, 0.0}, // mid lat
+        vec3d{90.0, 0.0, 0.0}, // north pole
+    };
+    for (const vec3d& llh_case : llh_cases) {
+        bool set_case = world.set_stat_anchor_detic(stat_id, earth_id, llh_case);
+        std::println("LLH case [deg, deg, sim] = {}, set = {}", llh_case, set_case);
+        std::println("station r_body_BCBF = {}", stat->r_body_BCBF);
+        std::println("station llh_BCBF = {}", stat->llh_BCBF);
+        mat3d R_case_ENU_BCBF = world.stat_rot_enu_from_body(stat_id);
+        std::println("station R_ENU_BCBF row 0 = {}", vec3d{R_case_ENU_BCBF.row(0)});
+        std::println("station R_ENU_BCBF row 1 = {}", vec3d{R_case_ENU_BCBF.row(1)});
+        std::println("station R_ENU_BCBF row 2 = {}", vec3d{R_case_ENU_BCBF.row(2)});
+    }
+
+    // station on rotating body, expect v_BCI = w x r_BCI
+    world.set_stat_anchor_detic(stat_id, earth_id, llh);
+    earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
+    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+    vec3d v_stat_BCI_expected
+        = earth->x_att.w.cross(vec3d{earth->semimajor_axis, 0.0, 0.0});
+    vec3d v_stat_BCI = world.stat_v_inertial(stat_id);
+    std::println("station spin velocity BCI = {}", v_stat_BCI);
+    std::println(
+        "station spin velocity error = {}",
+        (v_stat_BCI - v_stat_BCI_expected).norm()
+    );
+
+    // check az/el
+    // put sat overhead station, el = 90deg expected
+    sat->x_tr.r = earth->x_tr.r + vec3d{earth->semimajor_axis + 1000.0, 0.0, 0.0};
+    vec3d azel_overhead = azel_from_enu(world.stat_rel_enu(stat_id, sat_id));
+    std::println("target overhead azelrho = {}", azel_overhead);
+    std::println(
+        "target overhead elevation error = {}",
+        std::abs(azel_overhead(1) - 90.0)
+    );
+    // put sat directly east, el = 0deg and az = 90deg expected
+    sat->x_tr.r = earth->x_tr.r + vec3d{earth->semimajor_axis, 1000.0, 0.0};
+    vec3d azel_east = azel_from_enu(world.stat_rel_enu(stat_id, sat_id));
+    std::println("target east azelrho = {}", azel_east);
+    std::println("target east azimuth error = {}", std::abs(azel_east(0) - 90.0));
+    std::println("target east elevation error = {}", std::abs(azel_east(1)));
+    std::println("----------------------------------------------------------");
+}

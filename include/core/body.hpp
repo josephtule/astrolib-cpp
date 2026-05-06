@@ -2,6 +2,7 @@
 
 #include "core/entity.hpp"
 #include "core/state.hpp"
+#include "util/units.hpp"
 #include "util/vecdefs.hpp"
 #include <string>
 
@@ -76,8 +77,9 @@ struct Satellite : public Body {
 struct Station : public Body {
     bool anchored = true;
     EntityId anchor_id = kInvalidEntityId;
-    vec3d r_body = vec3d::Zero();     // Position relative to anchor body
-    vec3d r_inertial = vec3d::Zero(); // Position in "inertial" frame
+    vec3d r_body_BCBF = vec3d::Zero(); // Position of station relative to anchor in bcbf
+    vec3d llh_BCBF = vec3d::Zero();    // Planetodetic coordinates
+    // [lat, lon, h] - [rad, rad, sim units]
 
     // Constructor(s)
     Station() {

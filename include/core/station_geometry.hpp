@@ -264,6 +264,48 @@ inline vec3d azel_rates_from_bcbf(
     return azel_rates_from_enu(r_rel_enu, v_rel_enu, angle_out, tol);
 }
 
+inline vec3d stat_r_bcbf_from_detic(
+    const vec3d& llh,
+    const Celestial& body,
+    UAngle angle_in = UAngle::degree
+) {
+    if (body.semimajor_axis <= 0.0 || body.semiminor_axis <= 0.0) return vec3d0;
+    return detic_to_bcbf(llh, body, angle_in);
+}
+
+inline vec3d stat_target_rel_enu(
+    const vec3d& r_station_body,
+    const vec3d& r_target_body,
+    f64 lat, // planetodetic
+    f64 lon,
+    UAngle angle_in = UAngle::degree
+) {
+    vec3d r_rel_body = r_target_body - r_station_body;
+    vec3d r_rel_enu = bcbf_rel_to_enu(r_rel_body, lat, lon, angle_in);
+    return r_rel_enu;
+}
+
+inline mat3d stat_rot_enu_from_detic(const vec3d& llh, UAngle angle_in = UAngle::radian) {
+    f64 lat = llh(0), lon = llh(1);
+
+    return rot_enu_from_bcbf(lat, lon, angle_in);
+}
+
+inline vec3d stat_target_rel_enu(
+    const vec3d& r_station_body,
+    const vec3d& r_target_body,
+    const vec3d& stat_llh_body,
+    UAngle angle_in = UAngle::radian
+) {
+    return stat_target_rel_enu(
+        r_station_body,
+        r_target_body,
+        stat_llh_body(0),
+        stat_llh_body(1),
+        angle_in
+    );
+}
+
 // inline vec3d azel_from_radec(){
 //
 // }
