@@ -12,6 +12,17 @@ enum struct IntegratorType : i32 {
     rk3,
     rk4,
 };
+inline std::string integrator_name(IntegratorType integrator) {
+    switch (integrator) {
+    case IntegratorType::rk1: return "RK1";
+    case IntegratorType::rk2: return "RK2";
+    case IntegratorType::rk2_heun: return "RK2 Heun";
+    case IntegratorType::rk2_ralston: return "RK2 Ralston";
+    case IntegratorType::rk3: return "RK3";
+    case IntegratorType::rk4: return "RK4";
+    }
+    return "Unknown";
+};
 
 template <typename State, typename Deriv, typename Func>
 inline std::pair<f64, State> step_rk1(Func&& f, f64 t, const State& x, f64 dt) {

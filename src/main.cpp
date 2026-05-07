@@ -8,6 +8,7 @@
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "util/constants.hpp"
+#include "util/math.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
@@ -90,11 +91,11 @@ int main() {
     // run_world_measurement_diag();
     // run_batch_od_diag();
     // run_ekf_world_diag();
-    // run_world_stepper_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
+    run_world_stepper_diag();
     run_body_fixed_gravity_timing_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");

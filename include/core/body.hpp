@@ -32,7 +32,7 @@ struct Celestial : public Body {
     GravityModel gravity_model = GravityModel::pointmass;
     f64 mu = 0.0;
     i32 degree = 0, order = 0; // spherical harmonics degree (n) and order (m)
-    vec7d J = vec7d::Zero();   // zonal coefs
+    vec7d J = vec7d0;   // zonal coefs
     matXd C, S;                // sph harmonic coefs
 
     // Attitude/Orientation
@@ -66,8 +66,8 @@ struct Celestial : public Body {
 
 struct MassProperties {
     f64 mass = 0.0;
-    mat3d I = mat3d::Identity();
-    mat3d I_inv = mat3d::Identity();
+    mat3d I = mat3d1;
+    mat3d I_inv = mat3d1;
     bool principal_axes = true;
     bool active = false;
 };
@@ -84,8 +84,8 @@ struct Satellite : public Body {
 struct Station : public Body {
     bool anchored = true;
     EntityId anchor_id = kInvalidEntityId;
-    vec3d r_body_BCBF = vec3d::Zero(); // Position of station relative to anchor in bcbf
-    vec3d llh_BCBF = vec3d::Zero();    // Planetodetic coordinates
+    vec3d r_body_BCBF = vec3d0; // Position of station relative to anchor in bcbf
+    vec3d llh_BCBF = vec3d0;    // Planetodetic coordinates
     // [lat, lon, h] - [rad, rad, sim units]
 
     MassProperties mass_properties;

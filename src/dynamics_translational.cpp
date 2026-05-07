@@ -157,7 +157,7 @@ vec3d accel_gravity_spherical_harmonics(
     ecref<matXd> C,
     ecref<matXd> S,
     f64 tol) {
-    vec3d a = vec3d::Zero();
+    vec3d a = vec3d0;
 
     // Order and degree guards
     if (degree < 2 || order < 0) return a;

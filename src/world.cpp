@@ -241,7 +241,7 @@ bool World::emits_radiation(EntityId id) const {
 }
 
 vec3d World::gravity_accel_from(EntityId target_id, EntityId source_id) const {
-    vec3d a = vec3d::Zero();
+    vec3d a = vec3d0;
 
     if (!emits_gravity(source_id)) return a;
     if (target_id == source_id) return a;
@@ -300,9 +300,9 @@ vec3d World::gravity_accel_from(
     EntityId source_id
 ) const {
     vec3d a = vec3d0;
-
     if (!this->emits_gravity(source_id)) return vec3d0;
     if (target_id == source_id) return vec3d0;
+
     const auto target = body(target_id);
     const auto source = celestial(source_id);
     if (target == nullptr || source == nullptr) return vec3d0;
@@ -409,8 +409,10 @@ vec3d World::gravity_accel_from(
     return a;
 }
 
+
+// TODO: optimize two way accelerations somehow
 vec3d World::gravity_accel_on(EntityId target_id) const {
-    vec3d a = vec3d::Zero();
+    vec3d a = vec3d0;
     const Body* target = body(target_id);
     if (target == nullptr) return a;
 
@@ -424,7 +426,7 @@ vec3d World::gravity_accel_on(EntityId target_id) const {
 }
 
 vec3d World::gravity_accel_on(EntityId target_id, const StateTr& x_target) const {
-    vec3d a = vec3d::Zero();
+    vec3d a = vec3d0;
     const Body* target = body(target_id);
     if (target == nullptr) return a;
 
@@ -440,7 +442,7 @@ vec3d World::gravity_accel_on(EntityId target_id, const StateTr& x_target) const
 vec3d World::stat_r_inertial(EntityId station_id) const {
     // gets absolute inertial position
     // (anchored stations not propagated, free stations return internal state)
-    vec3d r_inertial = vec3d::Zero();
+    vec3d r_inertial = vec3d0;
     const Station* stat = station(station_id);
     if (stat == nullptr) return r_inertial;
     if (!stat->anchored) return stat->x_tr.r;
@@ -458,7 +460,7 @@ vec3d World::stat_r_inertial(EntityId station_id) const {
 
 vec3d World::stat_v_inertial(EntityId station_id) const {
     // inertial velocity of station
-    vec3d v_inertial = vec3d::Zero();
+    vec3d v_inertial = vec3d0;
     const Station* stat = station(station_id);
     if (stat == nullptr) return v_inertial;
     if (!stat->anchored) return stat->x_tr.v;
@@ -549,7 +551,7 @@ vec3d World::stat_rel_enu(EntityId station_id, EntityId target_id) const {
 }
 
 vec3d World::body_z_inertial(EntityId body_id) const {
-    vec3d z_inertial = vec3d::Zero();
+    vec3d z_inertial = vec3d0;
     const Body* body = this->body(body_id);
     if (body == nullptr) return z_inertial;
 
@@ -559,7 +561,7 @@ vec3d World::body_z_inertial(EntityId body_id) const {
 }
 
 vec3d World::body_w_inertial(EntityId body_id) const {
-    vec3d w_inertial = vec3d::Zero();
+    vec3d w_inertial = vec3d0;
     const Body* body = this->body(body_id);
     if (body == nullptr) return w_inertial;
 

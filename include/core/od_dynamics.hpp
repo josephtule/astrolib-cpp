@@ -76,11 +76,11 @@ inline StateTr propagate_tr_od(
 // State and Derivatives for orbit determination (state + STM)
 struct VarStateTr {
     StateTr x;
-    mat6d Phi = mat6d::Identity(); // STM
+    mat6d Phi = mat6d1; // STM
 };
 struct VarDerivTr {
     DerivTr dx;
-    mat6d dPhi = mat6d::Zero();
+    mat6d dPhi = mat6d0;
 };
 inline VarStateTr operator+(const VarStateTr& y, const VarDerivTr& dy) {
     return VarStateTr{.x = y.x + dy.dx, .Phi = y.Phi + dy.dPhi};

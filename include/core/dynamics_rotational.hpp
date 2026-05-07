@@ -4,7 +4,7 @@
 #include "util/vecdefs.hpp"
 
 inline vec4d k_eulerparams(ecref<vec4d> q, ecref<vec3d> w) {
-    vec4d dqdt = vec4d::Zero();
+    vec4d dqdt = vec4d0;
     dqdt
         = {w(2) * q(1) - w(1) * q(2) + w(0) * q(3),
            -w(2) * q(0) + w(0) * q(2) + w(1) * q(3),

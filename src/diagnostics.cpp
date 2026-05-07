@@ -871,9 +871,7 @@ static EarthStationSatScenario make_earth_station_sat_scenario(const vec3d& stat
     scenario.earth_id = wgs84(scenario.world);
     scenario.stat_id = scenario.world.spawn_station();
     scenario.sat_id = scenario.world.spawn_satellite();
-    for (i32 i = 0; i < 1; ++i) {
-        i32 id = scenario.world.spawn_satellite();
-    }
+
     Celestial* earth = scenario.world.celestial(scenario.earth_id);
 
     // earth
@@ -1044,8 +1042,8 @@ void run_batch_od_diag() {
                 meas.z(4) += noise_unit(rng) * sigma_v;
                 meas.z(5) += noise_unit(rng) * sigma_v;
                 meas.R = matXd::Zero(6, 6);
-                meas.R.block(0, 0, 3, 3) = mat3d::Identity() * sigma_r * sigma_r;
-                meas.R.block(3, 3, 3, 3) = mat3d::Identity() * sigma_v * sigma_v;
+                meas.R.block(0, 0, 3, 3) = mat3d1 * sigma_r * sigma_r;
+                meas.R.block(3, 3, 3, 3) = mat3d1 * sigma_v * sigma_v;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_obs);
             }
@@ -1517,8 +1515,8 @@ void run_ekf_world_diag() {
                 meas.z(4) += noise_unit(rng) * sigma_v;
                 meas.z(5) += noise_unit(rng) * sigma_v;
                 meas.R = matXd::Zero(6, 6);
-                meas.R.block(0, 0, 3, 3) = mat3d::Identity() * sigma_r * sigma_r;
-                meas.R.block(3, 3, 3, 3) = mat3d::Identity() * sigma_v * sigma_v;
+                meas.R.block(0, 0, 3, 3) = mat3d1 * sigma_r * sigma_r;
+                meas.R.block(3, 3, 3, 3) = mat3d1 * sigma_v * sigma_v;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_obs);
             }
@@ -1589,110 +1587,118 @@ void run_ekf_world_diag() {
 }
 
 void run_world_stepper_diag() {
-    vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
-    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
-    World& world = scenario.world;
-    EntityId earth_id = scenario.earth_id;
-    EntityId sat_id = scenario.sat_id;
-    EntityId stat_id = scenario.stat_id;
-    Celestial* earth = world.celestial(earth_id);
-    Satellite* sat = world.satellite(sat_id);
-    Station* stat = world.station(stat_id);
-
-    // earth
-    earth->propagate_att = true;
-    earth->set_spin_rate(0.1);
-
-    // station
-    // shouldn't propagate attitude because anchored
-    stat->anchored = true;               // for testing
-    stat->mass_properties.active = true; // for testing
-    stat->propagate_att = true;          // for testing
-    // need false, true, true to propagate station attitude
-    stat->mass_properties.mass = 500.0;
-    stat->mass_properties.principal_axes = true;
-    stat->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
-    stat->x_att.q = q_default;
-    stat->x_att.w = {0, 0, 0.01};
-    stat->propagate_tr = true;
-    stat->propagate_att = true;
-
-    // satellite
-    svec<EntityId> sat_ids = world.satellite_ids();
-    StateTr x0;
-    x0.r = vec3d{7000.0, 0.0, 0.0};
-    x0.v = vec3d{0.0, 7.546053290107541, 0.0};
-
-    for (EntityId id : sat_ids) {
-        Satellite* sat_temp = world.satellite(id);
-        sat_temp->mass_properties.active = true;
-        sat_temp->mass_properties.mass = 500.0;
-        sat_temp->mass_properties.principal_axes = true;
-        sat_temp->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
-        sat_temp->x_att.q = q_default;
-        sat_temp->x_att.w = {0, 0, 0.01};
-        sat_temp->x_tr = x0;
-        sat_temp->propagate_tr = true;
-        sat_temp->propagate_att = true;
-    }
-
-    WorldStepperConfig cfg;
-    cfg.step_translation = true;
-    cfg.step_attitude = true;
-    cfg.substeps = 1;
-    cfg.ticks = 10;
-    cfg.time_scale = 1.0 / cfg.ticks;
-    cfg.integrator_tr = IntegratorType::rk1;
-    cfg.integrator_att = IntegratorType::rk4;
-
-    f64 t_span = 100.0;
-    f64 t0 = 0.0;
-    i32 n_steps = 500;
-    f64 dt = t_span / n_steps;
-    world.reset_time(t0);
-
-    ODDynamicsConfig ODcfg;
-    ODcfg.body_radius = earth->mean_radius;
-    ODcfg.integrator = IntegratorType::rk1;
-    ODcfg.mu = earth->mu;
-    ODcfg.model = ODDynamicsModel::two_body;
-
-    // "truth"
-    i32 n_ref_steps = n_steps * cfg.ticks * cfg.substeps;
-    StateTr x_OD = propagate_tr_od(t0, x0, t_span, n_ref_steps, ODcfg);
-
-    // world stepper
-    WorldStepperStats stats;
-    stats.success = true;
-    for (i32 i = 0; i < n_steps; ++i) {
-        stats += step_world(world, dt, cfg);
-        if (!stats.success) break;
-    }
-
-    StateTr x_err = x_OD - sat->x_tr;
-
     print_diag_title("World Stepper");
-    std::println("Stepper Success: {}", stats.success);
-    std::println("Final Position (World Stepper)= {}", sat->x_tr.r);
-    std::println("Final Position (OD) = {}", x_OD.r);
-    std::println("Position Error = {}", x_err.r.norm());
-    std::println("Velocity Error = {}", x_err.v.norm());
-    std::println("Final Satellite Attitude (EP) = {}", sat->x_att.q);
-    std::println("Final Satellite Attitude Norm (EP) = {}", sat->x_att.q.norm());
-    std::println("Final Satellite Angular Velocity = {}", sat->x_att.w);
-    std::println("Final Station Attitude (EP) = {}", stat->x_att.q);
-    std::println("Final Station Attitude Norm (EP) = {}", stat->x_att.q.norm());
-    std::println("Final Station Angular Velocity = {}", stat->x_att.w);
-    std::println("Final Earth Attitude (EP) = {}", earth->x_att.q);
-    std::println("Final Earth Attitude Norm (EP) = {}", earth->x_att.q.norm());
-    f64 theta = world.t_sim() * earth->spin_rate();
-    std::println(
-        "Earth Attitude Error= {}",
-        (earth->x_att.q - vec4d{0.0, 0.0, std::sin(theta / 2.0), std::cos(theta / 2.0)})
-            .norm()
-    );
-    std::println("Final Earth Angular Velocity = {}", earth->x_att.w);
-    std::println("Final Time = {}", world.t_sim());
+
+    auto integrator_name = [](IntegratorType integrator) -> std::string {
+        switch (integrator) {
+        case IntegratorType::rk1: return "RK1";
+        case IntegratorType::rk2: return "RK2";
+        case IntegratorType::rk2_heun: return "RK2 Heun";
+        case IntegratorType::rk2_ralston: return "RK2 Ralston";
+        case IntegratorType::rk3: return "RK3";
+        case IntegratorType::rk4: return "RK4";
+        }
+        return "Unknown";
+    };
+
+    auto run_case = [&](IntegratorType integrator_tr) {
+        vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+        EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
+        World& world = scenario.world;
+        EntityId earth_id = scenario.earth_id;
+        EntityId sat_id = scenario.sat_id;
+        EntityId stat_id = scenario.stat_id;
+        Celestial* earth = world.celestial(earth_id);
+        Satellite* sat = world.satellite(sat_id);
+        Station* stat = world.station(stat_id);
+
+        // earth
+        earth->propagate_att = true;
+        earth->set_spin_rate(0.1);
+
+        // station
+        // shouldn't propagate attitude because anchored
+        stat->anchored = true;               // for testing
+        stat->mass_properties.active = true; // for testing
+        stat->propagate_att = true;          // for testing
+        // need false, true, true to propagate station attitude
+        stat->mass_properties.mass = 500.0;
+        stat->mass_properties.principal_axes = true;
+        stat->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
+        stat->x_att.q = q_default;
+        stat->x_att.w = {0, 0, 0.01};
+        stat->propagate_tr = true;
+        stat->propagate_att = true;
+
+        // satellite
+        StateTr x0;
+        x0.r = vec3d{7000.0, 0.0, 0.0};
+        x0.v = vec3d{0.0, 7.546053290107541, 0.0};
+
+        sat->mass_properties.active = true;
+        sat->mass_properties.mass = 500.0;
+        sat->mass_properties.principal_axes = true;
+        sat->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
+        sat->x_att.q = q_default;
+        sat->x_att.w = {0, 0, 0.01};
+        sat->x_tr = x0;
+        sat->propagate_tr = true;
+        sat->propagate_att = true;
+
+        WorldStepperConfig cfg;
+        cfg.step_translation = true;
+        cfg.step_attitude = true;
+        cfg.substeps = 1;
+        cfg.ticks = 10;
+        cfg.time_scale = 1.0 / cfg.ticks;
+        cfg.integrator_tr = integrator_tr;
+        cfg.integrator_att = IntegratorType::rk4;
+
+        f64 t_span = 100.0;
+        f64 t0 = 0.0;
+        i32 n_steps = 500;
+        f64 dt = t_span / n_steps;
+        world.reset_time(t0);
+
+        ODDynamicsConfig ODcfg;
+        ODcfg.body_radius = earth->mean_radius;
+        ODcfg.integrator = integrator_tr;
+        ODcfg.mu = earth->mu;
+        ODcfg.model = ODDynamicsModel::two_body;
+
+        // "truth"
+        i32 n_ref_steps = n_steps * cfg.ticks * cfg.substeps;
+        StateTr x_OD = propagate_tr_od(t0, x0, t_span, n_ref_steps, ODcfg);
+
+        // world stepper
+        WorldStepperStats stats;
+        stats.success = true;
+        for (i32 i = 0; i < n_steps; ++i) {
+            stats += step_world(world, dt, cfg);
+            if (!stats.success) break;
+        }
+
+        StateTr x_err = x_OD - sat->x_tr;
+        f64 pos_err = x_err.r.norm();
+        f64 vel_err = x_err.v.norm();
+        f64 pos_rel_err = pos_err / x_OD.r.norm();
+        f64 vel_rel_err = vel_err / x_OD.v.norm();
+
+        std::println("{} Success = {}", integrator_name(integrator_tr), stats.success);
+        std::println("{} Position Error = {}", integrator_name(integrator_tr), pos_err);
+        std::println("{} Velocity Error = {}", integrator_name(integrator_tr), vel_err);
+        std::println("{} Relative Position Error = {}", integrator_name(integrator_tr), pos_rel_err);
+        std::println("{} Relative Velocity Error = {}", integrator_name(integrator_tr), vel_rel_err);
+        std::println("{} Final Time = {}", integrator_name(integrator_tr), world.t_sim());
+        std::println();
+    };
+
+    run_case(IntegratorType::rk1);
+    run_case(IntegratorType::rk2);
+    run_case(IntegratorType::rk2_heun);
+    run_case(IntegratorType::rk2_ralston);
+    run_case(IntegratorType::rk3);
+    run_case(IntegratorType::rk4);
 }
 
 void run_body_fixed_gravity_timing_diag() {
@@ -1794,6 +1800,7 @@ void run_body_fixed_gravity_timing_diag() {
         earth->gravity_model = GravityModel::pointmass;
         earth->x_att.q = q_default;
         vec3d a_pm_0 = world.gravity_accel_on(sat_id);
+        vec3d a_pm_stage = world.gravity_accel_on(sat_id, sat->x_tr);
         earth->x_att.q = q_spin;
         vec3d a_pm_1_spin = world.gravity_accel_on(sat_id);
         vec3d r_pm_1_spin = sat->x_tr.r;
@@ -1814,6 +1821,7 @@ void run_body_fixed_gravity_timing_diag() {
         earth->degree = 2;
         earth->x_att.q = q_default;
         vec3d a_zonal_0 = world.gravity_accel_on(sat_id);
+        vec3d a_zonal_stage = world.gravity_accel_on(sat_id, sat->x_tr);
         earth->x_att.q = q_spin;
         vec3d a_zonal_1_spin = world.gravity_accel_on(sat_id);
         world.restore_checkpoint_state(world_snapshot);
@@ -1838,6 +1846,7 @@ void run_body_fixed_gravity_timing_diag() {
         earth->S(2, 1) = -5.0e-7;
         earth->x_att.q = q_default;
         vec3d a_sphh_0 = world.gravity_accel_on(sat_id);
+        vec3d a_sphh_stage = world.gravity_accel_on(sat_id, sat->x_tr);
         earth->x_att.q = q_spin;
         vec3d a_sphh_1_spin = world.gravity_accel_on(sat_id);
         world.restore_checkpoint_state(world_snapshot);
@@ -1862,6 +1871,12 @@ void run_body_fixed_gravity_timing_diag() {
         std::println("Zonal Accel = {}", a_zonal_0);
         std::println("Spherical Harmonics Accel = {}", a_sphh_0);
         std::println("Spherical Harmonics Rotated Accel = {}", a_sphh_1_spin);
+        std::println("Pointmass Same-State Staging Diff = {}", (a_pm_stage - a_pm_0).norm());
+        std::println("Zonal Same-State Staging Diff = {}", (a_zonal_stage - a_zonal_0).norm());
+        std::println(
+            "Spherical Harmonics Same-State Staging Diff = {}",
+            (a_sphh_stage - a_sphh_0).norm()
+        );
 
         std::println();
 

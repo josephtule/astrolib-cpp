@@ -180,7 +180,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             f64 dt = meas.t - input.t0;
             VarStateTr y0;
             y0.x = x0_ref;
-            y0.Phi = mat6d::Identity();
+            y0.Phi = mat6d1;
             VarStateTr yf = propagate_var_tr_od(
                 input.t0,
                 y0,

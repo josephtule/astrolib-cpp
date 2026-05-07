@@ -3,25 +3,25 @@
 #include "util/vecdefs.hpp"
 
 struct StateTr {
-    vec3d r = vec3d::Zero(); // position
-    vec3d v = vec3d::Zero(); // velocity
+    vec3d r = vec3d0; // position
+    vec3d v = vec3d0; // velocity
 };
 
 inline vec4d q_default{0.0, 0.0, 0.0, 1.0};
 struct StateAtt {
     vec4d q = q_default;     // euler-parameter/quaternion
-    vec3d w = vec3d::Zero(); // angular velocity
+    vec3d w = vec3d0; // angular velocity
 };
 
 // Derivatives
 struct DerivTr {
-    vec3d dr = vec3d::Zero();
-    vec3d dv = vec3d::Zero();
+    vec3d dr = vec3d0;
+    vec3d dv = vec3d0;
 };
 
 struct DerivAtt {
-    vec4d dq = vec4d::Zero();
-    vec3d dw = vec3d::Zero();
+    vec4d dq = vec4d0;
+    vec3d dw = vec3d0;
 };
 
 // Translation Operations

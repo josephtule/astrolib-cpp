@@ -210,7 +210,7 @@ inline vec4<T> dcm_to_ep(const mat3<T>& R) {
 }
 
 inline vec3d bcbf_to_centric(ecref<vec3d> r_bcbf, UAngle u_out = UAngle::degree) {
-    vec3d llr = vec3d::Zero();
+    vec3d llr = vec3d0;
 
     f64 x = r_bcbf(0);
     f64 y = r_bcbf(1);
@@ -234,7 +234,7 @@ inline vec3d bcbf_to_centric(ecref<vec3d> r_bcbf, UAngle u_out = UAngle::degree)
 }
 
 inline vec3d centric_to_bcbf(ecref<vec3d> llr, UAngle u_in = UAngle::degree) {
-    vec3d r_bcbf = vec3d::Zero();
+    vec3d r_bcbf = vec3d0;
 
     f64 latitude = llr(0);
     f64 longitude = llr(1);
@@ -261,7 +261,7 @@ inline vec3d bcbf_to_detic(
     UAngle u_out = UAngle::degree,
     f64 tol = tol_strict
 ) {
-    vec3d llh = vec3d::Zero();
+    vec3d llh = vec3d0;
 
     f64 x = r_bcbf(0);
     f64 y = r_bcbf(1);
@@ -325,7 +325,7 @@ inline vec3d detic_to_bcbf(
     const Celestial& body,
     UAngle u_in = UAngle::degree
 ) {
-    vec3d r_bcbf = vec3d::Zero();
+    vec3d r_bcbf = vec3d0;
 
     f64 latitude = llh(0);
     f64 longitude = llh(1);
