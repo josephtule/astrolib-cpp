@@ -159,6 +159,30 @@ EntityId World::insert_station(std::unique_ptr<Station> stat) {
     return insert_body(std::move(stat));
 }
 
+i32 World::num_celestials() const {
+    i32 count = 0;
+    for (EntityId id : active_ids) {
+        if (is_celestial(id)) count++;
+    }
+    return count;
+}
+
+i32 World::num_satellites() const {
+    i32 count = 0;
+    for (EntityId id : active_ids) {
+        if (is_satellite(id)) count++;
+    }
+    return count;
+}
+
+i32 World::num_stations() const {
+    i32 count = 0;
+    for (EntityId id : active_ids) {
+        if (is_station(id)) count++;
+    }
+    return count;
+}
+
 bool World::is_celestial(EntityId id) const {
     const auto ptr = body(id);
     if (ptr == nullptr) return false;
@@ -176,6 +200,33 @@ bool World::is_station(EntityId id) const {
     if (ptr == nullptr) return false;
     if (ptr->body_type != BodyType::station) return false;
     return true;
+}
+
+svec<EntityId> World::celestial_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_celestials());
+    for (EntityId id : active_ids) {
+        if (is_celestial(id)) ids.push_back(id);
+    }
+    return ids;
+}
+
+svec<EntityId> World::satellite_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_satellites());
+    for (EntityId id : active_ids) {
+        if (is_satellite(id)) ids.push_back(id);
+    }
+    return ids;
+}
+
+svec<EntityId> World::station_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_stations());
+    for (EntityId id : active_ids) {
+        if (is_station(id)) ids.push_back(id);
+    }
+    return ids;
 }
 
 bool World::emits_gravity(EntityId id) const {
@@ -243,6 +294,121 @@ vec3d World::gravity_accel_from(EntityId target_id, EntityId source_id) const {
     return a;
 }
 
+vec3d World::gravity_accel_from(
+    EntityId target_id,
+    const StateTr& x_target,
+    EntityId source_id
+) const {
+    vec3d a = vec3d0;
+
+    if (!this->emits_gravity(source_id)) return vec3d0;
+    if (target_id == source_id) return vec3d0;
+    const auto target = body(target_id);
+    const auto source = celestial(source_id);
+    if (target == nullptr || source == nullptr) return vec3d0;
+
+    vec3d r_rel_inertial = x_target.r - source->x_tr.r;
+    switch (source->gravity_model) {
+    case GravityModel::spherical_harmonics: {
+        vec4d q_BN = source->x_att.q; // [BN]: N -> B
+        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
+        // Body fixed relative position for spherical harmonic gravity perturbations
+        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
+        vec3d a_body = accel_gravity_spherical_harmonics(
+            r_rel_body,
+            source->mu,
+            source->mean_radius,
+            source->degree,
+            source->order,
+            source->C,
+            source->S
+        ); // Acceleration in body fixed frame
+        a = ep_rotate_fast_passive(q_NB, a_body);
+        break;
+    }
+    case GravityModel::zonal: {
+        vec4d q_BN = source->x_att.q; // [BN]: N -> B
+        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
+        // Body fixed relative position for zonal gravity perturbations
+        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
+        vec3d a_body = accel_gravity_zonal(
+            r_rel_body,
+            source->mu,
+            source->mean_radius,
+            source->degree,
+            source->J
+        ); // Acceleration in body fixed frame
+        a = ep_rotate_fast_passive(q_NB, a_body);
+        break;
+    }
+    case GravityModel::pointmass: {
+        a = accel_gravity_pointmass(r_rel_inertial, source->mu);
+        break;
+    }
+    default:
+    }
+
+    return a;
+}
+
+vec3d World::gravity_accel_from(
+    EntityId target_id,
+    const StateTr& x_target,
+    EntityId source_id,
+    const StateTr& x_source
+) const {
+    vec3d a = vec3d0;
+
+    if (!this->emits_gravity(source_id)) return vec3d0;
+    if (target_id == source_id) return vec3d0;
+    const auto target = body(target_id);
+    const auto source = celestial(source_id);
+    if (target == nullptr || source == nullptr) return vec3d0;
+
+    vec3d r_rel_inertial = x_target.r - x_source.r;
+    switch (source->gravity_model) {
+    case GravityModel::spherical_harmonics: {
+        vec4d q_BN = source->x_att.q; // [BN]: N -> B
+        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
+        // Body fixed relative position for spherical harmonic gravity perturbations
+        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
+        vec3d a_body = accel_gravity_spherical_harmonics(
+            r_rel_body,
+            source->mu,
+            source->mean_radius,
+            source->degree,
+            source->order,
+            source->C,
+            source->S
+        ); // Acceleration in body fixed frame
+        a = ep_rotate_fast_passive(q_NB, a_body);
+        break;
+    }
+    case GravityModel::zonal: {
+        vec4d q_BN = source->x_att.q; // [BN]: N -> B
+        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
+        // Body fixed relative position for zonal gravity perturbations
+        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
+        vec3d a_body = accel_gravity_zonal(
+            r_rel_body,
+            source->mu,
+            source->mean_radius,
+            source->degree,
+            source->J
+        ); // Acceleration in body fixed frame
+        a = ep_rotate_fast_passive(q_NB, a_body);
+        break;
+    }
+    case GravityModel::pointmass: {
+        a = accel_gravity_pointmass(r_rel_inertial, source->mu);
+        break;
+    }
+    default:
+    }
+
+    return a;
+}
+
 vec3d World::gravity_accel_on(EntityId target_id) const {
     vec3d a = vec3d::Zero();
     const Body* target = body(target_id);
@@ -252,6 +418,20 @@ vec3d World::gravity_accel_on(EntityId target_id) const {
         if (target_id == source_id) continue;
         if (!source->emits_gravity) continue;
         a += gravity_accel_from(target_id, source_id);
+    }
+
+    return a;
+}
+
+vec3d World::gravity_accel_on(EntityId target_id, const StateTr& x_target) const {
+    vec3d a = vec3d::Zero();
+    const Body* target = body(target_id);
+    if (target == nullptr) return a;
+
+    for (const auto& [source_id, source] : bodies) {
+        if (target_id == source_id) continue;
+        if (!source->emits_gravity) continue;
+        a += gravity_accel_from(target_id, x_target, source_id);
     }
 
     return a;

@@ -153,3 +153,10 @@ inline T cosd(T val) {
 }
 
 inline f64 clamp_unit(f64 x) { return std::clamp(x, -1.0, 1.0); }
+
+template <typename T>
+inline void normalize_quaternion_inplace(vec4d& q, T tol = tol_strict) {
+    T q_mag = q.norm();
+    if (q_mag <= tol) return;
+    q /= q_mag;
+}

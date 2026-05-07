@@ -23,8 +23,6 @@ int main() {
     Celestial* earth = world.celestial(earth_id);
     earth->gravity_model = GravityModel::zonal;
     earth->degree = 2;
-    earth->use_simple_spin = true;
-    earth->set_spin_rate(earth->spin_rate); // spin rate in rad/s
     mat3d earth_tilt_dcm = rotX(23.44 * deg_to_rad);
     earth->x_att.q = dcm_to_ep(earth_tilt_dcm);
 
@@ -92,11 +90,12 @@ int main() {
     // run_world_measurement_diag();
     // run_batch_od_diag();
     // run_ekf_world_diag();
+    // run_world_stepper_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_world_stepper_diag();
+    run_body_fixed_gravity_timing_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

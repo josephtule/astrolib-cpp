@@ -47,8 +47,8 @@ inline Celestial wgs84(ULength u_len = ULength::kilometer) {
 
     earth.x_att.q = {0.0, 0.0, 0.0, 1.0};
     earth.x_att.w = {0.0, 0.0, omega};
-    earth.use_simple_spin = true;
-    earth.spin_rate = omega;
+    earth.attitude_model = CelestialAttitudeModel::simple_spin;
+    earth.set_spin_rate(omega);
 
     earth.J = -vec7d{
         0.000000000000000000,
@@ -127,6 +127,3 @@ inline f64 norm_factor(i32 n, i32 m) {
     );
     return factor;
 }
-
-
-

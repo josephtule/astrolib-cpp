@@ -105,3 +105,51 @@ inline vec7d derivatt_to_vec7d(const DerivAtt& x) {
 }
 
 // Attitude Operations
+inline StateAtt operator+(const StateAtt& x1, const StateAtt& x2) {
+    return StateAtt{.q = x1.q + x2.q, .w = x1.w + x2.w};
+}
+inline StateAtt operator-(const StateAtt& x1, const StateAtt& x2) {
+    return StateAtt{.q = x1.q - x2.q, .w = x1.w - x2.w};
+}
+inline StateAtt operator*(const StateAtt& x, f64 scalar) {
+    return StateAtt{.q = x.q * scalar, .w = x.w * scalar};
+}
+inline StateAtt operator*(f64 scalar, const StateAtt& x) { return x * scalar; }
+inline StateAtt operator/(const StateAtt& x, f64 scalar) { return x * (1.0 / scalar); }
+inline StateAtt operator+(const StateAtt& x, const DerivAtt& dx) {
+    return StateAtt{.q = x.q + dx.dq, .w = x.w + dx.dw};
+}
+inline StateAtt operator+(const DerivAtt& dx, const StateAtt& x) { return x + dx; }
+inline StateAtt operator-(const StateAtt& x, const DerivAtt& dx) {
+    return StateAtt{.q = x.q - dx.dq, .w = x.w - dx.dw};
+}
+inline StateAtt& operator+=(StateAtt& x1, const StateAtt& x2) {
+    x1.q += x2.q;
+    x1.w += x2.w;
+    return x1;
+}
+inline StateAtt& operator+=(StateAtt& x, const DerivAtt& dx) {
+    x.q += dx.dq;
+    x.w += dx.dw;
+    return x;
+}
+inline StateAtt operator-(const StateAtt& x) {
+    return StateAtt{.q = -x.q, .w = -x.w};
+}
+
+inline DerivAtt operator+(const DerivAtt& dx1, const DerivAtt& dx2) {
+    return DerivAtt{.dq = dx1.dq + dx2.dq, .dw = dx1.dw + dx2.dw};
+}
+inline DerivAtt operator-(const DerivAtt& dx1, const DerivAtt& dx2) {
+    return DerivAtt{.dq = dx1.dq - dx2.dq, .dw = dx1.dw - dx2.dw};
+}
+inline DerivAtt operator*(const DerivAtt& dx, f64 scalar) {
+    return DerivAtt{.dq = dx.dq * scalar, .dw = dx.dw * scalar};
+}
+inline DerivAtt operator*(f64 scalar, const DerivAtt& dx) { return dx * scalar; }
+inline DerivAtt operator/(const DerivAtt& dx, f64 scalar) {
+    return dx * (1.0 / scalar);
+}
+inline DerivAtt operator-(const DerivAtt& dx) {
+    return DerivAtt{.dq = -dx.dq, .dw = -dx.dw};
+}

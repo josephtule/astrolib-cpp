@@ -2,7 +2,6 @@
 
 #include "core/entity.hpp"
 #include "core/state.hpp"
-#include "util/units.hpp"
 #include "util/vecdefs.hpp"
 #include <string>
 
@@ -27,7 +26,7 @@ struct Body {
 
 enum struct GravityModel { pointmass, zonal, spherical_harmonics };
 enum struct RadiationModel { none, isotropic };
-
+enum struct CelestialAttitudeModel { fixed, simple_spin, provider };
 struct Celestial : public Body {
     // Gravity
     GravityModel gravity_model = GravityModel::pointmass;
@@ -35,6 +34,9 @@ struct Celestial : public Body {
     i32 degree = 0, order = 0; // spherical harmonics degree (n) and order (m)
     vec7d J = vec7d::Zero();   // zonal coefs
     matXd C, S;                // sph harmonic coefs
+
+    // Attitude/Orientation
+    CelestialAttitudeModel attitude_model = CelestialAttitudeModel::fixed;
 
     // Radiation
     RadiationModel radiation_model = RadiationModel::none;
@@ -45,9 +47,8 @@ struct Celestial : public Body {
     f64 semiminor_axis = 0.0;
     f64 eccentricity = 0.0, flattening = 0.0;
 
-    // Attitude
-    bool use_simple_spin = false;
-    f64 spin_rate = 0.0;
+    // Spin
+    f64 spin_rate() const { return x_att.w.norm(); }
 
     // Constructor(s)
     Celestial() {
@@ -57,23 +58,27 @@ struct Celestial : public Body {
 
     void set_spin_rate(f64 spin_rate_) {
         // in rad/s
-        if (use_simple_spin) {
-            spin_rate = spin_rate_;
-            x_att.w(2) = spin_rate;
+        if (attitude_model == CelestialAttitudeModel::simple_spin) {
+            x_att.w(2) = spin_rate_;
         }
     }
 };
 
-struct Satellite : public Body {
-    // Mass Properties
+struct MassProperties {
     f64 mass = 0.0;
-
-    bool principal_axes = false;
     mat3d I = mat3d::Identity();
     mat3d I_inv = mat3d::Identity();
+    bool principal_axes = true;
+    bool active = false;
+};
+struct Satellite : public Body {
+    MassProperties mass_properties;
 
     // Constructor(s)
-    Satellite() { body_type = BodyType::satellite; }
+    Satellite() {
+        body_type = BodyType::satellite;
+        mass_properties.active = true;
+    }
 };
 
 struct Station : public Body {
@@ -82,6 +87,8 @@ struct Station : public Body {
     vec3d r_body_BCBF = vec3d::Zero(); // Position of station relative to anchor in bcbf
     vec3d llh_BCBF = vec3d::Zero();    // Planetodetic coordinates
     // [lat, lon, h] - [rad, rad, sim units]
+
+    MassProperties mass_properties;
 
     // Constructor(s)
     Station() {

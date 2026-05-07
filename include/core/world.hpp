@@ -84,17 +84,36 @@ class World {
     EntityId insert_celestial(std::unique_ptr<Celestial> cel);
     EntityId insert_satellite(std::unique_ptr<Satellite> sat);
     EntityId insert_station(std::unique_ptr<Station> stat);
+    i32 num_celestials() const;
+    i32 num_satellites() const;
+    i32 num_stations() const;
+    // TODO: add duplicate helpers
 
     // Type and emission queries
     bool is_celestial(EntityId id) const;
     bool is_satellite(EntityId id) const;
     bool is_station(EntityId id) const;
+    svec<EntityId> celestial_ids() const;
+    svec<EntityId> satellite_ids() const;
+    svec<EntityId> station_ids() const;
     bool emits_gravity(EntityId id) const;
     bool emits_radiation(EntityId id) const;
 
     // Force queries
     vec3d gravity_accel_on(EntityId target_id) const;
+    vec3d gravity_accel_on(EntityId target_id, const StateTr& x_target) const;
     vec3d gravity_accel_from(EntityId target_id, EntityId source_id) const;
+    vec3d gravity_accel_from(
+        EntityId target_id,
+        const StateTr& target_x,
+        EntityId source_id
+    ) const;
+    vec3d gravity_accel_from(
+        EntityId target_id,
+        const StateTr& x_target,
+        EntityId source_id,
+        const StateTr& x_source
+    ) const;
 
     // Station
     vec3d stat_r_inertial(EntityId station_id) const;

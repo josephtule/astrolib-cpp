@@ -1,4 +1,5 @@
 #include "core/diagnostics.hpp"
+#include "core/body.hpp"
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_batch.hpp"
@@ -13,9 +14,11 @@
 #include "core/planets.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
+#include "core/transform.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
 #include "util/units.hpp"
+#include "util/vecdefs.hpp"
 #include <random>
 
 void print_diag_title(const std::string& title) {
@@ -268,7 +271,7 @@ void run_epkde(
     Celestial* earth = world.celestial(earth_id);
 
     vec4d q = q_default;
-    vec3d w = earth->spin_rate * axis_z;
+    vec3d w = 7.292115000000000e-05 * axis_z;
 
     vec4d q_dot = k_eulerparams(q, w);
     std::println("q = {}", q);
@@ -868,11 +871,14 @@ static EarthStationSatScenario make_earth_station_sat_scenario(const vec3d& stat
     scenario.earth_id = wgs84(scenario.world);
     scenario.stat_id = scenario.world.spawn_station();
     scenario.sat_id = scenario.world.spawn_satellite();
+    for (i32 i = 0; i < 1; ++i) {
+        i32 id = scenario.world.spawn_satellite();
+    }
     Celestial* earth = scenario.world.celestial(scenario.earth_id);
 
     // earth
     earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
-    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+    earth->x_att.w = vec3d{0.0, 0.0, 7.292115000000000e-05};
 
     // station
     scenario.world
@@ -1212,7 +1218,7 @@ void run_station_anchor_diag() {
     // station on rotating body, expect v_BCI = w x r_BCI
     world.set_stat_anchor_detic(stat_id, earth_id, llh);
     earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
-    earth->x_att.w = vec3d{0.0, 0.0, earth->spin_rate};
+    earth->x_att.w = vec3d{0.0, 0.0, 7.292115000000000e-05};
     vec3d v_stat_BCI_expected
         = earth->x_att.w.cross(vec3d{earth->semimajor_axis, 0.0, 0.0});
     vec3d v_stat_BCI = world.stat_v_inertial(stat_id);
@@ -1588,26 +1594,60 @@ void run_world_stepper_diag() {
     World& world = scenario.world;
     EntityId earth_id = scenario.earth_id;
     EntityId sat_id = scenario.sat_id;
+    EntityId stat_id = scenario.stat_id;
     Celestial* earth = world.celestial(earth_id);
     Satellite* sat = world.satellite(sat_id);
+    Station* stat = world.station(stat_id);
 
+    // earth
+    earth->propagate_att = true;
+    earth->set_spin_rate(0.1);
+
+    // station
+    // shouldn't propagate attitude because anchored
+    stat->anchored = true;               // for testing
+    stat->mass_properties.active = true; // for testing
+    stat->propagate_att = true;          // for testing
+    // need false, true, true to propagate station attitude
+    stat->mass_properties.mass = 500.0;
+    stat->mass_properties.principal_axes = true;
+    stat->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
+    stat->x_att.q = q_default;
+    stat->x_att.w = {0, 0, 0.01};
+    stat->propagate_tr = true;
+    stat->propagate_att = true;
+
+    // satellite
+    svec<EntityId> sat_ids = world.satellite_ids();
     StateTr x0;
     x0.r = vec3d{7000.0, 0.0, 0.0};
     x0.v = vec3d{0.0, 7.546053290107541, 0.0};
-    sat->x_tr = x0;
 
-    sat->propagate_tr = true;
+    for (EntityId id : sat_ids) {
+        Satellite* sat_temp = world.satellite(id);
+        sat_temp->mass_properties.active = true;
+        sat_temp->mass_properties.mass = 500.0;
+        sat_temp->mass_properties.principal_axes = true;
+        sat_temp->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
+        sat_temp->x_att.q = q_default;
+        sat_temp->x_att.w = {0, 0, 0.01};
+        sat_temp->x_tr = x0;
+        sat_temp->propagate_tr = true;
+        sat_temp->propagate_att = true;
+    }
+
     WorldStepperConfig cfg;
     cfg.step_translation = true;
-    cfg.step_attitude = false;
+    cfg.step_attitude = true;
     cfg.substeps = 1;
     cfg.ticks = 10;
     cfg.time_scale = 1.0 / cfg.ticks;
-    cfg.integrator = IntegratorType::rk1;
+    cfg.integrator_tr = IntegratorType::rk1;
+    cfg.integrator_att = IntegratorType::rk4;
 
     f64 t_span = 100.0;
     f64 t0 = 0.0;
-    i32 n_steps = 1000;
+    i32 n_steps = 500;
     f64 dt = t_span / n_steps;
     world.reset_time(t0);
 
@@ -1623,8 +1663,9 @@ void run_world_stepper_diag() {
 
     // world stepper
     WorldStepperStats stats;
+    stats.success = true;
     for (i32 i = 0; i < n_steps; ++i) {
-        stats = step_world(world, dt, cfg);
+        stats += step_world(world, dt, cfg);
         if (!stats.success) break;
     }
 
@@ -1636,5 +1677,218 @@ void run_world_stepper_diag() {
     std::println("Final Position (OD) = {}", x_OD.r);
     std::println("Position Error = {}", x_err.r.norm());
     std::println("Velocity Error = {}", x_err.v.norm());
+    std::println("Final Satellite Attitude (EP) = {}", sat->x_att.q);
+    std::println("Final Satellite Attitude Norm (EP) = {}", sat->x_att.q.norm());
+    std::println("Final Satellite Angular Velocity = {}", sat->x_att.w);
+    std::println("Final Station Attitude (EP) = {}", stat->x_att.q);
+    std::println("Final Station Attitude Norm (EP) = {}", stat->x_att.q.norm());
+    std::println("Final Station Angular Velocity = {}", stat->x_att.w);
+    std::println("Final Earth Attitude (EP) = {}", earth->x_att.q);
+    std::println("Final Earth Attitude Norm (EP) = {}", earth->x_att.q.norm());
+    f64 theta = world.t_sim() * earth->spin_rate();
+    std::println(
+        "Earth Attitude Error= {}",
+        (earth->x_att.q - vec4d{0.0, 0.0, std::sin(theta / 2.0), std::cos(theta / 2.0)})
+            .norm()
+    );
+    std::println("Final Earth Angular Velocity = {}", earth->x_att.w);
     std::println("Final Time = {}", world.t_sim());
+}
+
+void run_body_fixed_gravity_timing_diag() {
+    print_diag_title("Body Fixed Gravity Timing");
+
+    // celestial simple spin
+    {
+        World world;
+        EntityId earth_id = wgs84(world);
+        Celestial* earth = world.celestial(earth_id);
+
+        f64 spin_rate = 0.1;
+        f64 t_span = 10.0;
+        f64 dt = 0.01;
+        i32 n_steps = static_cast<i32>(t_span / dt);
+
+        earth->x_att.q = q_default;
+        earth->x_att.w = {0.0, 0.0, spin_rate};
+        earth->attitude_model = CelestialAttitudeModel::simple_spin;
+        earth->propagate_att = true;
+
+        WorldStepperConfig cfg;
+        cfg.step_translation = false;
+        cfg.step_attitude = true;
+        cfg.integrator_tr = IntegratorType::rk1;
+        cfg.integrator_att = IntegratorType::rk4;
+        cfg.substeps = 1;
+        cfg.ticks = 1;
+        cfg.time_scale = 1.0;
+
+        WorldStepperStats stats;
+        stats.success = true;
+        for (i32 i = 0; i < n_steps; ++i) {
+            stats += step_world(world, dt, cfg);
+            if (!stats.success) break;
+        }
+
+        f64 theta = spin_rate * world.t_sim();
+        vec4d q_expected{0.0, 0.0, std::sin(theta / 2.0), std::cos(theta / 2.0)};
+
+        std::println("Simple Spin Success = {}", stats.success);
+        std::println("Simple Spin Final Time = {}", world.t_sim());
+        std::println("Simple Spin q = {}", earth->x_att.q);
+        std::println("Simple Spin Expected q = {}", q_expected);
+        std::println("Simple Spin q Error = {}", (earth->x_att.q - q_expected).norm());
+        std::println("Simple Spin q Norm = {}", earth->x_att.q.norm());
+        std::println();
+    }
+
+    // body-fixed source orientation diff
+    {
+        World world;
+        EntityId earth_id = wgs84(world);
+        EntityId sat_id = world.spawn_satellite();
+
+        Celestial* earth = world.celestial(earth_id);
+        Satellite* sat = world.satellite(sat_id);
+
+        // set earth/satellite state
+        earth->propagate_tr = false;
+        earth->propagate_att = true;
+        earth->x_tr.r = vec3d0;
+        earth->x_att.q = q_default;
+        earth->x_att.w = {0.0, 0.0, 0.1};
+        sat->x_tr.r = {7000.0, 500.0, 1000.0};
+
+        // different orientation
+        f64 theta = 1.0;
+        vec4d q_spin{0.0, 0.0, std::sin(theta / 2.0), std::cos(theta / 2.0)};
+
+        // integration options
+        WorldStepperConfig cfg;
+        cfg.step_translation = true;
+        cfg.step_attitude = true;
+        cfg.substeps = 1;
+        cfg.ticks = 10;
+        cfg.time_scale = 1.0 / cfg.ticks;
+        cfg.integrator_tr = IntegratorType::rk1;
+        cfg.integrator_att = IntegratorType::rk4;
+
+        f64 t_span = 100.0;
+        f64 t0 = 0.0;
+        i32 n_steps = 1000;
+        f64 dt = t_span / n_steps;
+        world.reset_time(t0);
+
+        WorldStateSnapshot world_snapshot = world.capture_checkpoint();
+
+        WorldStepperStats stats;
+        auto prop = [&]() {
+            stats.success = true;
+            for (i32 i = 0; i < n_steps; ++i) {
+                stats += step_world(world, dt, cfg);
+                if (!stats.success) break;
+            }
+        };
+
+        // point-mass
+        earth->gravity_model = GravityModel::pointmass;
+        earth->x_att.q = q_default;
+        vec3d a_pm_0 = world.gravity_accel_on(sat_id);
+        earth->x_att.q = q_spin;
+        vec3d a_pm_1_spin = world.gravity_accel_on(sat_id);
+        vec3d r_pm_1_spin = sat->x_tr.r;
+        world.restore_checkpoint_state(world_snapshot);
+        earth->attitude_model = CelestialAttitudeModel::simple_spin;
+        prop();
+        vec3d r_pm_1_prop = sat->x_tr.r;
+        vec3d v_pm_1_prop = sat->x_tr.v;
+        world.restore_checkpoint_state(world_snapshot);
+        earth->attitude_model = CelestialAttitudeModel::fixed;
+        prop();
+        vec3d r_pm_1_prop_fixed = sat->x_tr.r;
+        vec3d v_pm_1_prop_fixed = sat->x_tr.v;
+
+        // zonal (j2)
+        world.restore_checkpoint_state(world_snapshot);
+        earth->gravity_model = GravityModel::zonal;
+        earth->degree = 2;
+        earth->x_att.q = q_default;
+        vec3d a_zonal_0 = world.gravity_accel_on(sat_id);
+        earth->x_att.q = q_spin;
+        vec3d a_zonal_1_spin = world.gravity_accel_on(sat_id);
+        world.restore_checkpoint_state(world_snapshot);
+        earth->attitude_model = CelestialAttitudeModel::simple_spin;
+        prop();
+        vec3d r_zonal_1_prop = sat->x_tr.r;
+        vec3d v_zonal_1_prop = sat->x_tr.v;
+        world.restore_checkpoint_state(world_snapshot);
+        earth->attitude_model = CelestialAttitudeModel::fixed;
+        prop();
+        vec3d r_zonal_1_prop_fixed = sat->x_tr.r;
+        vec3d v_zonal_1_prop_fixed = sat->x_tr.v;
+
+        // spherical harmonics (2x2)
+        world.restore_checkpoint_state(world_snapshot);
+        earth->gravity_model = GravityModel::spherical_harmonics;
+        earth->degree = 2;
+        earth->order = 2;
+        earth->C = matXd::Zero(earth->degree + 1, earth->order + 1);
+        earth->S = matXd::Zero(earth->degree + 1, earth->order + 1);
+        earth->C(2, 2) = 1.0e-6;
+        earth->S(2, 1) = -5.0e-7;
+        earth->x_att.q = q_default;
+        vec3d a_sphh_0 = world.gravity_accel_on(sat_id);
+        earth->x_att.q = q_spin;
+        vec3d a_sphh_1_spin = world.gravity_accel_on(sat_id);
+        world.restore_checkpoint_state(world_snapshot);
+        earth->attitude_model = CelestialAttitudeModel::simple_spin;
+        prop();
+        vec3d r_sphh_1_prop = sat->x_tr.r;
+        vec3d v_sphh_1_prop = sat->x_tr.v;
+        world.restore_checkpoint_state(world_snapshot);
+        earth->attitude_model = CelestialAttitudeModel::fixed;
+        prop();
+        vec3d r_sphh_1_prop_fixed = sat->x_tr.r;
+        vec3d v_sphh_1_prop_fixed = sat->x_tr.v;
+
+        // difference in acceleration due to spin
+        std::println("Pointmass Spin Diff = {}", (a_pm_1_spin - a_pm_0).norm());
+        std::println("Zonal Spin Diff = {}", (a_zonal_1_spin - a_zonal_0).norm());
+        std::println(
+            "Spherical Harmonics Spin Diff = {}",
+            (a_sphh_1_spin - a_sphh_0).norm()
+        );
+        std::println("Pointmass Accel = {}", a_pm_0);
+        std::println("Zonal Accel = {}", a_zonal_0);
+        std::println("Spherical Harmonics Accel = {}", a_sphh_0);
+        std::println("Spherical Harmonics Rotated Accel = {}", a_sphh_1_spin);
+
+        std::println();
+
+        // difference in state simple spin vs fixed
+        std::println(
+            "Pointmass Position Error = {}",
+            (r_pm_1_prop_fixed - r_pm_1_prop).norm()
+        );
+        std::println(
+            "Pointmass Velocity Error = {}",
+            (v_pm_1_prop_fixed - v_pm_1_prop).norm()
+        );
+        std::println(
+            "Zonal Position Error = {}",
+            (r_zonal_1_prop_fixed - r_zonal_1_prop).norm()
+        );
+        std::println(
+            "Zonal Velocity Error = {}",
+            (v_zonal_1_prop_fixed - v_zonal_1_prop).norm()
+        );
+        std::println(
+            "Spherical Harmonics Position Error = {}",
+            (r_sphh_1_prop_fixed - r_sphh_1_prop).norm()
+        );
+        std::println(
+            "Spherical Harmonics Velocity Error = {}",
+            (v_sphh_1_prop_fixed - v_sphh_1_prop).norm()
+        );
+    }
 }

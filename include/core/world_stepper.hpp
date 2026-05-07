@@ -6,7 +6,8 @@
 #include "core/world.hpp"
 
 struct WorldStepperConfig {
-    IntegratorType integrator = IntegratorType::rk1;
+    IntegratorType integrator_tr = IntegratorType::rk1;
+    IntegratorType integrator_att = IntegratorType::rk4;
     i32 substeps = 1;     // subdivisions per tick
     i32 ticks = 1;        // repeated integration ticks per call
     f64 time_scale = 1.0; // simulated-time multiplier applied to input dt
@@ -15,11 +16,29 @@ struct WorldStepperConfig {
 };
 
 struct WorldStepperStats {
-    bool success = false;
-    i32 ticks_completed;
-    i32 substeps_completed;
-    f64 dt_sim_advanced;
+    bool success = true;
+    i32 ticks_completed = 0;
+    i32 substeps_completed = 0;
+    f64 dt_sim_advanced = 0.0;
 };
+inline WorldStepperStats operator+(
+    const WorldStepperStats& stats1,
+    const WorldStepperStats& stats2
+) {
+    return WorldStepperStats{
+        .success = stats1.success && stats2.success,
+        .ticks_completed = stats1.ticks_completed + stats2.ticks_completed,
+        .substeps_completed = stats1.substeps_completed + stats2.substeps_completed,
+        .dt_sim_advanced = stats1.dt_sim_advanced + stats2.dt_sim_advanced
+    };
+}
+inline WorldStepperStats& operator+=(
+    WorldStepperStats& stats1,
+    const WorldStepperStats& stats2
+) {
+    stats1 = stats1 + stats2;
+    return stats1;
+}
 
 DerivTr derivtr_world(const World& world, EntityId id, const StateTr& x);
 
