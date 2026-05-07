@@ -15,8 +15,9 @@
 #include <chrono>
 #include <print>
 
+const std::string pwd = std::string(PROJECT_ROOT);
+
 int main() {
-    std::string pwd = std::string(PROJECT_ROOT);
     World world;
 
     // Earth (at origin, tilted, spinning, zonal)
@@ -91,12 +92,13 @@ int main() {
     // run_world_measurement_diag();
     // run_batch_od_diag();
     // run_ekf_world_diag();
+    // run_world_stepper_diag();
+    // run_body_fixed_gravity_timing_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_world_stepper_diag();
-    run_body_fixed_gravity_timing_diag();
+    run_moving_source_world_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

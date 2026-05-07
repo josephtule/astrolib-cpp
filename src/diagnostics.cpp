@@ -1687,8 +1687,16 @@ void run_world_stepper_diag() {
         std::println("{} Success = {}", integrator_name(integrator_tr), stats.success);
         std::println("{} Position Error = {}", integrator_name(integrator_tr), pos_err);
         std::println("{} Velocity Error = {}", integrator_name(integrator_tr), vel_err);
-        std::println("{} Relative Position Error = {}", integrator_name(integrator_tr), pos_rel_err);
-        std::println("{} Relative Velocity Error = {}", integrator_name(integrator_tr), vel_rel_err);
+        std::println(
+            "{} Relative Position Error = {}",
+            integrator_name(integrator_tr),
+            pos_rel_err
+        );
+        std::println(
+            "{} Relative Velocity Error = {}",
+            integrator_name(integrator_tr),
+            vel_rel_err
+        );
         std::println("{} Final Time = {}", integrator_name(integrator_tr), world.t_sim());
         std::println();
     };
@@ -1871,8 +1879,14 @@ void run_body_fixed_gravity_timing_diag() {
         std::println("Zonal Accel = {}", a_zonal_0);
         std::println("Spherical Harmonics Accel = {}", a_sphh_0);
         std::println("Spherical Harmonics Rotated Accel = {}", a_sphh_1_spin);
-        std::println("Pointmass Same-State Staging Diff = {}", (a_pm_stage - a_pm_0).norm());
-        std::println("Zonal Same-State Staging Diff = {}", (a_zonal_stage - a_zonal_0).norm());
+        std::println(
+            "Pointmass Same-State Staging Diff = {}",
+            (a_pm_stage - a_pm_0).norm()
+        );
+        std::println(
+            "Zonal Same-State Staging Diff = {}",
+            (a_zonal_stage - a_zonal_0).norm()
+        );
         std::println(
             "Spherical Harmonics Same-State Staging Diff = {}",
             (a_sphh_stage - a_sphh_0).norm()
@@ -1906,4 +1920,156 @@ void run_body_fixed_gravity_timing_diag() {
             (v_sphh_1_prop_fixed - v_sphh_1_prop).norm()
         );
     }
+}
+
+void run_moving_source_world_diag() {
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->gravity_model = GravityModel::zonal;
+    earth->name = "Earth";
+    earth->attitude_model = CelestialAttitudeModel::fixed;
+    earth->propagate_att = false;
+    earth->degree = 4;
+
+    // Urath
+    EntityId urath_id = wgs84(world);
+    Celestial* urath = world.celestial(urath_id);
+    urath->gravity_model = GravityModel::pointmass;
+    urath->name = "Urath";
+    urath->attitude_model = CelestialAttitudeModel::fixed;
+    urath->propagate_att = false;
+    urath->degree = 4;
+    // urath->mu /= 10.0;
+
+    // satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    sat->propagate_att = false;
+
+    // binary body orbit initial conditions
+    f64 separation = 100'000.0;
+    f64 r_mag = separation / 2.0;
+    f64 v_mag = std::sqrt(earth->mu / (2.0 * separation));
+    f64 period = (2.0 * pi * r_mag) / v_mag;
+    earth->x_tr.r = vec3d{r_mag, 0.0, 0.0};
+    earth->x_tr.v = vec3d{0.0, -v_mag, 0.0};
+    urath->x_tr.r = vec3d{-r_mag, 0.0, 0.0};
+    urath->x_tr.v = vec3d{0.0, v_mag, 0.0};
+    // sat orbit around urath
+    f64 r_mag_sat = urath->semimajor_axis + 1000.0;
+    f64 v_mag_sat = std::sqrt(urath->mu / r_mag_sat);
+    sat->x_tr.r = urath->x_tr.r + vec3d{r_mag_sat, 0.0, 0.0};
+    sat->x_tr.v = urath->x_tr.v + vec3d{0.0, v_mag_sat, 0.0};
+
+    // integration options
+    WorldStepperConfig cfg;
+    cfg.step_translation = true;
+    cfg.step_attitude = true;
+    cfg.substeps = 10;
+    cfg.ticks = 1;
+    cfg.time_scale = 1.0;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+
+    f64 t_span = period;
+    f64 t0 = 0.0;
+    i32 n_steps = 100000;
+    f64 dt = t_span / n_steps;
+    world.reset_time(t0);
+
+    WorldStateSnapshot world_snapshot = world.capture_checkpoint();
+
+    bool output_csv = false;
+    std::ofstream file(std::string(PROJECT_ROOT) + "/assets/world_traj.csv");
+
+    if (output_csv) {
+        file << "i,"
+             << "earth_x,earth_y,earth_z,"
+             << "urath_x,urath_y,urath_z,"
+             << "sat_x,sat_y,sat_z\n";
+    }
+
+    StateTr x_earth0 = earth->x_tr;
+    StateTr x_urath0 = urath->x_tr;
+    StateTr x_sat0 = sat->x_tr;
+
+    i32 print_i = 25000;
+    i32 csv_i = 10;
+    WorldStepperStats stats;
+    auto prop = [&](bool write_csv, bool print_progress) {
+        stats.success = true;
+        for (i32 i = 0; i < n_steps; ++i) {
+            if (write_csv && output_csv && i % csv_i == 0) {
+                file << i << "," << earth->x_tr.r(0) << "," << earth->x_tr.r(1) << ","
+                     << earth->x_tr.r(2) << "," << urath->x_tr.r(0) << ","
+                     << urath->x_tr.r(1) << "," << urath->x_tr.r(2) << ","
+                     << sat->x_tr.r(0) << "," << sat->x_tr.r(1) << "," << sat->x_tr.r(2)
+                     << "\n";
+            }
+            if (print_progress && i % print_i == 0) {
+                std::println("i: {}", i);
+                std::println("Earth Position = {}", earth->x_tr.r);
+                std::println("Urath Position = {}", urath->x_tr.r);
+                std::println("Satellite Position = {}", sat->x_tr.r);
+            }
+            stats += step_world(world, dt, cfg);
+            if (!stats.success) break;
+        }
+    };
+
+    // moving earth and urath
+    earth->propagate_tr = true;
+    urath->propagate_tr = true;
+    sat->propagate_tr = true;
+    prop(false, false);
+    StateTr x_earth_moving = earth->x_tr;
+    StateTr x_urath_moving = urath->x_tr;
+    StateTr x_sat_moving = sat->x_tr;
+    f64 t_moving = world.t_sim();
+    WorldStepperStats stats_moving = stats;
+
+    // fixed earth and urath
+    world.restore_checkpoint_state(world_snapshot);
+    earth->propagate_tr = false;
+    urath->propagate_tr = false;
+    sat->propagate_tr = true;
+    prop(false, false);
+    StateTr x_earth_fixed = earth->x_tr;
+    StateTr x_urath_fixed = urath->x_tr;
+    StateTr x_sat_fixed = sat->x_tr;
+    f64 t_fixed = world.t_sim();
+    WorldStepperStats stats_fixed = stats;
+
+    std::println("Moving Source Success = {}", stats_moving.success);
+    std::println("Fixed Source Success = {}", stats_fixed.success);
+    std::println("Moving Source Final Time = {}", t_moving);
+    std::println("Fixed Source Final Time = {}", t_fixed);
+    std::println("Earth Displacement = {}", (x_earth_moving.r - x_earth0.r).norm());
+    std::println("Urath Displacement = {}", (x_urath_moving.r - x_urath0.r).norm());
+    std::println("Satellite Displacement = {}", (x_sat_moving.r - x_sat0.r).norm());
+    std::println(
+        "Fixed Source Earth Displacement = {}",
+        (x_earth_fixed.r - x_earth0.r).norm()
+    );
+    std::println(
+        "Fixed Source Urath Displacement = {}",
+        (x_urath_fixed.r - x_urath0.r).norm()
+    );
+    std::println(
+        "Moving Source Satellite Position Diff = {}",
+        (x_sat_moving.r - x_sat_fixed.r).norm()
+    );
+    std::println(
+        "Moving Source Satellite Velocity Diff = {}",
+        (x_sat_moving.v - x_sat_fixed.v).norm()
+    );
+    std::println("Moving Source Final Earth Position = {}", x_earth_moving.r);
+    std::println("Moving Source Final Urath Position = {}", x_urath_moving.r);
+    std::println("Moving Source Final Satellite Position = {}", x_sat_moving.r);
+    std::println("Fixed Source Final Earth Position = {}", x_earth_fixed.r);
+    std::println("Fixed Source Final Urath Position = {}", x_urath_fixed.r);
+    std::println("Fixed Source Final Satellite Position = {}", x_sat_fixed.r);
 }

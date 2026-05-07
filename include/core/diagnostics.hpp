@@ -67,3 +67,4 @@ void run_world_measurement_diag();
 void run_ekf_world_diag();
 void run_world_stepper_diag();
 void run_body_fixed_gravity_timing_diag();
+void run_moving_source_world_diag();

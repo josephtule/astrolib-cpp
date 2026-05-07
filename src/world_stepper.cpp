@@ -204,10 +204,11 @@ bool step_cel_att_world(World& world, EntityId id, f64 dt) {
 struct WorldTrStage {
     svec<EntityId> ids;
     umap<EntityId, StateTr> x_tr;
+    umap<EntityId, StateAtt> x_att;
     // TODO: add attitude later?
 };
 struct TrDerivWeight {
-    // K_i in RK integrators
+    // K_i in RK integrators (translational)
     const umap<EntityId, DerivTr>* k = nullptr;
     f64 scale = 0.0;
 };
