@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 
 // TODO: use TLEData struct
 
@@ -58,16 +59,15 @@ bool read_line_two(std::string line, TLEData& tle) {
     return true;
 }
 
-bool read_TLE_single(
+bool read_TLE_raw_single(
     const std::string& filename,
     TLEData& tle,
     f64 mu,
-    i32 millenium,
+    i32 millennium,
     i32 lineskips,
-    i32 skip_sats,
-    UAngle angle_out
+    i32 skip_sats
 ) {
-    if (millenium != 1900 && millenium != 2000) return false;
+    if (millennium != 1900 && millennium != 2000) return false;
 
     // reads tle file with only one satellite entry
     std::ifstream file(filename);
@@ -102,7 +102,6 @@ bool read_TLE_single(
                     tle.name = line;
             }
         } break;
-
         case 1: {
             have_line1 = true;
 
@@ -110,7 +109,6 @@ bool read_TLE_single(
                 if (!read_line_one(line, tle)) return false;
             }
         } break;
-
         case 2: {
             if (!have_line1) return false;
 
@@ -125,7 +123,6 @@ bool read_TLE_single(
             ++sats_seen;
             have_line1 = false;
         } break;
-
         default: break;
         }
 
@@ -133,6 +130,59 @@ bool read_TLE_single(
     }
     if (!found_sat) return false;
 
+    CalendarTime cal = doy_to_cal(tle.epoch_day_frac, millennium + tle.epoch_year);
+    tle.jd_utc = cal_to_jd(cal);
+
+    return true;
+}
+
+bool read_TLE_converted_single(
+    const std::string& filename,
+    TLEData& tle,
+    f64 mu,
+    i32 millennium,
+    i32 lineskips,
+    i32 skip_sats,
+    UAngle angle_out
+) {
+    bool tle_ok
+        = read_TLE_raw_single(filename, tle, mu, millennium, lineskips, skip_sats);
+    if (!tle_ok) return false;
+
+    bool tle_convert_ok = convert_TLE(tle, mu, angle_out);
+    if (!tle_convert_ok) return false;
+
+    return true;
+}
+bool read_TLE_converted_single(
+    const std::string& filename,
+    Satellite& sat,
+    JulianDate& jd_utc,
+    f64 mu,
+    i32 millennium,
+    i32 lineskips,
+    i32 skip_sats,
+    UAngle angle_out
+) {
+    TLEData tle;
+    bool read_ok = read_TLE_converted_single(
+        filename,
+        tle,
+        mu,
+        millennium,
+        lineskips,
+        skip_sats,
+        angle_out
+    );
+    if (!read_ok) return false;
+
+    sat = sat_from_tle_data(tle, mu);
+    jd_utc = tle.jd_utc;
+
+    return true;
+}
+
+bool convert_TLE(TLEData& tle, f64 mu, UAngle angle_out) {
     // convert from rev/day^i to deg/s^i, assume 86400s day
     tle.mean_motion *= 360.0 / 86400.0;
     tle.d_mean_motion *= 360.0 / std::pow(86400.0, 2);
@@ -157,7 +207,7 @@ bool read_TLE_single(
         UAngle::degree,
         UAngle::radian
     ); // mean motion in rad/s
-    double sma = std::cbrt(mu / (n * n));
+    tle.sma = std::cbrt(mu / (n * n));
 
     // TLE data is in degrees
     UAngle angle_in = UAngle::degree;
@@ -172,78 +222,134 @@ bool read_TLE_single(
     }
     tle.units_angle = angle_out;
 
-    CalendarTime cal = doy_to_cal(tle.epoch_day_frac, millenium + tle.epoch_year);
-    tle.jd_utc = cal_to_jd(cal);
-
-    return true;
-}
-bool read_TLE_single(
-    const std::string& filename,
-    Satellite& sat,
-    JulianDate& jd_utc,
-    f64 mu,
-    i32 millenium,
-    i32 lineskips,
-    i32 skip_sats,
-    UAngle angle_out
-) {
-    TLEData tle;
-    bool read_ok
-        = read_TLE_single(filename, tle, mu, millenium, lineskips, skip_sats, angle_out);
-    if (!read_ok) return false;
-
-    sat = sat_from_tle_data(tle, mu);
-    jd_utc = tle.jd_utc;
+    tle.converted = true;
 
     return true;
 }
 
 bool read_TLE_multiple(
     const std::string& filename,
-    svec<Satellite>& sats,
+    svec<std::unique_ptr<Satellite>>& sats,
     svec<JulianDate>& jds,
     f64 mu,
-    i32 millenium,
-    i32 skip_sats,
     i32 num_sats,
+    i32 millennium,
+    i32 skip_sats,
     i32 lineskips,
     UAngle angle_out
 ) {
-    if (millenium != 1900 || millenium != 2000) return false;
+    svec<i32> idx;
+    for (i32 i = 0; i < num_sats; ++i) idx.push_back(i);
+    return read_TLE_index(
+        filename,
+        sats,
+        jds,
+        idx,
+        mu,
+        millennium,
+        lineskips,
+        0,
+        angle_out
+    );
+}
 
-    // reads tle file with only one satellite entry
+bool read_TLE_index(
+    const std::string& filename,
+    svec<std::unique_ptr<Satellite>>& sats,
+    svec<JulianDate>& jds,
+    const svec<i32>& idx,
+    f64 mu,
+    i32 millennium,
+    i32 lineskips,
+    i32 idx_start,
+    UAngle angle_out
+) {
+    if (millennium != 1900 && millennium != 2000) return false;
+    if (idx_start != 0 && idx_start != 1) return false;
+
+    svec<i32> idx_sorted = idx;
+    std::sort(idx_sorted.begin(), idx_sorted.end());
+
     std::ifstream file(filename);
     if (!file) return false;
 
     std::string line;
     for (i32 i = 0; i < lineskips && std::getline(file, line); ++i) {}
-}
 
-bool read_TLE_index(
-    const std::string& filename,
-    svec<Satellite>& sats,
-    svec<JulianDate>& jds,
-    const svec<i32>& idx,
-    f64 mu,
-    i32 millenium,
-    i32 lineskips,
-    UAngle angle_out
-) {
-    svec<i32> idx_sorted = idx;
-    std::sort(idx_sorted.begin(), idx_sorted.end());
+    bool found_sat = false;
+
+    i32 sats_seen = 0;
+    bool have_line1 = false;
+
+    TLEData tle;
+    i32 i = 0;
+    i32 current_idx = idx_sorted[i] - idx_start;
+    while (std::getline(file, line)) {
+
+        if (line.empty()) continue;
+
+        i32 linenum;
+
+        // line 0 may not have 0
+        if (std::isdigit(static_cast<unsigned char>(line[0]))) {
+            linenum = std::stoi(line.substr(0, 1));
+        } else {
+            linenum = 0;
+        }
+
+        // TODO: maybe switch to using another getline
+        switch (linenum) {
+        case 0: {
+            if (sats_seen == current_idx) {
+                if (line.size() > 2 && line[0] == '0')
+                    tle.name = line.substr(2);
+                else
+                    tle.name = line;
+            }
+        } break;
+        case 1: {
+            have_line1 = true;
+
+            if (sats_seen == current_idx) {
+                if (!read_line_one(line, tle)) return false;
+            }
+        } break;
+        case 2: {
+            if (!have_line1) return false;
+
+            if (sats_seen == current_idx) {
+                if (!read_line_two(line, tle)) return false;
+
+                if (!convert_TLE(tle, mu)) return false;
+
+                sats.emplace_back(
+                    std::make_unique<Satellite>(sat_from_tle_data(tle, mu))
+                );
+
+                jds.push_back(tle.jd_utc);
+
+                ++i;
+
+                if (i >= idx_sorted.size()) {
+                    found_sat = true;
+                    break;
+                }
+
+                current_idx = idx_sorted[i] - idx_start;
+            }
+
+            ++sats_seen;
+            have_line1 = false;
+        } break;
+        default: break;
+        }
+    }
 
     return true;
 }
 
 void sat_from_tle_data(Satellite& sat, const TLEData& tle, f64 mu) {
-    OEClassical coe{
-        .sma = tle.sma,
-        .ecc = tle.ecc,
-        .inc = tle.inc,
-        .raan = tle.raan,
-        .aop = tle.aop,
-        .ta = tle.ta
-    };
+    OEClassical coe = coe_from_tle(tle);
 
     sat.name = tle.name;
     sat.x_tr = classical_to_rv(coe, mu, tle.units_angle);

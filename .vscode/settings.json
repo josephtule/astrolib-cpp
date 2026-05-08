@@ -22,5 +22,8 @@
         "\\cmat": "\\begin{Bmatrix}#1\\end{Bmatrix}",
         "\\vmat": "\\begin{vmatrix}#1\\end{vmatrix}",
         "\\vvmat": "\\begin{Vmatrix}#1\\end{Vmatrix}"
-    }
+    },
+    "cSpell.words": [
+        "raan"
+    ]
 }

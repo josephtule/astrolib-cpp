@@ -19,8 +19,10 @@
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
+#include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+#include <memory>
 #include <random>
 
 void print_diag_title(const std::string& title) {
@@ -2077,8 +2079,52 @@ void run_moving_source_world_diag() {
 }
 
 void run_tle_diag(std::string filename) {
-    Satellite sat;
+    TLEData tle;
     Celestial earth = wgs84();
-    JulianDate jd_utc;
-    bool ok = read_TLE_single(filename, sat, jd_utc, earth.mu, 1900);
+
+    bool tle_ok = read_TLE_converted_single(filename, tle, earth.mu, 1900);
+    Satellite sat = sat_from_tle_data(tle, earth.mu);
+
+    svec<std::unique_ptr<Satellite>> sats_idx;
+    svec<JulianDate> jds_idx;
+    svec<i32> idx = {0, 2};
+    bool tle_idx_ok = read_TLE_index(filename, sats_idx, jds_idx, idx, earth.mu, 1900);
+
+    print_diag_title("TLE Reader");
+    std::println("TLE Single Success: {} ---", tle_ok);
+    if (tle_ok) {
+        std::println("Satellite: {}", sat.name);
+        print_coe(coe_from_tle(tle));
+    }
+
+    std::println();
+
+    std::println("TLE Index Success: {} ---", tle_idx_ok);
+    if (tle_idx_ok) {
+        for (i32 i = 0; i < idx.size(); ++i) {
+            Satellite& sat_i = *sats_idx[i];
+            OEClassical coe = rv_to_classical(sat_i.x_tr, earth.mu);
+            std::println("Satellite: {}", sat_i.name);
+            print_coe(coe);
+            if (i != idx.size() - 1) std::println();
+        }
+    }
+
+    std::println();
+
+    svec<std::unique_ptr<Satellite>> sats_mult;
+    svec<JulianDate> jds_mult;
+    i32 num_sats = 3;
+    bool tle_mult_ok
+        = read_TLE_multiple(filename, sats_mult, jds_mult, earth.mu, num_sats, 1900);
+    std::println("TLE Multiple Success: {} ---", tle_mult_ok);
+    if (tle_mult_ok) {
+        for (i32 i = 0; i < num_sats; ++i) {
+            Satellite& sat_i = *sats_mult[i];
+            OEClassical coe = rv_to_classical(sat_i.x_tr, earth.mu);
+            std::println("Satellite: {}", sat_i.name);
+            print_coe(coe);
+            if (i != num_sats - 1) std::println();
+        }
+    }
 }

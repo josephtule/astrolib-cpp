@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/body.hpp"
+#include "core/orbital_elements.hpp"
 #include "core/time.hpp"
 #include "util/units.hpp"
 
@@ -37,25 +38,35 @@ struct TLEData {
     f64 mean_motion = 0.0;
     i32 rev = 0;
 
+    bool converted = false;
     UAngle units_angle = UAngle::radian;
 };
 
-bool read_TLE_single(
+bool read_TLE_raw_single(
     const std::string& filename,
     TLEData& tle,
     f64 mu,
-    i32 millenium,
+    i32 millennium,
     i32 lineskips,
-    i32 skip_sats,
+    i32 skip_sats
+);
+bool convert_TLE(TLEData& tle, f64 mu, UAngle angle_out = UAngle::radian);
+
+bool read_TLE_converted_single(
+    const std::string& filename,
+    TLEData& tle,
+    f64 mu,
+    i32 millennium = 2000,
+    i32 lineskips = 0,
+    i32 skip_sats = 0,
     UAngle angle_out = UAngle::radian
 );
-
-bool read_TLE_single(
+bool read_TLE_converted_single(
     const std::string& filename,
     Satellite& sat,
     JulianDate& jd,
     f64 mu,
-    i32 millenium = 2000,
+    i32 millennium = 2000,
     i32 lineskips = 0,
     i32 skip_sats = 0,
     UAngle angle_out = UAngle::radian
@@ -63,26 +74,38 @@ bool read_TLE_single(
 
 bool read_TLE_multiple(
     const std::string& filename,
-    svec<Satellite>& sats,
+    svec<std::unique_ptr<Satellite>>& sats,
     svec<JulianDate>& jds,
     f64 mu,
-    i32 millenium = 2000,
-    i32 skip_sats = 0,
     i32 num_sats = 1,
+    i32 millennium = 2000,
+    i32 skip_sats = 0,
     i32 lineskips = 0,
     UAngle angle_out = UAngle::radian
 );
 
 bool read_TLE_index(
     const std::string& filename,
-    svec<Satellite>& sats,
+    svec<std::unique_ptr<Satellite>>& sats,
     svec<JulianDate>& jds,
-    const svec<i32>& idx, // may need to sort
+    const svec<i32>& idx,
     f64 mu,
-    i32 millenium = 2000,
+    i32 millennium = 2000,
     i32 lineskips = 0,
+    i32 idx_start = 0,
     UAngle angle_out = UAngle::radian
 );
 
-void sat_from_tle_data(Satellite &sat, const TLEData &tle, f64 mu);
+void sat_from_tle_data(Satellite& sat, const TLEData& tle, f64 mu);
 Satellite sat_from_tle_data(const TLEData& tle, f64 mu);
+
+inline OEClassical coe_from_tle(const TLEData& tle) {
+    return OEClassical{
+        .sma = tle.sma,
+        .ecc = tle.ecc,
+        .inc = tle.inc,
+        .raan = tle.raan,
+        .aop = tle.aop,
+        .ta = tle.ta
+    };
+}

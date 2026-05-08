@@ -7,10 +7,9 @@
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
-#include <algorithm>
-#include <cmath>
-#include <complex>
 
+#include <cmath>
+#include <print>
 
 struct OEClassical {
     // angles stored as radians internally
@@ -199,4 +198,13 @@ inline StateTr classical_to_rv(
         uangle_in,
         tol
     );
+}
+
+inline void print_coe(const OEClassical& coe) {
+    std::println("Semimajor Axis: {}", coe.sma);
+    std::println("Eccentricity: {}", coe.ecc);
+    std::println("Inclination: {}", coe.inc);
+    std::println("RA of Asc Node: {}", coe.raan);
+    std::println("Arg of Perigee: {}", coe.aop);
+    std::println("True Anomaly: {}", coe.ta);
 }
