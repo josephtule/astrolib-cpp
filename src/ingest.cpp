@@ -28,11 +28,11 @@ bool read_line_one(const std::string& line, TLEData& tle) {
     std::string ephemeris_type = line.substr(62, 1);
     std::string element_set_num = line.substr(64, 4);
 
-    if (!isNumeric(sat_num) || !isNumeric(launch_year) || !isNumeric(launch_num)
-        || !isNumeric(epoch_year) || !isNumeric(epoch_day_frac)
-        || !isNumeric(d_mean_motion) || !isNumeric(dd_frac) || !isNumeric(dd_exponent)
-        || !isNumeric(bstar_frac) || !isNumeric(bstar_exponent)
-        || !isNumeric(ephemeris_type) || !isNumeric(element_set_num)) {
+    if (!is_numeric(sat_num) || !is_numeric(launch_year) || !is_numeric(launch_num)
+        || !is_numeric(epoch_year) || !is_numeric(epoch_day_frac)
+        || !is_numeric(d_mean_motion) || !is_numeric(dd_frac) || !is_numeric(dd_exponent)
+        || !is_numeric(bstar_frac) || !is_numeric(bstar_exponent)
+        || !is_numeric(ephemeris_type) || !is_numeric(element_set_num)) {
         return false;
     }
 
@@ -40,15 +40,11 @@ bool read_line_one(const std::string& line, TLEData& tle) {
     tle.launch_year = std::stoi(launch_year);
     tle.launch_num = std::stoi(launch_num);
     tle.launch_piece = line.substr(14, 3);
-
     tle.epoch_year = std::stoi(epoch_year);
     tle.epoch_day_frac = std::stod(epoch_day_frac);
     tle.d_mean_motion = std::stod(d_mean_motion);
-
     tle.dd_mean_motion = std::stod("0." + dd_frac) * std::pow(10, std::stod(dd_exponent));
-
     tle.b_star = std::stod("0." + bstar_frac) * std::pow(10, std::stod(bstar_exponent));
-
     tle.ephemeris_type = std::stoi(ephemeris_type);
     tle.element_set_number = std::stoi(element_set_num);
 
@@ -65,9 +61,9 @@ bool read_line_two(const std::string& line, TLEData& tle) {
     std::string mean_motion = line.substr(52, 11);
     std::string rev = line.substr(63, 5);
 
-    if (!isNumeric(sat_num) || !isNumeric(inc) || !isNumeric(raan) || !isNumeric(ecc)
-        || !isNumeric(aop) || !isNumeric(mean_anom) || !isNumeric(mean_motion)
-        || !isNumeric(rev)) {
+    if (!is_numeric(sat_num) || !is_numeric(inc) || !is_numeric(raan) || !is_numeric(ecc)
+        || !is_numeric(aop) || !is_numeric(mean_anom) || !is_numeric(mean_motion)
+        || !is_numeric(rev)) {
         return false;
     }
 

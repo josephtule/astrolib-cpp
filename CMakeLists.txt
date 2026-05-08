@@ -24,22 +24,10 @@ target_include_directories(${TARGET_NAME} PRIVATE
 ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# # Add Raylib
-# include(FetchContent)
-
-# if(EXISTS "${CMAKE_SOURCE_DIR}/external/raylib")
-#   set(FETCHCONTENT_SOURCE_DIR_RAYLIB "${CMAKE_SOURCE_DIR}/external/raylib" CACHE PATH "" FORCE)
-# endif()
-
-# FetchContent_Declare(
-#   raylib
-#   GIT_REPOSITORY https://github.com/raysan5/raylib.git
-#   GIT_TAG master  
-# #   GIT_TAG 5.5       # or pin a commit hash
-# )
-# FetchContent_MakeAvailable(raylib)
-
-# target_link_libraries(${TARGET_NAME} PRIVATE raylib)
+# Add Raylib
+target_include_directories(${TARGET_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/eigen
+)
 
 # Add Eigen
 # add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/eigen)
