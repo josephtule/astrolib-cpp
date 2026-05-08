@@ -1,8 +1,9 @@
 #include "core/ingest.hpp"
+#include "core/astrodynamics.hpp"
 #include "core/body.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/time.hpp"
-#include "util/astrodynamics.hpp"
+#include "util/tools.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 
@@ -13,48 +14,74 @@
 
 // TODO: use TLEData struct
 
-bool read_line_one(std::string line, TLEData& tle) {
-    try {
-        tle.sat_num = std::stoi(line.substr(2, 5));
-        tle.launch_year = std::stoi(line.substr(9, 2));
-        tle.launch_num = std::stoi(line.substr(11, 3));
-        tle.launch_piece = line.substr(14, 3);
-        tle.epoch_year = std::stoi(line.substr(18, 2));
-        tle.epoch_day_frac = std::stod(line.substr(20, 12));
-        tle.d_mean_motion = std::stod(line.substr(33, 10));
-        tle.dd_mean_motion = std::stod("0." + line.substr(44, 6))
-                             * std::pow(10, std::stod(line.substr(50, 2)));
-        tle.b_star = std::stod("0." + line.substr(54, 6))
-                     * std::pow(10, std::stod(line.substr(59, 2)));
+bool read_line_one(const std::string& line, TLEData& tle) {
+    std::string sat_num = line.substr(2, 5);
+    std::string launch_year = line.substr(9, 2);
+    std::string launch_num = line.substr(11, 3);
+    std::string epoch_year = line.substr(18, 2);
+    std::string epoch_day_frac = line.substr(20, 12);
+    std::string d_mean_motion = line.substr(33, 10);
+    std::string dd_frac = line.substr(44, 6);
+    std::string dd_exponent = line.substr(50, 2);
+    std::string bstar_frac = line.substr(54, 6);
+    std::string bstar_exponent = line.substr(59, 2);
+    std::string ephemeris_type = line.substr(62, 1);
+    std::string element_set_num = line.substr(64, 4);
 
-        tle.ephemeris_type = std::stoi(line.substr(62, 1));
-        tle.element_set_number = std::stoi(line.substr(64, 4));
-    } catch (const std::invalid_argument&) {
-        return false;
-    } catch (const std::out_of_range&) {
+    if (!isNumeric(sat_num) || !isNumeric(launch_year) || !isNumeric(launch_num)
+        || !isNumeric(epoch_year) || !isNumeric(epoch_day_frac)
+        || !isNumeric(d_mean_motion) || !isNumeric(dd_frac) || !isNumeric(dd_exponent)
+        || !isNumeric(bstar_frac) || !isNumeric(bstar_exponent)
+        || !isNumeric(ephemeris_type) || !isNumeric(element_set_num)) {
         return false;
     }
+
+    tle.sat_num = std::stoi(sat_num);
+    tle.launch_year = std::stoi(launch_year);
+    tle.launch_num = std::stoi(launch_num);
+    tle.launch_piece = line.substr(14, 3);
+
+    tle.epoch_year = std::stoi(epoch_year);
+    tle.epoch_day_frac = std::stod(epoch_day_frac);
+    tle.d_mean_motion = std::stod(d_mean_motion);
+
+    tle.dd_mean_motion = std::stod("0." + dd_frac) * std::pow(10, std::stod(dd_exponent));
+
+    tle.b_star = std::stod("0." + bstar_frac) * std::pow(10, std::stod(bstar_exponent));
+
+    tle.ephemeris_type = std::stoi(ephemeris_type);
+    tle.element_set_number = std::stoi(element_set_num);
 
     return true;
 }
 
-bool read_line_two(std::string line, TLEData& tle) {
-    try {
-        i32 sat_num_2 = std::stoi(line.substr(2, 5));
-        if (tle.sat_num != sat_num_2) return false;
+bool read_line_two(const std::string& line, TLEData& tle) {
+    std::string sat_num = line.substr(2, 5);
+    std::string inc = line.substr(8, 8);
+    std::string raan = line.substr(17, 8);
+    std::string ecc = line.substr(26, 7);
+    std::string aop = line.substr(34, 8);
+    std::string mean_anom = line.substr(43, 8);
+    std::string mean_motion = line.substr(52, 11);
+    std::string rev = line.substr(63, 5);
 
-        tle.inc = std::stod(line.substr(8, 8));
-        tle.raan = std::stod(line.substr(17, 8));
-        tle.ecc = std::stod("0." + line.substr(26, 7));
-        tle.aop = std::stod(line.substr(34, 8));
-        tle.mean_anom = std::stod(line.substr(43, 8));
-        tle.mean_motion = std::stod(line.substr(52, 11));
-        tle.rev = std::stoi(line.substr(63, 5));
-    } catch (const std::invalid_argument&) {
-        return false;
-    } catch (const std::out_of_range&) {
+    if (!isNumeric(sat_num) || !isNumeric(inc) || !isNumeric(raan) || !isNumeric(ecc)
+        || !isNumeric(aop) || !isNumeric(mean_anom) || !isNumeric(mean_motion)
+        || !isNumeric(rev)) {
         return false;
     }
+
+    i32 sat_num_2 = std::stoi(sat_num);
+
+    if (tle.sat_num != sat_num_2) return false;
+
+    tle.inc = std::stod(inc);
+    tle.raan = std::stod(raan);
+    tle.ecc = std::stod("0." + ecc);
+    tle.aop = std::stod(aop);
+    tle.mean_anom = std::stod(mean_anom);
+    tle.mean_motion = std::stod(mean_motion);
+    tle.rev = std::stoi(rev);
 
     return true;
 }
