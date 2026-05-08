@@ -115,7 +115,7 @@ inline VarDerivTr operator-(const VarDerivTr& dy) {
 }
 
 // Jacobians
-inline mat6d jacobian_tr_two_body(const StateTr& x_rel, f64 mu, f64 tol = tol_strict) {
+inline mat6d jacobian_tr_two_body(const StateTr& x_rel, f64 mu, f64 tol = tol12) {
     mat6d J = mat6d0;
     if (mu <= 0.0) return J;
 

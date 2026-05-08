@@ -5,7 +5,7 @@
 #include "core/time.hpp"
 #include "core/world.hpp"
 
-void print_diag_title(const std::string & title);
+void print_diag_title(const std::string& title);
 void run_batch_od_diag();
 void run_gravity_diag(
     World& world,
@@ -68,3 +68,4 @@ void run_ekf_world_diag();
 void run_world_stepper_diag();
 void run_body_fixed_gravity_timing_diag();
 void run_moving_source_world_diag();
+void run_tle_diag(std::string filename);

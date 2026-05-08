@@ -4,6 +4,7 @@
 #include "core/entity.hpp"
 #include "core/estimation_batch.hpp"
 #include "core/estimation_recursive.hpp"
+#include "core/ingest.hpp"
 #include "core/integrator.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
@@ -14,6 +15,7 @@
 #include "core/planets.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
+#include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
@@ -635,7 +637,7 @@ f64 tof_elliptic_ta(
     f64 mu,
     UAngle angle_in = UAngle::radian,
     i32 n_rev = 0,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     // temp, for diags only
     if (mu <= 0.0 || sma <= 0.0 || ecc < 0.0 || ecc >= 1.0 || n_rev < 0) {
@@ -2072,4 +2074,11 @@ void run_moving_source_world_diag() {
     std::println("Fixed Source Final Earth Position = {}", x_earth_fixed.r);
     std::println("Fixed Source Final Urath Position = {}", x_urath_fixed.r);
     std::println("Fixed Source Final Satellite Position = {}", x_sat_fixed.r);
+}
+
+void run_tle_diag(std::string filename) {
+    Satellite sat;
+    Celestial earth = wgs84();
+    JulianDate jd_utc;
+    bool ok = read_TLE_single(filename, sat, jd_utc, earth.mu, 1900);
 }

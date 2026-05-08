@@ -264,7 +264,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
         f64 current_raw_norm = std::sqrt(raw_residual_norm2);
 
         // normal matrices
-        if (!Lambda.allFinite() || Lambda.diagonal().cwiseAbs().minCoeff() <= tol_tight) {
+        if (!Lambda.allFinite() || Lambda.diagonal().cwiseAbs().minCoeff() <= tol9) {
             result.status = ODStatus::singular_normal_matrix;
             return result;
         }

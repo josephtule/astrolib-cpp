@@ -35,8 +35,8 @@ const f64 G_m = 6.6743e-11;
 const f64 G_km = 6.6743e-20;
 
 // tolorances
-const f64 tol_loose = 1e-3;
-const f64 tol_med = 1e-6;
-const f64 tol_tight = 1e-9;
-const f64 tol_strict = 1e-12;
-const f64 tol_max = 1e-16;
+const f64 tol3 = 1e-3;
+const f64 tol6 = 1e-6;
+const f64 tol9 = 1e-9;
+const f64 tol12 = 1e-12;
+const f64 tol16 = 1e-16;

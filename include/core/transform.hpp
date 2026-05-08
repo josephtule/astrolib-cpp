@@ -259,7 +259,7 @@ inline vec3d bcbf_to_detic(
     ecref<vec3d> r_bcbf,
     Celestial& body,
     UAngle u_out = UAngle::degree,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d llh = vec3d0;
 

@@ -71,7 +71,7 @@ inline EntityId wgs84(World& world, ULength u_len = ULength::kilometer) {
 }
 
 inline bool read_egm2008(
-    std::string filename,
+    const std::string& filename,
     matXd& C,
     matXd& S,
     i32 degree,

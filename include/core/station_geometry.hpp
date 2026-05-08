@@ -56,7 +56,7 @@ inline vec3d bcbf_rel_to_enu(
 inline vec3d azel_from_enu(
     const vec3d& r_rel_enu, // must be ENU
     UAngle angle_out = UAngle::degree,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d azel = vec3d0;
 
@@ -102,7 +102,7 @@ inline vec3d azel_from_bcbf(
     f64 station_lon,
     UAngle angle_in = UAngle::degree,
     UAngle angle_out = UAngle::degree,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d r_rel_bcbf = station_rel_bcbf(r_target_bcbf, r_station_bcbf);
     vec3d r_rel_enu = bcbf_rel_to_enu(r_rel_bcbf, station_lat, station_lon, angle_in);
@@ -117,7 +117,7 @@ inline vec3d azel_from_source_frame(
     f64 station_lon,
     UAngle angle_in = UAngle::degree,
     UAngle angle_out = UAngle::degree,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d r_target_bcbf = R_BCBF_source * r_target_source;
     vec3d r_station_bcbf = R_BCBF_source * r_station_source;
@@ -141,7 +141,7 @@ inline vec3d azel_from_source_frame(
     f64 station_lon,
     UAngle angle_in = UAngle::degree,
     UAngle angle_out = UAngle::degree,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d r_target_bcbf = ep_rotate_fast_passive(q_BCBF_source, r_target_source);
     vec3d r_station_bcbf = ep_rotate_fast_passive(q_BCBF_source, r_station_source);
@@ -169,7 +169,7 @@ inline vec3d azel_from_earth_frame(
     TimeScale scale_in = TimeScale::utc,
     UAngle angle_in = UAngle::degree,
     UAngle angle_out = UAngle::degree,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     mat3d R_ITRS_source
         = rot_earth_frame(jd, frame_source, EarthFrame::ITRS, eop, offsets, scale_in);
@@ -192,7 +192,7 @@ inline vec3d azel_rates_from_enu(
     const vec3d& r_rel_enu,
     const vec3d& v_rel_enu,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d azel_dot = vec3d0;
 
@@ -231,7 +231,7 @@ inline vec3d azel_rates_from_bcbf(
     f64 station_lon,
     UAngle angle_in = UAngle::degree,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     // NOTE: both r_rel and v_rel need to be in the same frame, BCI -> BCBF requires
     // BKE/transport theorem addition before rotating into the BCBF frame if BCBF is

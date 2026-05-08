@@ -94,11 +94,12 @@ int main() {
     // run_ekf_world_diag();
     // run_world_stepper_diag();
     // run_body_fixed_gravity_timing_diag();
+    // run_moving_source_world_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_moving_source_world_diag();
+    run_tle_diag(pwd + "/assets/tle_fake.txt");
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

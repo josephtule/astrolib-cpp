@@ -183,7 +183,7 @@ bool step_cel_att_world(World& world, EntityId id, f64 dt) {
     case CelestialAttitudeModel::fixed: return false;
     case CelestialAttitudeModel::simple_spin: {
         f64 w_mag = cel->x_att.w.norm();
-        if (w_mag <= tol_strict) break;
+        if (w_mag <= tol12) break;
 
         vec3d axis = cel->x_att.w / w_mag;
         f64 theta = w_mag * dt;
@@ -201,20 +201,22 @@ bool step_cel_att_world(World& world, EntityId id, f64 dt) {
     return true;
 }
 
+template <typename State>
 struct WorldTrStage {
     svec<EntityId> ids;
-    umap<EntityId, StateTr> x_tr;
-    umap<EntityId, StateAtt> x_att;
+    umap<EntityId, State> x;
     // TODO: add attitude later?
 };
-struct TrDerivWeight {
+template <typename Deriv>
+struct DerivWeight {
     // K_i in RK integrators (translational)
-    const umap<EntityId, DerivTr>* k = nullptr;
+    const umap<EntityId, Deriv>* k = nullptr;
     f64 scale = 0.0;
 };
 
-static WorldTrStage build_tr_stage(const World& world) {
-    WorldTrStage stage;
+template <typename State>
+static WorldTrStage<State> build_tr_stage(const World& world) {
+    WorldTrStage<State> stage;
 
     svec<EntityId> ids = propagated_tr_ids(world);
     for (EntityId id : ids) {
@@ -222,52 +224,55 @@ static WorldTrStage build_tr_stage(const World& world) {
         if (body == nullptr) continue;
 
         stage.ids.push_back(id);
-        stage.x_tr.emplace(id, body->x_tr);
+        stage.x.emplace(id, body->x_tr);
     }
     return stage;
 }
 
 // Gravity sources use their staged translational state when propagated
 // fixed sources fall back to their stored world state.
+template <typename State>
 static StateTr source_tr_from_stage_or_world(
     const World& world,
-    const WorldTrStage& stage,
+    const WorldTrStage<State>& stage,
     EntityId source_id
 ) {
     // NOTE: currently only celestials are valid gravity emitters.
     const Celestial* cel = world.celestial(source_id);
     if (cel == nullptr) return StateTr{};
 
-    auto it = stage.x_tr.find(source_id);
-    if (it == stage.x_tr.end()) return cel->x_tr; // world fallback
+    auto it = stage.x.find(source_id);
+    if (it == stage.x.end()) return cel->x_tr; // world fallback
 
     return it->second;
 }
 
-static WorldTrStage build_tr_trial_stage(
-    const WorldTrStage& base_stage,
-    std::initializer_list<TrDerivWeight> weights
+template <typename State>
+static WorldTrStage<State> build_tr_trial_stage(
+    const WorldTrStage<State>& base_stage,
+    std::initializer_list<DerivWeight<DerivTr>> weights
 ) {
-    WorldTrStage trial;
+    WorldTrStage<State> trial;
     trial.ids = base_stage.ids;
 
     for (EntityId id : base_stage.ids) {
-        StateTr x = base_stage.x_tr.at(id);
+        StateTr x = base_stage.x.at(id);
 
-        for (const TrDerivWeight& weight : weights) {
+        for (const DerivWeight<DerivTr>& weight : weights) {
             if (weight.k == nullptr) continue;
             x += weight.scale * weight.k->at(id);
         }
 
-        trial.x_tr.emplace(id, x);
+        trial.x.emplace(id, x);
     }
 
     return trial;
 }
 
+template <typename State>
 static vec3d staged_gravity_accel_on(
     const World& world,
-    const WorldTrStage& stage,
+    const WorldTrStage<State>& stage,
     EntityId target_id,
     const StateTr& x_target
 ) {
@@ -289,9 +294,10 @@ static vec3d staged_gravity_accel_on(
     return a;
 }
 
+template <typename State>
 static DerivTr derivtr_world_staged(
     const World& world,
-    const WorldTrStage& stage,
+    const WorldTrStage<State>& stage,
     EntityId target_id,
     const StateTr& x_target
 ) {
@@ -301,18 +307,19 @@ static DerivTr derivtr_world_staged(
     return dx;
 }
 
+template <typename State>
 static bool step_tr_world_staged_rk1(World& world, f64 t, f64 dt) {
-    WorldTrStage stage0 = build_tr_stage(world);
+    WorldTrStage stage0 = build_tr_stage<State>(world);
 
     // rk1 stage 1
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0.ids) {
-        const StateTr& x0 = stage0.x_tr.at(id);
+        const StateTr& x0 = stage0.x.at(id);
         k1[id] = derivtr_world_staged(world, stage0, id, x0);
     }
 
     for (EntityId id : stage0.ids) {
-        StateTr x0 = stage0.x_tr.at(id);
+        StateTr x0 = stage0.x.at(id);
         StateTr x_next = x0 + dt * k1.at(id);
 
         Body* body = world.body(id);
@@ -323,14 +330,15 @@ static bool step_tr_world_staged_rk1(World& world, f64 t, f64 dt) {
     return true;
 }
 
+template <typename State>
 static bool step_tr_world_staged_rk2(World& world, f64 t, f64 dt) {
-    WorldTrStage stage0 = build_tr_stage(world);
+    WorldTrStage stage0 = build_tr_stage<State>(world);
     umap<EntityId, StateTr> x_next;
 
     // rk2 stage 1
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0.ids) {
-        const StateTr& x0 = stage0.x_tr.at(id);
+        const StateTr& x0 = stage0.x.at(id);
         k1[id] = derivtr_world_staged(world, stage0, id, x0);
     }
 
@@ -338,12 +346,12 @@ static bool step_tr_world_staged_rk2(World& world, f64 t, f64 dt) {
     WorldTrStage stage1 = build_tr_trial_stage(stage0, {{.k = &k1, .scale = 0.5 * dt}});
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1.ids) {
-        const StateTr& x1 = stage1.x_tr.at(id);
+        const StateTr& x1 = stage1.x.at(id);
         k2[id] = derivtr_world_staged(world, stage1, id, x1);
     }
 
     for (EntityId id : stage0.ids) {
-        StateTr x0 = stage0.x_tr.at(id);
+        StateTr x0 = stage0.x.at(id);
         StateTr x_next = x0 + dt * k2.at(id);
 
         Body* body = world.body(id);
@@ -354,14 +362,15 @@ static bool step_tr_world_staged_rk2(World& world, f64 t, f64 dt) {
     return true;
 }
 
+template <typename State>
 static bool step_tr_world_staged_rk2heun(World& world, f64 t, f64 dt) {
-    WorldTrStage stage0 = build_tr_stage(world);
+    WorldTrStage stage0 = build_tr_stage<State>(world);
     umap<EntityId, StateTr> x_next;
 
     // rk2 stage 1
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0.ids) {
-        const StateTr& x0 = stage0.x_tr.at(id);
+        const StateTr& x0 = stage0.x.at(id);
         k1[id] = derivtr_world_staged(world, stage0, id, x0);
     }
 
@@ -369,12 +378,12 @@ static bool step_tr_world_staged_rk2heun(World& world, f64 t, f64 dt) {
     WorldTrStage stage1 = build_tr_trial_stage(stage0, {{.k = &k1, .scale = dt}});
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1.ids) {
-        const StateTr& x1 = stage1.x_tr.at(id);
+        const StateTr& x1 = stage1.x.at(id);
         k2[id] = derivtr_world_staged(world, stage1, id, x1);
     }
 
     for (EntityId id : stage0.ids) {
-        StateTr x0 = stage0.x_tr.at(id);
+        StateTr x0 = stage0.x.at(id);
         StateTr x_next = x0 + dt * (k1.at(id) + k2.at(id)) / 2.0;
 
         Body* body = world.body(id);
@@ -385,14 +394,15 @@ static bool step_tr_world_staged_rk2heun(World& world, f64 t, f64 dt) {
     return true;
 }
 
+template <typename State>
 static bool step_tr_world_staged_rk2ralston(World& world, f64 t, f64 dt) {
-    WorldTrStage stage0 = build_tr_stage(world);
+    WorldTrStage stage0 = build_tr_stage<State>(world);
     umap<EntityId, StateTr> x_next;
 
     // rk2 stage 1
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0.ids) {
-        const StateTr& x0 = stage0.x_tr.at(id);
+        const StateTr& x0 = stage0.x.at(id);
         k1[id] = derivtr_world_staged(world, stage0, id, x0);
     }
 
@@ -401,12 +411,12 @@ static bool step_tr_world_staged_rk2ralston(World& world, f64 t, f64 dt) {
         = build_tr_trial_stage(stage0, {{.k = &k1, .scale = 3.0 / 4.0 * dt}});
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1.ids) {
-        const StateTr& x1 = stage1.x_tr.at(id);
+        const StateTr& x1 = stage1.x.at(id);
         k2[id] = derivtr_world_staged(world, stage1, id, x1);
     }
 
     for (EntityId id : stage0.ids) {
-        StateTr x0 = stage0.x_tr.at(id);
+        StateTr x0 = stage0.x.at(id);
         StateTr x_next = x0 + dt * (k1.at(id) / 3.0 + 2.0 / 3.0 * k2.at(id));
 
         Body* body = world.body(id);
@@ -417,14 +427,15 @@ static bool step_tr_world_staged_rk2ralston(World& world, f64 t, f64 dt) {
     return true;
 }
 
+template <typename State>
 static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
     umap<EntityId, StateTr> x_next;
 
     // rk3 stage 1
-    WorldTrStage stage0 = build_tr_stage(world);
+    WorldTrStage stage0 = build_tr_stage<State>(world);
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0.ids) {
-        const StateTr& x0 = stage0.x_tr.at(id);
+        const StateTr& x0 = stage0.x.at(id);
         k1[id] = derivtr_world_staged(world, stage0, id, x0);
     }
 
@@ -432,7 +443,7 @@ static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
     WorldTrStage stage1 = build_tr_trial_stage(stage0, {{.k = &k1, .scale = dt / 2.0}});
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1.ids) {
-        const StateTr& x1 = stage1.x_tr.at(id);
+        const StateTr& x1 = stage1.x.at(id);
         k2[id] = derivtr_world_staged(world, stage1, id, x1);
     }
 
@@ -443,12 +454,12 @@ static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
     );
     umap<EntityId, DerivTr> k3;
     for (EntityId id : stage2.ids) {
-        const StateTr& x2 = stage2.x_tr.at(id);
+        const StateTr& x2 = stage2.x.at(id);
         k3[id] = derivtr_world_staged(world, stage2, id, x2);
     }
 
     for (EntityId id : stage0.ids) {
-        StateTr x0 = stage0.x_tr.at(id);
+        StateTr x0 = stage0.x.at(id);
         StateTr x_next = x0 + dt / 6.0 * (k1.at(id) + 4.0 * k2.at(id) + k3.at(id));
 
         Body* body = world.body(id);
@@ -459,14 +470,15 @@ static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
     return true;
 }
 
+template <typename State>
 static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     umap<EntityId, StateTr> x_next;
 
     // rk4 stage 1
-    WorldTrStage stage0 = build_tr_stage(world);
+    WorldTrStage stage0 = build_tr_stage<State>(world);
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0.ids) {
-        const StateTr& x0 = stage0.x_tr.at(id);
+        const StateTr& x0 = stage0.x.at(id);
         k1[id] = derivtr_world_staged(world, stage0, id, x0);
     }
 
@@ -474,7 +486,7 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     WorldTrStage stage1 = build_tr_trial_stage(stage0, {{.k = &k1, .scale = dt / 2.0}});
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1.ids) {
-        const StateTr& x1 = stage1.x_tr.at(id);
+        const StateTr& x1 = stage1.x.at(id);
         k2[id] = derivtr_world_staged(world, stage1, id, x1);
     }
 
@@ -482,7 +494,7 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     WorldTrStage stage2 = build_tr_trial_stage(stage0, {{.k = &k2, .scale = dt / 2.0}});
     umap<EntityId, DerivTr> k3;
     for (EntityId id : stage2.ids) {
-        const StateTr& x2 = stage2.x_tr.at(id);
+        const StateTr& x2 = stage2.x.at(id);
         k3[id] = derivtr_world_staged(world, stage2, id, x2);
     }
 
@@ -490,12 +502,12 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     WorldTrStage stage3 = build_tr_trial_stage(stage0, {{.k = &k3, .scale = dt}});
     umap<EntityId, DerivTr> k4;
     for (EntityId id : stage3.ids) {
-        const StateTr& x3 = stage3.x_tr.at(id);
+        const StateTr& x3 = stage3.x.at(id);
         k4[id] = derivtr_world_staged(world, stage3, id, x3);
     }
 
     for (EntityId id : stage0.ids) {
-        StateTr x0 = stage0.x_tr.at(id);
+        StateTr x0 = stage0.x.at(id);
         StateTr x_next
             = x0 + dt / 6.0 * (k1.at(id) + 2.0 * k2.at(id) + 2.0 * k3.at(id) + k4.at(id));
 
@@ -507,19 +519,16 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     return true;
 }
 
-static bool step_tr_world_staged(
-    World& world,
-    f64 t,
-    f64 dt,
-    IntegratorType integrator
-) {
+template <typename State>
+static bool step_tr_world_staged(World& world, f64 t, f64 dt, IntegratorType integrator) {
     switch (integrator) {
-    case IntegratorType::rk1: return step_tr_world_staged_rk1(world, t, dt);
-    case IntegratorType::rk2: return step_tr_world_staged_rk2(world, t, dt);
-    case IntegratorType::rk2_heun: return step_tr_world_staged_rk2heun(world, t, dt);
-    case IntegratorType::rk2_ralston: return step_tr_world_staged_rk2ralston(world, t, dt);
-    case IntegratorType::rk3: return step_tr_world_staged_rk3(world, t, dt);
-    case IntegratorType::rk4: return step_tr_world_staged_rk4(world, t, dt);
+    case IntegratorType::rk1: return step_tr_world_staged_rk1<State>(world, t, dt);
+    case IntegratorType::rk2: return step_tr_world_staged_rk2<State>(world, t, dt);
+    case IntegratorType::rk2_heun: return step_tr_world_staged_rk2heun<State>(world, t, dt);
+    case IntegratorType::rk2_ralston:
+        return step_tr_world_staged_rk2ralston<State>(world, t, dt);
+    case IntegratorType::rk3: return step_tr_world_staged_rk3<State>(world, t, dt);
+    case IntegratorType::rk4: return step_tr_world_staged_rk4<State>(world, t, dt);
     }
 
     return false;
@@ -541,7 +550,7 @@ WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg
         for (i32 substep = 0; substep < cfg.substeps; ++substep) {
             // translational
             if (cfg.step_translation) {
-                bool step_ok = step_tr_world_staged(
+                bool step_ok = step_tr_world_staged<StateTr>(
                     world,
                     world.t_sim(),
                     dt_sub,

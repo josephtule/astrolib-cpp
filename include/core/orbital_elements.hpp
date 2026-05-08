@@ -32,7 +32,7 @@ inline OEClassical rv_to_classical(
     vec3d v,
     f64 mu,
     UAngle uangle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     // r and v in inertial frame
     OEClassical coe;
@@ -113,7 +113,7 @@ inline OEClassical rv_to_classical(
     StateTr x_tr,
     f64 mu,
     UAngle uangle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     return rv_to_classical(x_tr.r, x_tr.v, mu, uangle_out, tol);
 }
@@ -127,7 +127,7 @@ inline StateTr classical_to_rv(
     f64 ta,
     f64 mu,
     UAngle uangle_in = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     StateTr rv;
 
@@ -186,7 +186,7 @@ inline StateTr classical_to_rv(
     OEClassical coe,
     f64 mu,
     UAngle uangle_in = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     return classical_to_rv(
         coe.sma,

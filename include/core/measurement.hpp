@@ -61,7 +61,7 @@ inline vecXd predict_measurement(
     const MeasurementContext& ctx,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     const StateTr& x_target = ctx.x_target;
     const StateTr& x_observer = ctx.x_observer;
@@ -129,7 +129,7 @@ inline vecXd predict_measurement(
     const StateTr& x_target,
     const StateTr& x_observer,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     if (type == ObservationType::azel)
         return vecXd{}; // NOTE: azel unsupported in this overload
@@ -167,7 +167,7 @@ inline matXd jacobian_fd_measurement(
     UAngle angle_out = UAngle::radian,
     f64 eps_pos = 1e-3,
     f64 eps_vel = 1e-6,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     i32 rows = measurement_dim(type);
     i32 cols = 6;
@@ -196,7 +196,7 @@ inline matXd jacobian_fd_measurement(
 inline matXd jacobian_radec(
     const MeasurementContext& ctx,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d r_rel = ctx.x_target.r - ctx.x_observer.r;
     f64 rho2 = r_rel.squaredNorm();
@@ -230,7 +230,7 @@ inline matXd measurement_jacobian(
     UAngle angle_out = UAngle::radian,
     f64 eps_pos = 1e-3,
     f64 eps_vel = 1e-6,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     i32 rows = measurement_dim(type);
     i32 cols = 6;

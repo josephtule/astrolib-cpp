@@ -20,7 +20,7 @@ struct ODEKFStepInput {
     ODDynamicsConfig dyn_config;
     i32 prop_steps = 100;
     mat6d Q = mat6d0; // process noise covariance (process uncertainty)
-    f64 tol_time = tol_strict;
+    f64 tol_time = tol12;
 };
 
 struct ODEKFStepResult {
@@ -40,7 +40,7 @@ struct ODEKFInput {
     ODDynamicsConfig dyn_config;
     i32 prop_steps = 100;
     mat6d Q = mat6d0;
-    f64 tol_time = tol_strict;
+    f64 tol_time = tol12;
 };
 
 struct ODEKFResult {

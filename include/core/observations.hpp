@@ -10,7 +10,7 @@
 inline vec3d radec_from_rel(
     const vec3d& r_rel,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d radec = vec3d0;
 
@@ -39,7 +39,7 @@ inline vec3d radec_from_pos(
     const vec3d& r_target,
     const vec3d& r_observer,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     // r_target and r_observer must be in the same frame
     return radec_from_rel(r_target - r_observer, angle_out, tol);
@@ -49,7 +49,7 @@ inline vec3d radec_rates_from_rel(
     const vec3d& r_rel,
     const vec3d& v_rel,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     vec3d radec_dot = vec3d0;
 
@@ -84,7 +84,7 @@ inline vec3d radec_rates_from_state(
     const StateTr& x_target,
     const StateTr& x_observer,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     return radec_rates_from_rel(
         x_target.r - x_observer.r,

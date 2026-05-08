@@ -16,7 +16,7 @@ inline vecXd world_predict_measurement(
     EntityId target_id,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol_strict
+    f64 tol = tol12
 ) {
     const Station* observer = world.station(observer_id);
     const Body* target = world.body(target_id);

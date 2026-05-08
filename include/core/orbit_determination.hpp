@@ -33,9 +33,9 @@ struct IODAnglesObs3 {
     mat3d R; // observer inertial positions as columns
 };
 
-bool iod_vec_valid(ecref<vec3d> v, f64 tol = tol_strict);
+bool iod_vec_valid(ecref<vec3d> v, f64 tol = tol12);
 
-bool iod_time_valid(f64 t1, f64 t2, f64 t3, f64 tol = tol_strict);
+bool iod_time_valid(f64 t1, f64 t2, f64 t3, f64 tol = tol12);
 
 IODAnglesObs3 iod_angles3_from_radec(
     const std::array<f64, 3>& t,
@@ -71,7 +71,7 @@ IODResult iod_gauss(
     ecref<vec3d> R2,
     ecref<vec3d> R3,
     f64 mu,
-    f64 tol = tol_med
+    f64 tol = tol6
 );
 
 IODResult iod_gauss(
@@ -79,7 +79,7 @@ IODResult iod_gauss(
     const std::array<vec3d, 3>& L,
     const std::array<vec3d, 3>& R,
     f64 mu,
-    f64 tol = tol_med
+    f64 tol = tol6
 );
 
 IODResult iod_gauss(
@@ -87,7 +87,7 @@ IODResult iod_gauss(
     const svec<vec3d>& L,
     const svec<vec3d>& R,
     f64 mu,
-    f64 tol = tol_med
+    f64 tol = tol6
 );
 
 IODResult iod_gauss(
@@ -95,17 +95,17 @@ IODResult iod_gauss(
     ecref<mat3d> L,
     ecref<mat3d> R,
     f64 mu,
-    f64 tol = tol_med
+    f64 tol = tol6
 );
 
-IODResult iod_gauss(const IODAnglesObs3& arc, f64 mu, f64 tol = tol_med);
+IODResult iod_gauss(const IODAnglesObs3& arc, f64 mu, f64 tol = tol6);
 
 IODResult iod_gibbs(
     ecref<vec3d> r1,
     ecref<vec3d> r2,
     ecref<vec3d> r3,
     f64 mu,
-    f64 tol = tol_med
+    f64 tol = tol6
 );
 
 IODResult iod_herrickgibbs(
@@ -116,7 +116,7 @@ IODResult iod_herrickgibbs(
     ecref<vec3d> r2,
     ecref<vec3d> r3,
     f64 mu,
-    f64 tol = tol_med
+    f64 tol = tol6
 );
 
 IODResult iod_laplace(
@@ -131,5 +131,5 @@ IODResult iod_laplace(
     ecref<vec3d> R3,
     f64 mu,
     vec3d w, // angular velocity of body
-    f64 tol = tol_med
+    f64 tol = tol6
 );
