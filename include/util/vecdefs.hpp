@@ -166,3 +166,21 @@ const mat9d mat9d1 = mat9d::Identity();
 const mat10d mat10d1 = mat10d::Identity();
 const mat11d mat11d1 = mat11d::Identity();
 const mat12d mat12d1 = mat12d::Identity();
+
+template <typename T, int N>
+inline vec<f32, N> vf32(const vec<T, N>& v) {
+    return v.template cast<f32>();
+}
+template <class T, int N, int M>
+inline mat<f32, N, M> mf32(const mat<T, N, M>& m) {
+    return m.template cast<f32>();
+}
+
+template <typename T, int N>
+inline vec<f64, N> vf64(const vec<T, N>& v) {
+    return v.template cast<f64>();
+}
+template <class T, int N, int M>
+inline mat<f64, N, M> mf64(const mat<T, N, M>& m) {
+    return m.template cast<64>();
+}

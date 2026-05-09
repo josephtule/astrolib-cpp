@@ -3,14 +3,14 @@
 #include "util/vecdefs.hpp"
 
 struct StateTr {
-    vec3d r = vec3d0; // position
-    vec3d v = vec3d0; // velocity
+    vec3d r = vec3d0; // position, inertial
+    vec3d v = vec3d0; // velocity, inertial
 };
 
 inline vec4d q_default{0.0, 0.0, 0.0, 1.0};
 struct StateAtt {
-    vec4d q = q_default;     // euler-parameter/quaternion
-    vec3d w = vec3d0; // angular velocity
+    vec4d q = q_default; // euler-parameter/quaternion, N -> B
+    vec3d w = vec3d0;    // angular velocity, in body frame
 };
 
 // Derivatives
@@ -133,9 +133,7 @@ inline StateAtt& operator+=(StateAtt& x, const DerivAtt& dx) {
     x.w += dx.dw;
     return x;
 }
-inline StateAtt operator-(const StateAtt& x) {
-    return StateAtt{.q = -x.q, .w = -x.w};
-}
+inline StateAtt operator-(const StateAtt& x) { return StateAtt{.q = -x.q, .w = -x.w}; }
 
 inline DerivAtt operator+(const DerivAtt& dx1, const DerivAtt& dx2) {
     return DerivAtt{.dq = dx1.dq + dx2.dq, .dw = dx1.dw + dx2.dw};
@@ -147,9 +145,7 @@ inline DerivAtt operator*(const DerivAtt& dx, f64 scalar) {
     return DerivAtt{.dq = dx.dq * scalar, .dw = dx.dw * scalar};
 }
 inline DerivAtt operator*(f64 scalar, const DerivAtt& dx) { return dx * scalar; }
-inline DerivAtt operator/(const DerivAtt& dx, f64 scalar) {
-    return dx * (1.0 / scalar);
-}
+inline DerivAtt operator/(const DerivAtt& dx, f64 scalar) { return dx * (1.0 / scalar); }
 inline DerivAtt operator-(const DerivAtt& dx) {
     return DerivAtt{.dq = -dx.dq, .dw = -dx.dw};
 }

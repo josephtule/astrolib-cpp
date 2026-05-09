@@ -11,6 +11,7 @@
 #include "util/math.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+#include "graphics/raygen.hpp"
 
 #include <chrono>
 #include <iostream>

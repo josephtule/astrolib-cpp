@@ -26,7 +26,7 @@ ${CMAKE_CURRENT_SOURCE_DIR}/include
 
 # Add Raylib
 target_include_directories(${TARGET_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/eigen
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/raylib/src 
 )
 
 # Add Eigen

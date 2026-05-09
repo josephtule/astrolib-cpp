@@ -1,5 +1,4 @@
 #include "core/world_stepper.hpp"
-#include "Eigen/Core"
 #include "core/body.hpp"
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
@@ -524,7 +523,8 @@ static bool step_tr_world_staged(World& world, f64 t, f64 dt, IntegratorType int
     switch (integrator) {
     case IntegratorType::rk1: return step_tr_world_staged_rk1<State>(world, t, dt);
     case IntegratorType::rk2: return step_tr_world_staged_rk2<State>(world, t, dt);
-    case IntegratorType::rk2_heun: return step_tr_world_staged_rk2heun<State>(world, t, dt);
+    case IntegratorType::rk2_heun:
+        return step_tr_world_staged_rk2heun<State>(world, t, dt);
     case IntegratorType::rk2_ralston:
         return step_tr_world_staged_rk2ralston<State>(world, t, dt);
     case IntegratorType::rk3: return step_tr_world_staged_rk3<State>(world, t, dt);

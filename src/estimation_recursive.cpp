@@ -1,6 +1,5 @@
 #include "core/estimation_recursive.hpp"
 
-#include <Eigen/Core>
 #include <cmath>
 
 ODStatus od_ekf_step_validate_input(const ODEKFStepInput& input) {
