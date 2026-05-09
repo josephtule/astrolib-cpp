@@ -166,7 +166,7 @@ void run_spherical_harmonics_diag(
     earth->gravity_model = GravityModel::spherical_harmonics;
     earth->degree = degree;
     earth->order = 0;
-    read_egm2008(
+    read_sphh_coefs(
         std::string(PROJECT_ROOT) + "/assets/egm2008_120.txt",
         earth->C,
         earth->S,
@@ -204,7 +204,7 @@ void run_sphh_longitude_diag(
     earth->gravity_model = GravityModel::spherical_harmonics;
     earth->degree = degree;
     earth->order = order;
-    read_egm2008(
+    read_sphh_coefs(
         std::string(PROJECT_ROOT) + "/assets/egm2008_120.txt",
         earth->C,
         earth->S,

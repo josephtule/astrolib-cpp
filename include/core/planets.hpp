@@ -51,7 +51,7 @@ inline Celestial wgs84(ULength u_len = ULength::kilometer) {
     earth.set_spin_rate(omega);
 
     earth.J = -vec7d{
-        0.000000000000000000,
+        1.000000000000000000,
         0.000000000000000000,
         -0.001082626173852223,
         0.000002532410518568,
@@ -70,7 +70,7 @@ inline EntityId wgs84(World& world, ULength u_len = ULength::kilometer) {
     return id;
 }
 
-inline bool read_egm2008(
+inline bool read_sphh_coefs(
     const std::string& filename,
     matXd& C,
     matXd& S,
@@ -78,6 +78,7 @@ inline bool read_egm2008(
     i32 order,
     i32 lineskips = 0
 ) {
+    // formatted for NASA SHA spherical harmonics and EGM spherical harmonics
     order = std::min(order, degree);
     C = matXd::Zero(degree + 1, order + 1);
     S = matXd::Zero(degree + 1, order + 1);
@@ -126,4 +127,57 @@ inline f64 norm_factor(i32 n, i32 m) {
         / static_cast<f64>(factorial(n + m))
     );
     return factor;
+}
+inline bool zonal_coefs_from_C(vecXd& J, const matXd& C, i32 degree) {
+    if (C.rows() <= degree || C.cols() < 1) return false;
+
+    J.resize(degree);
+    for (i32 i = 0; i < degree; ++i) {
+        J(i) = -norm_factor(i, 0) * C(i, 0);
+    }
+
+    return true;
+}
+
+inline bool read_gfc(
+    // .gfc spherical harmonics file
+    const std::string& filename,
+    matXd& C,
+    matXd& S,
+    i32 degree,
+    i32 order,
+    i32 lineskips = 0
+) {
+    order = std::min(order, degree);
+    C = matXd::Zero(degree + 1, order + 1);
+    S = matXd::Zero(degree + 1, order + 1);
+
+    std::ifstream file(filename);
+    if (!file) return false;
+
+    std::string line;
+
+    for (i32 i = 0; i < lineskips && std::getline(file, line); ++i) {}
+    while (getline(file, line)) {
+        if (line.substr(0, 3) != "gfc") continue;
+
+        std::replace(line.begin(), line.end(), 'D', 'E');
+        std::replace(line.begin(), line.end(), 'd', 'e');
+
+        std::istringstream iss(line);
+
+        i32 n, m;
+        f64 c, s;
+        std::string _;
+        if (!(iss >> _ >> n >> m >> c >> s)) continue;
+
+        if (n > degree) break;
+        if (m > order) continue;
+
+        C(n, m) = c;
+        S(n, m) = s;
+    }
+    return true;
+
+    return true;
 }

@@ -3,7 +3,7 @@
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/units.hpp"
-#include "util/vecdefs.hpp"
+
 #include <cmath>
 
 inline bool mean_anom_to_eccen_anom(
