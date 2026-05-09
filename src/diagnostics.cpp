@@ -19,9 +19,13 @@
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
+#include "graphics/raygen.hpp"
+#include "raylib.h"
+#include "rlgl.h"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+
 #include <memory>
 #include <random>
 
@@ -2126,5 +2130,125 @@ void run_tle_diag(std::string filename) {
             print_coe(coe);
             if (i != num_sats - 1) std::println();
         }
+    }
+}
+
+void run_prelim_rendering() {
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->gravity_model = GravityModel::zonal;
+    earth->name = "Earth";
+    earth->attitude_model = CelestialAttitudeModel::fixed;
+    earth->propagate_att = true;
+    earth->degree = 4;
+    earth->attitude_model = CelestialAttitudeModel::simple_spin;
+
+    // Urath
+    EntityId urath_id = wgs84(world);
+    Celestial* urath = world.celestial(urath_id);
+    urath->gravity_model = GravityModel::pointmass;
+    urath->name = "Urath";
+    urath->attitude_model = CelestialAttitudeModel::fixed;
+    urath->propagate_att = true;
+    urath->degree = 4;
+    urath->attitude_model = CelestialAttitudeModel::simple_spin;
+    urath->set_spin_rate(urath->spin_rate()*10.);
+    // urath->mu /= 10.0;
+
+    // satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    sat->propagate_att = false;
+
+    // binary body orbit initial conditions
+    f64 separation = 100'000.0;
+    f64 r_mag = separation / 2.0;
+    f64 v_mag = std::sqrt(earth->mu / (2.0 * separation));
+    f64 period = (2.0 * pi * r_mag) / v_mag;
+    earth->x_tr.r = vec3d{r_mag, 0.0, 0.0};
+    earth->x_tr.v = vec3d{0.0, -v_mag, 0.0};
+    urath->x_tr.r = vec3d{-r_mag, 0.0, 0.0};
+    urath->x_tr.v = vec3d{0.0, v_mag, 0.0};
+    // sat orbit around urath
+    f64 r_mag_sat = urath->semimajor_axis + 1000.0;
+    f64 v_mag_sat = std::sqrt(urath->mu / r_mag_sat);
+    sat->x_tr.r = urath->x_tr.r + vec3d{r_mag_sat, 0.0, 0.0};
+    sat->x_tr.v = urath->x_tr.v + vec3d{0.0, v_mag_sat, 0.0};
+
+    // integration options
+    WorldStepperConfig cfg;
+    cfg.step_translation = true;
+    cfg.step_attitude = true;
+    cfg.substeps = 10;
+    cfg.ticks = 1;
+    cfg.time_scale = 1.0;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+
+    f64 t_span = period;
+    f64 t0 = 0.0;
+    i32 n_steps = 100000;
+    f64 dt = t_span / n_steps;
+    world.reset_time(t0);
+
+    WorldStateSnapshot world_snapshot = world.capture_checkpoint();
+
+    StateTr x_earth0 = earth->x_tr;
+    StateTr x_urath0 = urath->x_tr;
+    StateTr x_sat0 = sat->x_tr;
+
+    WorldStepperStats stats;
+    stats.success = true;
+
+    int screenWidth = 960;
+    int screenHeight = 800;
+
+    SetTraceLogLevel(LOG_WARNING);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
+
+    InitWindow(screenWidth, screenHeight, "Basic Window");
+    SetTargetFPS(60);
+
+    Camera3D camera;
+    camera.position = {100000, 100000, 100000};
+    camera.fovy = 90;
+    camera.projection = CAMERA_PERSPECTIVE;
+    camera.up = eig_to_rl(axis_z);
+    camera.target = eig_to_rl(origin);
+    rlSetClipPlanes(1.0e3, 1.0e6);
+
+    dt = 250.0;
+
+    Mesh sphere_mesh = GenMeshSphere(1., 10, 10);
+    auto sphere_model = LoadModelFromMesh(sphere_mesh);
+    sphere_model.transform = MatrixIdentity();
+    Image checker_pattern = GenImageChecked(8, 8, 1, 1, BLUE, RED);
+    Texture2D texture = LoadTextureFromImage(checker_pattern);
+    UnloadImage(checker_pattern);
+    sphere_model.materials[0] = LoadMaterialDefault();
+    sphere_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
+
+    while (!WindowShouldClose()) {
+
+        BeginDrawing();
+        BeginMode3D(camera);
+        ClearBackground(Color({30, 30, 30, 255}));
+
+        stats += step_world(world, dt, cfg);
+        if (!stats.success) break;
+        vec3f size;
+        size << earth->semimajor_axis, earth->semimajor_axis, earth->semimajor_axis;
+
+        Matrix M_earth = make_transform(earth->x_tr, earth->x_att, size);
+        DrawMesh(sphere_mesh, sphere_model.materials[0], M_earth);
+
+        Matrix M_urath = make_transform(urath->x_tr, urath->x_att, size);
+        DrawMesh(sphere_mesh, sphere_model.materials[0], M_urath);
+
+        EndMode3D();
+        EndDrawing();
     }
 }

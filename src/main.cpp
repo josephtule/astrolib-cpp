@@ -102,18 +102,19 @@ int main() {
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
     // run_tle_diag(pwd + "/assets/tle_fake.txt");
-    i32 degree = 100, order = 100;
-    matXd C(degree, order);
-    matXd S(degree, order);
-    vecXd J(degree);
-    bool gfc_ok = read_gfc(pwd + "/assets/EGM2008.gfc.txt", C, S, degree, order);
-    std::println("GFC File Sucess: {}", gfc_ok);
-    if (gfc_ok && degree + order < 36) {
-        zonal_coefs_from_C(J, C, degree);
-        std::println("J = {}", J);
-        std::println("J_error =  {}", (J - earth->J.segment(0, degree)));
-        std::cout << "C =\n" << C << std::endl;
-    }
+    // i32 degree = 100, order = 100;
+    // matXd C(degree, order);
+    // matXd S(degree, order);
+    // vecXd J(degree);
+    // bool gfc_ok = read_gfc(pwd + "/assets/EGM2008.gfc.txt", C, S, degree, order);
+    // std::println("GFC File Sucess: {}", gfc_ok);
+    // if (gfc_ok && degree + order < 36) {
+    //     zonal_coefs_from_C(J, C, degree);
+    //     std::println("J = {}", J);
+    //     std::println("J_error =  {}", (J - earth->J.segment(0, degree)));
+    //     std::cout << "C =\n" << C << std::endl;
+    // }
+    run_prelim_rendering();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

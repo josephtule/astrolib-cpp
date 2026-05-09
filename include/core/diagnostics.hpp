@@ -69,3 +69,4 @@ void run_world_stepper_diag();
 void run_body_fixed_gravity_timing_diag();
 void run_moving_source_world_diag();
 void run_tle_diag(std::string filename);
+void run_prelim_rendering();

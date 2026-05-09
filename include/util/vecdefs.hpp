@@ -115,10 +115,6 @@ using mat10f = eig::Matrix<f32, 10, 10>;
 using mat11f = eig::Matrix<f32, 11, 11>;
 using mat12f = eig::Matrix<f32, 12, 12>;
 
-const vec3d axis_x = vec3d{1.0, 0.0, 0.0};
-const vec3d axis_y = vec3d{0.0, 1.0, 0.0};
-const vec3d axis_z = vec3d{0.0, 0.0, 1.0};
-
 const vec2d vec2d0 = vec2d::Zero();
 const vec3d vec3d0 = vec3d::Zero();
 const vec4d vec4d0 = vec4d::Zero();
@@ -166,6 +162,59 @@ const mat9d mat9d1 = mat9d::Identity();
 const mat10d mat10d1 = mat10d::Identity();
 const mat11d mat11d1 = mat11d::Identity();
 const mat12d mat12d1 = mat12d::Identity();
+
+const vec2f vec2f1 = vec2f::Identity();
+const vec3f vec3f1 = vec3f::Identity();
+const vec4f vec4f1 = vec4f::Identity();
+const vec5f vec5f1 = vec5f::Identity();
+const vec6f vec6f1 = vec6f::Identity();
+const vec7f vec7f1 = vec7f::Identity();
+const vec8f vec8f1 = vec8f::Identity();
+const vec9f vec9f1 = vec9f::Identity();
+const vec10f vec10f1 = vec10f::Identity();
+const vec11f vec11f1 = vec11f::Identity();
+const vec12f vec12f1 = vec12f::Identity();
+
+const mat2f mat2f1 = mat2f::Identity();
+const mat3f mat3f1 = mat3f::Identity();
+const mat4f mat4f1 = mat4f::Identity();
+const mat5f mat5f1 = mat5f::Identity();
+const mat6f mat6f1 = mat6f::Identity();
+const mat7f mat7f1 = mat7f::Identity();
+const mat8f mat8f1 = mat8f::Identity();
+const mat9f mat9f1 = mat9f::Identity();
+const mat10f mat10f1 = mat10f::Identity();
+const mat11f mat11f1 = mat11f::Identity();
+const mat12f mat12f1 = mat12f::Identity();
+
+const vec2f vec2f0 = vec2f::Zero();
+const vec3f vec3f0 = vec3f::Zero();
+const vec4f vec4f0 = vec4f::Zero();
+const vec5f vec5f0 = vec5f::Zero();
+const vec6f vec6f0 = vec6f::Zero();
+const vec7f vec7f0 = vec7f::Zero();
+const vec8f vec8f0 = vec8f::Zero();
+const vec9f vec9f0 = vec9f::Zero();
+const vec10f vec10f0 = vec10f::Zero();
+const vec11f vec11f0 = vec11f::Zero();
+const vec12f vec12f0 = vec12f::Zero();
+
+const mat2f mat2f0 = mat2f::Zero();
+const mat3f mat3f0 = mat3f::Zero();
+const mat4f mat4f0 = mat4f::Zero();
+const mat5f mat5f0 = mat5f::Zero();
+const mat6f mat6f0 = mat6f::Zero();
+const mat7f mat7f0 = mat7f::Zero();
+const mat8f mat8f0 = mat8f::Zero();
+const mat9f mat9f0 = mat9f::Zero();
+const mat10f mat10f0 = mat10f::Zero();
+const mat11f mat11f0 = mat11f::Zero();
+const mat12f mat12f0 = mat12f::Zero();
+
+const vec3d origin = vec3d0;
+const vec3d axis_x = vec3d{1.0, 0.0, 0.0};
+const vec3d axis_y = vec3d{0.0, 1.0, 0.0};
+const vec3d axis_z = vec3d{0.0, 0.0, 1.0};
 
 template <typename T, int N>
 inline vec<f32, N> vf32(const vec<T, N>& v) {

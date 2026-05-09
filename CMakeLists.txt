@@ -25,9 +25,9 @@ ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 # Add Raylib
-target_include_directories(${TARGET_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/raylib/src 
-)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/raylib)
+target_link_libraries(${TARGET_NAME} PRIVATE raylib)
 
 # Add Eigen
 # add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/eigen)
