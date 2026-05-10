@@ -97,11 +97,11 @@ int main() {
     // run_world_stepper_diag();
     // run_body_fixed_gravity_timing_diag();
     // run_moving_source_world_diag();
+    // run_tle_diag(pwd + "/assets/tle_fake.txt");
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    // run_tle_diag(pwd + "/assets/tle_fake.txt");
     // i32 degree = 100, order = 100;
     // matXd C(degree, order);
     // matXd S(degree, order);

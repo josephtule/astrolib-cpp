@@ -32,7 +32,7 @@ struct Celestial : public Body {
     GravityModel gravity_model = GravityModel::pointmass;
     f64 mu = 0.0;
     i32 degree = 0, order = 0; // spherical harmonics degree (n) and order (m)
-    vec7d J = vec7d0;   // zonal coefs
+    vec7d J = vec7d0;          // zonal coefs
     matXd C, S;                // sph harmonic coefs
 
     // Attitude/Orientation
@@ -78,6 +78,10 @@ struct Satellite : public Body {
     Satellite() {
         body_type = BodyType::satellite;
         mass_properties.active = true;
+    }
+    void set_I(const mat3d& I) {
+        this->mass_properties.I = I;
+        this->mass_properties.I_inv = I.inverse();
     }
 };
 

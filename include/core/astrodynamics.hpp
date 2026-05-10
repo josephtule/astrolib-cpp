@@ -47,14 +47,20 @@ inline bool mean_anom_to_eccen_anom(
             f64 f_next = func(x_next);
             converged = std::abs(f_next) <= std::sqrt(eps(f_next));
             x_iter = x_next;
-            break;
+            if (converged) {
+                break;
+            } else {
+                continue;
+            }
         }
 
         x_iter = x_next;
         ++iter;
     }
 
-    if (iter >= max_iter) converged = false;
+    if (iter >= max_iter) {
+        converged = false;
+    }
 
     eccen_anom = x_iter;
     if (angle_out != UAngle::radian) {

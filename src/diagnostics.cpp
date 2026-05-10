@@ -33,6 +33,8 @@
 #include <memory>
 #include <random>
 
+const std::string pwd = std::string(PROJECT_ROOT);
+
 void print_diag_title(const std::string& title) {
     std::string line = "-----------------------------------------------------------";
     size_t width = line.size();
@@ -2143,19 +2145,26 @@ void run_make_transform_diag() {
     // Earth
     EntityId earth_id = wgs84(world);
     Celestial* earth = world.celestial(earth_id);
-    earth->gravity_model = GravityModel::zonal;
     earth->name = "Earth";
-    earth->attitude_model = CelestialAttitudeModel::fixed;
-    earth->propagate_att = true;
+    earth->gravity_model = GravityModel::spherical_harmonics;
     earth->degree = 4;
+    earth->order = 4;
+    bool gfc_ok = read_gfc(
+        pwd + "/assets/EGM2008.gfc.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    earth->propagate_att = true;
     earth->attitude_model = CelestialAttitudeModel::simple_spin;
+    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
 
     // Urath
     EntityId urath_id = wgs84(world);
     Celestial* urath = world.celestial(urath_id);
     urath->gravity_model = GravityModel::pointmass;
     urath->name = "Urath";
-    urath->attitude_model = CelestialAttitudeModel::fixed;
     urath->propagate_att = true;
     urath->degree = 4;
     urath->attitude_model = CelestialAttitudeModel::simple_spin;
@@ -2165,9 +2174,7 @@ void run_make_transform_diag() {
     // satellite
     EntityId sat_id = world.spawn_satellite();
     Satellite* sat = world.satellite(sat_id);
-    sat->mass_properties.I = vec3d{100.0, 200.0, 300.0}.asDiagonal();
-    sat->mass_properties.I_inv
-        = sat->mass_properties.I.inverse();           // TODO: make set I function
+    sat->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
     sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
     sat->propagate_att = true;
 
@@ -2187,6 +2194,34 @@ void run_make_transform_diag() {
     sat->x_tr.r = urath->x_tr.r + vec3d{r_mag_sat, 0.0, 0.0};
     sat->x_tr.v = urath->x_tr.v + vec3d{0.0, v_mag_sat, 0.0};
 
+    // TLE satellites
+    svec<std::unique_ptr<Satellite>> sats;
+    svec<JulianDate> jds;
+    i32 num_sats_tle = 20;
+    bool read_tle_ok = read_TLE_multiple(
+        pwd + "/assets/tle_all.txt",
+        sats,
+        jds,
+        earth->mu,
+        num_sats_tle
+    );
+    for (i32 i = 0; i < sats.size(); ++i) {
+        EntityId sat_i_id = world.insert_satellite(std::move(sats[i]));
+        Satellite* sat_i = world.satellite(sat_i_id);
+        if (sat_i == nullptr) {
+            std::println("oops");
+            continue;
+        }
+        // rotation not correct, TLE in TEME
+        sat_i->x_tr.r = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.r); 
+        sat_i->x_tr.v = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.v);
+        sat_i->x_tr += earth->x_tr;
+        sat_i->propagate_tr = true;
+        sat_i->propagate_att = false;
+    }
+    if (!read_tle_ok) return;
+    svec<EntityId> sat_ids = world.satellite_ids();
+
     // integration options
     WorldStepperConfig cfg;
     cfg.step_translation = true;
@@ -2204,10 +2239,6 @@ void run_make_transform_diag() {
     world.reset_time(t0);
 
     WorldStateSnapshot world_snapshot = world.capture_checkpoint();
-
-    StateTr x_earth0 = earth->x_tr;
-    StateTr x_urath0 = urath->x_tr;
-    StateTr x_sat0 = sat->x_tr;
 
     WorldStepperStats stats;
     stats.success = true;
@@ -2232,14 +2263,7 @@ void run_make_transform_diag() {
     dt = 50.0;
 
     i32 sphere_i = 16;
-    Image checker_pattern = GenImageChecked(
-        sphere_i,
-        sphere_i,
-        1,
-        1,
-        {120, 120, 200, 255},
-        {80, 80, 150, 255}
-    );
+    Image checker_pattern = GenImageChecked(sphere_i, sphere_i, 1, 1, RAYWHITE, GRAY);
     Texture2D texture = LoadTextureFromImage(checker_pattern);
 
     Mesh sphere_mesh = GenMeshSphere(1., sphere_i, sphere_i);
@@ -2248,7 +2272,7 @@ void run_make_transform_diag() {
     sphere_model.materials[0] = LoadMaterialDefault();
     sphere_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
 
-    checker_pattern = GenImageChecked(2, 2, 1, 1, BLUE, RED);
+    checker_pattern = GenImageChecked(2, 2, 1, 1, RAYWHITE, GRAY);
     texture = LoadTextureFromImage(checker_pattern);
     Mesh cube_mesh = GenMeshCube(1.f, 1.f, 1.f);
     Model cube_model = LoadModelFromMesh(cube_mesh);
@@ -2290,7 +2314,7 @@ void run_make_transform_diag() {
             vec2f{grid_increment, grid_increment},
             GridPlane::XY,
             true,
-            Color{240,240,240, 45}
+            Color{240, 240, 240, 45}
         );
 
         Matrix M_earth = make_transform(earth->x_tr, earth->x_att, earth_size);
@@ -2300,14 +2324,20 @@ void run_make_transform_diag() {
 
         Matrix M_urath = make_transform(urath->x_tr, urath->x_att, earth_size);
         sphere_model.transform = M_urath;
-        DrawModel(sphere_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, BLUE);
+        DrawModel(sphere_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, DARKGREEN);
         draw_axes(urath->x_tr, urath->x_att, urath->semimajor_axis * 2.0f);
 
         f32 sat_scale = 5000.0f;
-        Matrix M_sat = make_transform(sat->x_tr, sat->x_att, sat_size, sat_scale);
-        cube_model.transform = M_sat;
-        DrawModel(cube_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, BLUE);
-        draw_axes(sat->x_tr, sat->x_att, sat_scale);
+        for (i32 i = 0; i < sat_ids.size(); ++i) {
+            Satellite* sat_i = world.satellite(sat_ids[i]);
+            if (sat_i == nullptr) continue;
+            Matrix M_sat = make_transform(sat_i->x_tr, sat_i->x_att, sat_size, sat_scale);
+            cube_model.transform = M_sat;
+            DrawModel(cube_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, RED);
+            if (sat->propagate_att) {
+                draw_axes(sat_i->x_tr, sat_i->x_att, sat_scale);
+            }
+        }
 
         EndMode3D();
         EndDrawing();

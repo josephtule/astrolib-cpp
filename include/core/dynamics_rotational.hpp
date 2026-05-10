@@ -1,6 +1,9 @@
 #pragma once
 
 #include "core/state.hpp"
+#include "core/transform.hpp"
+#include "util/constants.hpp"
+#include "util/math.hpp"
 #include "util/vecdefs.hpp"
 
 inline vec4d k_eulerparams(ecref<vec4d> q, ecref<vec3d> w) {
@@ -43,7 +46,7 @@ inline vec3d d_angularvelocity_nPA(const vec3d& w, const mat3d& I, const mat3d& 
 
     // vec3d dhdt = torque - dhdt_tf;
     vec3d dhdt = -dhdt_tf;
-    
+
     // vec3T<T> dwdt = I_inv * (torque - dhdt_tf);
     vec3d dwdt = vec3d{
         I_inv(0, 0) * dhdt(0) + I_inv(0, 1) * dhdt(1) + I_inv(0, 2) * dhdt(2),
@@ -80,6 +83,22 @@ inline DerivAtt d_rigidbody(
     dx.dw = d_angularvelocity_nPA(w, I, I_inv);
 
     return dx;
+}
+
+inline vec4d step_q_simple_spin(const StateAtt& x_att, f64 dt) {
+    f64 w_mag = x_att.w.norm();
+    if (w_mag <= tol12) return x_att.q;
+
+    vec3d axis = x_att.w / w_mag;
+    f64 theta = w_mag * dt;
+    vec4d dq;
+    dq << axis * std::sin(theta / 2.0), std::cos(theta / 2.0);
+
+    vec4d q_new = ep_mult(x_att.q, dq);
+
+    normalize_quaternion_inplace<f64>(q_new);
+
+    return q_new;
 }
 
 // TODO: add override for rotation of celestial bodies (With Earth Orientation

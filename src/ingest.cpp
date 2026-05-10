@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <string>
 
 // TODO: use TLEData struct
 
@@ -119,10 +120,15 @@ bool read_TLE_raw_single(
         switch (linenum) {
         case 0: {
             if (sats_seen == skip_sats) {
-                if (line.size() > 2 && line[0] == '0')
+                if (line.size() > 2 && line[0] == '0') {
                     tle.name = line.substr(2);
-                else
+                    tle.name.erase(
+                        std::remove(tle.name.begin(), tle.name.end(), '\r'),
+                        tle.name.end()
+                    ); // remove returns
+                } else {
                     tle.name = line;
+                }
             }
         } break;
         case 1: {
@@ -324,26 +330,37 @@ bool read_TLE_index(
         switch (linenum) {
         case 0: {
             if (sats_seen == current_idx) {
-                if (line.size() > 2 && line[0] == '0')
+                if (line.size() > 2 && line[0] == '0') {
                     tle.name = line.substr(2);
-                else
+                    tle.name.erase(
+                        std::remove(tle.name.begin(), tle.name.end(), '\r'),
+                        tle.name.end()
+                    );
+                } else {
                     tle.name = line;
+                }
             }
         } break;
         case 1: {
             have_line1 = true;
 
             if (sats_seen == current_idx) {
-                if (!read_line_one(line, tle)) return false;
+                if (!read_line_one(line, tle)) {
+                    return false;
+                }
             }
         } break;
         case 2: {
             if (!have_line1) return false;
 
             if (sats_seen == current_idx) {
-                if (!read_line_two(line, tle)) return false;
+                if (!read_line_two(line, tle)) {
+                    return false;
+                }
 
-                if (!convert_TLE(tle, mu)) return false;
+                if (!convert_TLE(tle, mu)) {
+                    return false;
+                }
 
                 sats.emplace_back(
                     std::make_unique<Satellite>(sat_from_tle_data(tle, mu))
@@ -354,8 +371,7 @@ bool read_TLE_index(
                 ++i;
 
                 if (i >= idx_sorted.size()) {
-                    found_sat = true;
-                    break;
+                    return true;
                 }
 
                 current_idx = idx_sorted[i] - idx_start;
@@ -374,7 +390,10 @@ bool read_TLE_index(
 void sat_from_tle_data(Satellite& sat, const TLEData& tle, f64 mu) {
     OEClassical coe = coe_from_tle(tle);
 
-    sat.name = tle.name;
+    // sat.name = tle.name;
+    sat.name = tle.name + " (" + std::to_string(tle.sat_num) + "-"
+               + std::to_string(tle.launch_year) + std::to_string(tle.launch_num)
+               + trim(tle.launch_piece) + ")";
     sat.x_tr = classical_to_rv(coe, mu, tle.units_angle);
 }
 

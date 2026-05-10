@@ -114,6 +114,13 @@ class World {
         EntityId source_id,
         const StateTr& x_source
     ) const;
+    vec3d gravity_accel_from(
+        EntityId target_id,
+        const StateTr& x_target,
+        EntityId source_id,
+        const StateTr& x_source,
+        const StateAtt& x_source_att
+    ) const;
 
     // Station
     vec3d stat_r_inertial(EntityId station_id) const;
