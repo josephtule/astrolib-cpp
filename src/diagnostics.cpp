@@ -19,12 +19,16 @@
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
-#include "graphics/raygen.hpp"
-#include "raylib.h"
-#include "rlgl.h"
+
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+
+#include "graphics/raygen.hpp"
+#include "graphics/rdraw.hpp"
+#include "raylib.h"
+#include "raymath.h"
+#include "rlgl.h"
 
 #include <memory>
 #include <random>
@@ -2133,7 +2137,7 @@ void run_tle_diag(std::string filename) {
     }
 }
 
-void run_prelim_rendering() {
+void run_make_transform_diag() {
     World world;
 
     // Earth
@@ -2155,13 +2159,17 @@ void run_prelim_rendering() {
     urath->propagate_att = true;
     urath->degree = 4;
     urath->attitude_model = CelestialAttitudeModel::simple_spin;
-    urath->set_spin_rate(urath->spin_rate()*10.);
+    urath->set_spin_rate(urath->spin_rate() * 3.);
     // urath->mu /= 10.0;
 
     // satellite
     EntityId sat_id = world.spawn_satellite();
     Satellite* sat = world.satellite(sat_id);
-    sat->propagate_att = false;
+    sat->mass_properties.I = vec3d{100.0, 200.0, 300.0}.asDiagonal();
+    sat->mass_properties.I_inv
+        = sat->mass_properties.I.inverse();           // TODO: make set I function
+    sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
+    sat->propagate_att = true;
 
     // binary body orbit initial conditions
     f64 separation = 100'000.0;
@@ -2173,6 +2181,7 @@ void run_prelim_rendering() {
     urath->x_tr.r = vec3d{-r_mag, 0.0, 0.0};
     urath->x_tr.v = vec3d{0.0, v_mag, 0.0};
     // sat orbit around urath
+    // sat->propagate_tr = false;
     f64 r_mag_sat = urath->semimajor_axis + 1000.0;
     f64 v_mag_sat = std::sqrt(urath->mu / r_mag_sat);
     sat->x_tr.r = urath->x_tr.r + vec3d{r_mag_sat, 0.0, 0.0};
@@ -2210,43 +2219,95 @@ void run_prelim_rendering() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
 
     InitWindow(screenWidth, screenHeight, "Basic Window");
-    SetTargetFPS(60);
 
     Camera3D camera;
-    camera.position = {100000, 100000, 100000};
-    camera.fovy = 90;
+    vec3f cam_pos = vec3f{1.0, 1.0, 1.0} * 75000;
+    camera.position = eig_to_rl(cam_pos);
+    camera.fovy = 45;
     camera.projection = CAMERA_PERSPECTIVE;
     camera.up = eig_to_rl(axis_z);
     camera.target = eig_to_rl(origin);
     rlSetClipPlanes(1.0e3, 1.0e6);
 
-    dt = 250.0;
+    dt = 50.0;
 
-    Mesh sphere_mesh = GenMeshSphere(1., 10, 10);
-    auto sphere_model = LoadModelFromMesh(sphere_mesh);
-    sphere_model.transform = MatrixIdentity();
-    Image checker_pattern = GenImageChecked(8, 8, 1, 1, BLUE, RED);
+    i32 sphere_i = 16;
+    Image checker_pattern = GenImageChecked(
+        sphere_i,
+        sphere_i,
+        1,
+        1,
+        {120, 120, 200, 255},
+        {80, 80, 150, 255}
+    );
     Texture2D texture = LoadTextureFromImage(checker_pattern);
-    UnloadImage(checker_pattern);
+
+    Mesh sphere_mesh = GenMeshSphere(1., sphere_i, sphere_i);
+    Model sphere_model = LoadModelFromMesh(sphere_mesh);
+    sphere_model.transform = MatrixIdentity();
     sphere_model.materials[0] = LoadMaterialDefault();
     sphere_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
 
-    while (!WindowShouldClose()) {
+    checker_pattern = GenImageChecked(2, 2, 1, 1, BLUE, RED);
+    texture = LoadTextureFromImage(checker_pattern);
+    Mesh cube_mesh = GenMeshCube(1.f, 1.f, 1.f);
+    Model cube_model = LoadModelFromMesh(cube_mesh);
+    cube_model.transform = MatrixIdentity();
+    cube_model.materials[0] = LoadMaterialDefault();
+    cube_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
 
+    vec3f earth_size;
+    earth_size << earth->semimajor_axis, earth->semimajor_axis, earth->semimajor_axis;
+    vec3f sat_size = vec3f{100.0, 200.0, 300.0} / 1000.0; // km
+
+    UnloadImage(checker_pattern);
+
+    SetTargetFPS(60);
+    while (!WindowShouldClose()) {
+        // f32 fps = 1./GetFrameTime();
+        // std::println("{}",fps);
         BeginDrawing();
         BeginMode3D(camera);
         ClearBackground(Color({30, 30, 30, 255}));
 
         stats += step_world(world, dt, cfg);
-        if (!stats.success) break;
-        vec3f size;
-        size << earth->semimajor_axis, earth->semimajor_axis, earth->semimajor_axis;
+        if (!stats.success) {
+            std::println("Simulation Failure");
+            break;
+        }
 
-        Matrix M_earth = make_transform(earth->x_tr, earth->x_att, size);
-        DrawMesh(sphere_mesh, sphere_model.materials[0], M_earth);
+        f32 o_axis_scale = 25000.0f;
+        draw_axes(StateTr{}, StateAtt{}, o_axis_scale);
+        draw_axes(StateTr{}, StateAtt{}, -o_axis_scale);
 
-        Matrix M_urath = make_transform(urath->x_tr, urath->x_att, size);
-        DrawMesh(sphere_mesh, sphere_model.materials[0], M_urath);
+        f32 grid_scale = 100000;
+        f32 grid_increment = 1000;
+        vec2f grid_min = vec2f{-1, -1} * grid_scale;
+        vec2f grid_max = vec2f{1, 1} * grid_scale;
+        draw_grid(
+            grid_min,
+            grid_max,
+            vec2f{grid_increment, grid_increment},
+            GridPlane::XY,
+            true,
+            Color{240,240,240, 45}
+        );
+
+        Matrix M_earth = make_transform(earth->x_tr, earth->x_att, earth_size);
+        sphere_model.transform = M_earth;
+        DrawModel(sphere_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, BLUE);
+        draw_axes(earth->x_tr, earth->x_att, earth->semimajor_axis * 2.0f);
+
+        Matrix M_urath = make_transform(urath->x_tr, urath->x_att, earth_size);
+        sphere_model.transform = M_urath;
+        DrawModel(sphere_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, BLUE);
+        draw_axes(urath->x_tr, urath->x_att, urath->semimajor_axis * 2.0f);
+
+        f32 sat_scale = 5000.0f;
+        Matrix M_sat = make_transform(sat->x_tr, sat->x_att, sat_size, sat_scale);
+        cube_model.transform = M_sat;
+        DrawModel(cube_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, BLUE);
+        draw_axes(sat->x_tr, sat->x_att, sat_scale);
 
         EndMode3D();
         EndDrawing();

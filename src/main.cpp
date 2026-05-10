@@ -114,7 +114,7 @@ int main() {
     //     std::println("J_error =  {}", (J - earth->J.segment(0, degree)));
     //     std::cout << "C =\n" << C << std::endl;
     // }
-    run_prelim_rendering();
+    run_make_transform_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

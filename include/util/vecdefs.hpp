@@ -212,9 +212,13 @@ const mat11f mat11f0 = mat11f::Zero();
 const mat12f mat12f0 = mat12f::Zero();
 
 const vec3d origin = vec3d0;
+const vec3f originf = vec3f0;
 const vec3d axis_x = vec3d{1.0, 0.0, 0.0};
 const vec3d axis_y = vec3d{0.0, 1.0, 0.0};
 const vec3d axis_z = vec3d{0.0, 0.0, 1.0};
+const vec3f axis_xf = vec3f{1.0f, 0.0f, 0.0f};
+const vec3f axis_yf = vec3f{0.0f, 1.0f, 0.0f};
+const vec3f axis_zf = vec3f{0.0f, 0.0f, 1.0f};
 
 template <typename T, int N>
 inline vec<f32, N> vf32(const vec<T, N>& v) {

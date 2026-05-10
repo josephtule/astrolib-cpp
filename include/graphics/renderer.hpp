@@ -12,11 +12,6 @@ struct RenderInstance {
     Color tint;
 };
 
-struct ModelAsset {
-    // model asset = a single model multiple instances can call
-    Model model;
-};
-
 enum struct BodyRenderKind {
     Cube,       // default for satellites
     Ellipsoid,  // default for celestials
@@ -57,8 +52,3 @@ inline AssetId choose_asset(const RenderComponent& rc, const BuiltInAssets& buil
 
     return builtin.unit_cube;
 }
-
-
-
-
-
