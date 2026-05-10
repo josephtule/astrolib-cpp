@@ -2139,7 +2139,7 @@ void run_tle_diag(std::string filename) {
     }
 }
 
-void run_make_transform_diag() {
+void run_make_transform_draw_diag() {
     World world;
 
     // Earth
@@ -2213,7 +2213,7 @@ void run_make_transform_diag() {
             continue;
         }
         // rotation not correct, TLE in TEME
-        sat_i->x_tr.r = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.r); 
+        sat_i->x_tr.r = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.r);
         sat_i->x_tr.v = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.v);
         sat_i->x_tr += earth->x_tr;
         sat_i->propagate_tr = true;
@@ -2226,17 +2226,11 @@ void run_make_transform_diag() {
     WorldStepperConfig cfg;
     cfg.step_translation = true;
     cfg.step_attitude = true;
-    cfg.substeps = 10;
+    cfg.substeps = 1;
     cfg.ticks = 1;
     cfg.time_scale = 1.0;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
-
-    f64 t_span = period;
-    f64 t0 = 0.0;
-    i32 n_steps = 100000;
-    f64 dt = t_span / n_steps;
-    world.reset_time(t0);
 
     WorldStateSnapshot world_snapshot = world.capture_checkpoint();
 
@@ -2260,7 +2254,7 @@ void run_make_transform_diag() {
     camera.target = eig_to_rl(origin);
     rlSetClipPlanes(1.0e3, 1.0e6);
 
-    dt = 50.0;
+    f64 dt = 50.0;
 
     i32 sphere_i = 16;
     Image checker_pattern = GenImageChecked(sphere_i, sphere_i, 1, 1, RAYWHITE, GRAY);
@@ -2286,10 +2280,11 @@ void run_make_transform_diag() {
 
     UnloadImage(checker_pattern);
 
-    SetTargetFPS(60);
+    // SetTargetFPS(60);
     while (!WindowShouldClose()) {
-        // f32 fps = 1./GetFrameTime();
-        // std::println("{}",fps);
+        f32 fps = 1. / GetFrameTime();
+        std::println("{}", fps);
+
         BeginDrawing();
         BeginMode3D(camera);
         ClearBackground(Color({30, 30, 30, 255}));
@@ -2342,4 +2337,97 @@ void run_make_transform_diag() {
         EndMode3D();
         EndDrawing();
     }
+}
+
+void run_staged_attitude_gravity_diag() {
+    print_diag_title("Staged Attitude Diagnostic");
+
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->name = "Earth";
+    earth->gravity_model = GravityModel::spherical_harmonics;
+    earth->degree = 4;
+    earth->order = 4;
+    bool gfc_ok = read_gfc(
+        pwd + "/assets/EGM2008.gfc.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    earth->propagate_tr = false;
+    earth->propagate_att = false;
+    earth->attitude_model = CelestialAttitudeModel::simple_spin;
+    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
+    earth->set_spin_rate(earth->spin_rate() * 4);
+
+    // satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    sat->propagate_tr = true;
+    sat->propagate_att = false;
+    sat->x_tr
+        = classical_to_rv(8000, 0.15, 10.0, 10.0, 10.0, 0, earth->mu, UAngle::degree);
+    sat->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
+    sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
+
+    // integration options
+    WorldStepperConfig cfg;
+    cfg.step_translation = true;
+    cfg.step_attitude = true;
+    cfg.substeps = 1;
+    cfg.ticks = 1;
+    cfg.time_scale = 1.0;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+
+    f64 t_span = 10000;
+    f64 t0 = 0.0;
+    i32 n_steps = 10000;
+    f64 dt = t_span / n_steps;
+    world.reset_time(t0);
+
+    WorldStateSnapshot world_snapshot = world.capture_checkpoint();
+
+    WorldStepperStats stats;
+    auto prop = [&]() {
+        stats.success = true;
+        for (i32 i = 0; i < n_steps; ++i) {
+            stats += step_world(world, dt, cfg);
+            if (!stats.success) break;
+        }
+    };
+
+    auto run_case = [&](GravityModel gravity_model, std::string name) {
+        world.restore_checkpoint_state(world_snapshot);
+        earth->gravity_model = gravity_model;
+        earth->attitude_model = CelestialAttitudeModel::fixed;
+        earth->propagate_att = false;
+        prop();
+        StateTr xf_fixed = sat->x_tr;
+        WorldStepperStats stats_fixed = stats;
+
+        world.restore_checkpoint_state(world_snapshot);
+        earth->gravity_model = gravity_model;
+        earth->attitude_model = CelestialAttitudeModel::simple_spin;
+        earth->propagate_att = true;
+        prop();
+        StateTr xf_rot = sat->x_tr;
+        WorldStepperStats stats_rot = stats;
+
+        StateTr x_err = xf_fixed - xf_rot;
+
+        std::println("{} Fixed Success = {}", name, stats_fixed.success);
+        std::println("{} Rotating Success = {}", name, stats_rot.success);
+        std::println("{} Position Difference = {}", name, x_err.r.norm());
+        std::println("{} Velocity Difference = {}", name, x_err.v.norm());
+        std::println();
+    };
+
+    run_case(GravityModel::pointmass, "Pointmass");
+    run_case(GravityModel::spherical_harmonics, "Spherical Harmonics");
+    run_case(GravityModel::zonal, "Zonal");
 }

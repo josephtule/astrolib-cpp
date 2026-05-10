@@ -242,57 +242,17 @@ bool World::emits_radiation(EntityId id) const {
 }
 
 vec3d World::gravity_accel_from(EntityId target_id, EntityId source_id) const {
-    vec3d a = vec3d0;
-
-    if (!emits_gravity(source_id)) return a;
-    if (target_id == source_id) return a;
     const auto target = body(target_id);
-    // const auto source = dynamic_cast<const Celestial*>(body(source_id));
     const auto source = celestial(source_id);
-    if (target == nullptr || source == nullptr) return a;
+    if (target == nullptr || source == nullptr) return vec3d0;
 
-    vec3d r_rel_inertial = target->x_tr.r - source->x_tr.r;
-    switch (source->gravity_model) {
-    case GravityModel::spherical_harmonics: {
-        vec4d q_BN = source->x_att.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
-        // Body fixed relative position for spherical harmonic gravity perturbations
-        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
-        vec3d a_body = accel_gravity_spherical_harmonics(
-            r_rel_body,
-            source->mu,
-            source->mean_radius,
-            source->degree,
-            source->order,
-            source->C,
-            source->S
-        ); // Acceleration in body fixed frame
-        a = ep_rotate_fast_passive(q_NB, a_body);
-        break;
-    }
-    case GravityModel::zonal: {
-        vec4d q_BN = source->x_att.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
-        // Body fixed relative position for zonal gravity perturbations
-        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
-        vec3d a_body = accel_gravity_zonal(
-            r_rel_body,
-            source->mu,
-            source->mean_radius,
-            source->degree,
-            source->J
-        ); // Acceleration in body fixed frame
-        a = ep_rotate_fast_passive(q_NB, a_body);
-        break;
-    }
-    case GravityModel::pointmass: {
-        a = accel_gravity_pointmass(r_rel_inertial, source->mu);
-        break;
-    }
-    default:
-    }
-
-    return a;
+    return gravity_accel_from(
+        target_id,
+        target->x_tr,
+        source_id,
+        source->x_tr,
+        source->x_att
+    );
 }
 
 vec3d World::gravity_accel_from(
@@ -300,56 +260,16 @@ vec3d World::gravity_accel_from(
     const StateTr& x_target,
     EntityId source_id
 ) const {
-    vec3d a = vec3d0;
-    if (!this->emits_gravity(source_id)) return vec3d0;
-    if (target_id == source_id) return vec3d0;
-
-    const auto target = body(target_id);
     const auto source = celestial(source_id);
-    if (target == nullptr || source == nullptr) return vec3d0;
+    if (source == nullptr) return vec3d0;
 
-    vec3d r_rel_inertial = x_target.r - source->x_tr.r;
-    switch (source->gravity_model) {
-    case GravityModel::spherical_harmonics: {
-        vec4d q_BN = source->x_att.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
-        // Body fixed relative position for spherical harmonic gravity perturbations
-        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
-        vec3d a_body = accel_gravity_spherical_harmonics(
-            r_rel_body,
-            source->mu,
-            source->mean_radius,
-            source->degree,
-            source->order,
-            source->C,
-            source->S
-        ); // Acceleration in body fixed frame
-        a = ep_rotate_fast_passive(q_NB, a_body);
-        break;
-    }
-    case GravityModel::zonal: {
-        vec4d q_BN = source->x_att.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
-        // Body fixed relative position for zonal gravity perturbations
-        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
-        vec3d a_body = accel_gravity_zonal(
-            r_rel_body,
-            source->mu,
-            source->mean_radius,
-            source->degree,
-            source->J
-        ); // Acceleration in body fixed frame
-        a = ep_rotate_fast_passive(q_NB, a_body);
-        break;
-    }
-    case GravityModel::pointmass: {
-        a = accel_gravity_pointmass(r_rel_inertial, source->mu);
-        break;
-    }
-    default:
-    }
-
-    return a;
+    return gravity_accel_from(
+        target_id,
+        x_target,
+        source_id,
+        source->x_tr,
+        source->x_att
+    );
 }
 
 vec3d World::gravity_accel_from(
@@ -358,56 +278,16 @@ vec3d World::gravity_accel_from(
     EntityId source_id,
     const StateTr& x_source
 ) const {
-    vec3d a = vec3d0;
-
-    if (!this->emits_gravity(source_id)) return vec3d0;
-    if (target_id == source_id) return vec3d0;
-    const auto target = body(target_id);
     const auto source = celestial(source_id);
-    if (target == nullptr || source == nullptr) return vec3d0;
+    if (source == nullptr) return vec3d0;
 
-    vec3d r_rel_inertial = x_target.r - x_source.r;
-    switch (source->gravity_model) {
-    case GravityModel::spherical_harmonics: {
-        vec4d q_BN = source->x_att.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
-        // Body fixed relative position for spherical harmonic gravity perturbations
-        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
-        vec3d a_body = accel_gravity_spherical_harmonics(
-            r_rel_body,
-            source->mu,
-            source->mean_radius,
-            source->degree,
-            source->order,
-            source->C,
-            source->S
-        ); // Acceleration in body fixed frame
-        a = ep_rotate_fast_passive(q_NB, a_body);
-        break;
-    }
-    case GravityModel::zonal: {
-        vec4d q_BN = source->x_att.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
-        // Body fixed relative position for zonal gravity perturbations
-        vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
-        vec3d a_body = accel_gravity_zonal(
-            r_rel_body,
-            source->mu,
-            source->mean_radius,
-            source->degree,
-            source->J
-        ); // Acceleration in body fixed frame
-        a = ep_rotate_fast_passive(q_NB, a_body);
-        break;
-    }
-    case GravityModel::pointmass: {
-        a = accel_gravity_pointmass(r_rel_inertial, source->mu);
-        break;
-    }
-    default:
-    }
-
-    return a;
+    return gravity_accel_from(
+        target_id,
+        x_target,
+        source_id,
+        x_source,
+        source->x_att
+    );
 }
 
 vec3d World::gravity_accel_from(
@@ -417,7 +297,7 @@ vec3d World::gravity_accel_from(
     const StateTr& x_tr_source,
     const StateAtt& x_att_source
 ) const {
-   vec3d a = vec3d0;
+    vec3d a = vec3d0;
 
     if (!this->emits_gravity(source_id)) return vec3d0;
     if (target_id == source_id) return vec3d0;
@@ -429,7 +309,7 @@ vec3d World::gravity_accel_from(
     switch (source->gravity_model) {
     case GravityModel::spherical_harmonics: {
         vec4d q_BN = x_att_source.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
+        vec4d q_NB = ep_conj(q_BN);  // [NB]: B -> N
         // Body fixed relative position for spherical harmonic gravity perturbations
         vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
         vec3d a_body = accel_gravity_spherical_harmonics(
@@ -445,8 +325,8 @@ vec3d World::gravity_accel_from(
         break;
     }
     case GravityModel::zonal: {
-        vec4d q_BN = source->x_att.q; // [BN]: N -> B
-        vec4d q_NB = ep_conj(q_BN);   // [NB]: B -> N
+        vec4d q_BN = x_att_source.q; // [BN]: N -> B
+        vec4d q_NB = ep_conj(q_BN);  // [NB]: B -> N
         // Body fixed relative position for zonal gravity perturbations
         vec3d r_rel_body = ep_rotate_fast_passive(q_BN, r_rel_inertial);
         vec3d a_body = accel_gravity_zonal(
@@ -455,7 +335,7 @@ vec3d World::gravity_accel_from(
             source->mean_radius,
             source->degree,
             source->J
-        ); // Acceleration in body fixed frame
+        );                                        // Acceleration in body fixed frame
         a = ep_rotate_fast_passive(q_NB, a_body); // rotate back to inertial
         break;
     }
@@ -466,9 +346,7 @@ vec3d World::gravity_accel_from(
     default:
     }
 
-    return a; 
-
-
+    return a;
 }
 
 // TODO: optimize two way accelerations somehow

@@ -7,11 +7,11 @@
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
+#include "graphics/raygen.hpp"
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
-#include "graphics/raygen.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -98,6 +98,7 @@ int main() {
     // run_body_fixed_gravity_timing_diag();
     // run_moving_source_world_diag();
     // run_tle_diag(pwd + "/assets/tle_fake.txt");
+    // run_make_transform_draw_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
@@ -114,7 +115,7 @@ int main() {
     //     std::println("J_error =  {}", (J - earth->J.segment(0, degree)));
     //     std::cout << "C =\n" << C << std::endl;
     // }
-    run_make_transform_diag();
+    run_staged_attitude_gravity_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
