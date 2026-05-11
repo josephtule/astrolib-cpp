@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/earth_orientation.hpp"
+#include "core/state.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "util/constants.hpp"
@@ -304,6 +305,20 @@ inline vec3d stat_target_rel_enu(
         stat_llh_body(1),
         angle_in
     );
+}
+
+inline vec4d stat_att_enu_from_detic(
+    const StateAtt& x_anchor_att,
+    const vec3d& llh,
+    UAngle angle_in = UAngle::radian
+) {
+    // rotation to position on anchor, from BCBF (in lat/lon) to ENU
+    mat3d R_ENU_BCBF = stat_rot_enu_from_detic(llh, angle_in);
+    // rotation of anchor orientation, from sim inertial to BCBF
+    mat3d R_BCBF_I = ep_to_dcm(x_anchor_att.q);
+    mat3d R_ENU_I = R_ENU_BCBF * R_BCBF_I; // compose rotations
+
+    return dcm_to_ep(R_ENU_I);
 }
 
 // inline vec3d azel_from_radec(){

@@ -99,6 +99,7 @@ int main() {
     // run_moving_source_world_diag();
     // run_tle_diag(pwd + "/assets/tle_fake.txt");
     // run_make_transform_draw_diag();
+    // run_staged_attitude_gravity_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
@@ -115,7 +116,7 @@ int main() {
     //     std::println("J_error =  {}", (J - earth->J.segment(0, degree)));
     //     std::cout << "C =\n" << C << std::endl;
     // }
-    run_staged_attitude_gravity_diag();
+    run_render_pipeline_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

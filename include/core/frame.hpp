@@ -12,7 +12,7 @@ enum struct FrameType {
 };
 
 struct FrameTransform {
-    vec4d q = q_default;
+    vec4d q = q_identity;
     vec3d r = vec3d0;
     // optional:
     vec3d v = vec3d0;

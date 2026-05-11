@@ -20,6 +20,7 @@
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
 
+#include "graphics/renderer.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
@@ -109,7 +110,7 @@ void run_zonal_orientation_diag(
     vec4d earth_q0 = earth->x_att.q;
 
     // pointmass (no orientation)
-    earth->x_att.q = q_default;
+    earth->x_att.q = q_identity;
     earth->gravity_model = GravityModel::pointmass;
     vec3d a_point = world.gravity_accel_from(sat_id, earth_id);
 
@@ -119,7 +120,7 @@ void run_zonal_orientation_diag(
 
     // zonal (no orientation)
     earth->gravity_model = GravityModel::zonal;
-    earth->x_att.q = q_default;
+    earth->x_att.q = q_identity;
     vec3d a_zonal = world.gravity_accel_from(sat_id, earth_id);
 
     // zonal (tilted)
@@ -284,7 +285,7 @@ void run_epkde(
 ) {
     Celestial* earth = world.celestial(earth_id);
 
-    vec4d q = q_default;
+    vec4d q = q_identity;
     vec3d w = 7.292115000000000e-05 * axis_z;
 
     vec4d q_dot = k_eulerparams(q, w);
@@ -1639,7 +1640,7 @@ void run_world_stepper_diag() {
         stat->mass_properties.mass = 500.0;
         stat->mass_properties.principal_axes = true;
         stat->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
-        stat->x_att.q = q_default;
+        stat->x_att.q = q_identity;
         stat->x_att.w = {0, 0, 0.01};
         stat->propagate_tr = true;
         stat->propagate_att = true;
@@ -1653,7 +1654,7 @@ void run_world_stepper_diag() {
         sat->mass_properties.mass = 500.0;
         sat->mass_properties.principal_axes = true;
         sat->mass_properties.I.diagonal() = vec3d{100.0, 200.0, 300.0};
-        sat->x_att.q = q_default;
+        sat->x_att.q = q_identity;
         sat->x_att.w = {0, 0, 0.01};
         sat->x_tr = x0;
         sat->propagate_tr = true;
@@ -1737,7 +1738,7 @@ void run_body_fixed_gravity_timing_diag() {
         f64 dt = 0.01;
         i32 n_steps = static_cast<i32>(t_span / dt);
 
-        earth->x_att.q = q_default;
+        earth->x_att.q = q_identity;
         earth->x_att.w = {0.0, 0.0, spin_rate};
         earth->attitude_model = CelestialAttitudeModel::simple_spin;
         earth->propagate_att = true;
@@ -1783,7 +1784,7 @@ void run_body_fixed_gravity_timing_diag() {
         earth->propagate_tr = false;
         earth->propagate_att = true;
         earth->x_tr.r = vec3d0;
-        earth->x_att.q = q_default;
+        earth->x_att.q = q_identity;
         earth->x_att.w = {0.0, 0.0, 0.1};
         sat->x_tr.r = {7000.0, 500.0, 1000.0};
 
@@ -1820,7 +1821,7 @@ void run_body_fixed_gravity_timing_diag() {
 
         // point-mass
         earth->gravity_model = GravityModel::pointmass;
-        earth->x_att.q = q_default;
+        earth->x_att.q = q_identity;
         vec3d a_pm_0 = world.gravity_accel_on(sat_id);
         vec3d a_pm_stage = world.gravity_accel_on(sat_id, sat->x_tr);
         earth->x_att.q = q_spin;
@@ -1841,7 +1842,7 @@ void run_body_fixed_gravity_timing_diag() {
         world.restore_checkpoint_state(world_snapshot);
         earth->gravity_model = GravityModel::zonal;
         earth->degree = 2;
-        earth->x_att.q = q_default;
+        earth->x_att.q = q_identity;
         vec3d a_zonal_0 = world.gravity_accel_on(sat_id);
         vec3d a_zonal_stage = world.gravity_accel_on(sat_id, sat->x_tr);
         earth->x_att.q = q_spin;
@@ -1866,7 +1867,7 @@ void run_body_fixed_gravity_timing_diag() {
         earth->S = matXd::Zero(earth->degree + 1, earth->order + 1);
         earth->C(2, 2) = 1.0e-6;
         earth->S(2, 1) = -5.0e-7;
-        earth->x_att.q = q_default;
+        earth->x_att.q = q_identity;
         vec3d a_sphh_0 = world.gravity_accel_on(sat_id);
         vec3d a_sphh_stage = world.gravity_accel_on(sat_id, sat->x_tr);
         earth->x_att.q = q_spin;
@@ -2205,21 +2206,27 @@ void run_make_transform_draw_diag() {
         earth->mu,
         num_sats_tle
     );
+    if (!read_tle_ok) {
+        std::println("TLE Read Failed");
+        return;
+    }
+
     for (i32 i = 0; i < sats.size(); ++i) {
         EntityId sat_i_id = world.insert_satellite(std::move(sats[i]));
         Satellite* sat_i = world.satellite(sat_i_id);
         if (sat_i == nullptr) {
-            std::println("oops");
+            std::println("TLE Satellite Insert Failed");
             continue;
         }
-        // rotation not correct, TLE in TEME
+        // for visuals only, TLE/SGP4 is TEME, not sim inertial
         sat_i->x_tr.r = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.r);
         sat_i->x_tr.v = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.v);
         sat_i->x_tr += earth->x_tr;
+        sat_i->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
+        sat_i->x_att.w = vec3d{0.000001, 0.0001, 0.000001} * i;
         sat_i->propagate_tr = true;
         sat_i->propagate_att = false;
     }
-    if (!read_tle_ok) return;
     svec<EntityId> sat_ids = world.satellite_ids();
 
     // integration options
@@ -2280,11 +2287,8 @@ void run_make_transform_draw_diag() {
 
     UnloadImage(checker_pattern);
 
-    // SetTargetFPS(60);
+    SetTargetFPS(60);
     while (!WindowShouldClose()) {
-        f32 fps = 1. / GetFrameTime();
-        std::println("{}", fps);
-
         BeginDrawing();
         BeginMode3D(camera);
         ClearBackground(Color({30, 30, 30, 255}));
@@ -2329,7 +2333,7 @@ void run_make_transform_draw_diag() {
             Matrix M_sat = make_transform(sat_i->x_tr, sat_i->x_att, sat_size, sat_scale);
             cube_model.transform = M_sat;
             DrawModel(cube_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, RED);
-            if (sat->propagate_att) {
+            if (sat_i->propagate_att) {
                 draw_axes(sat_i->x_tr, sat_i->x_att, sat_scale);
             }
         }
@@ -2430,4 +2434,123 @@ void run_staged_attitude_gravity_diag() {
     run_case(GravityModel::pointmass, "Pointmass");
     run_case(GravityModel::spherical_harmonics, "Spherical Harmonics");
     run_case(GravityModel::zonal, "Zonal");
+}
+
+void run_render_pipeline_diag() {
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->name = "Earth";
+    earth->gravity_model = GravityModel::spherical_harmonics;
+    earth->degree = 4;
+    earth->order = 4;
+    bool gfc_ok = read_gfc(
+        pwd + "/assets/EGM2008.gfc.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    earth->propagate_tr = false;
+    earth->propagate_att = true;
+    earth->attitude_model = CelestialAttitudeModel::simple_spin;
+    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
+    earth->set_spin_rate(earth->spin_rate() * 4);
+    BuiltinRenderAssets assets;
+
+    // satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    sat->propagate_tr = true;
+    sat->propagate_att = true;
+    sat->x_tr
+        = classical_to_rv(8000, 0.15, 10.0, 10.0, 10.0, 0, earth->mu, UAngle::degree);
+    sat->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
+    sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
+
+    // station
+    EntityId stat_id = world.spawn_station();
+    Station* stat = world.station(stat_id);
+    world.set_stat_anchor_detic(stat_id, earth_id, vec3d{0.0, 0.0, 0.0});
+
+    // integrator
+    WorldStepperConfig cfg;
+    cfg.step_translation = true;
+    cfg.step_attitude = true;
+    cfg.substeps = 1;
+    cfg.ticks = 10000;
+    cfg.time_scale = 1.0;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+
+    f64 t0 = 0.0;
+    f64 dt = 1.0 / cfg.ticks * 10.0;
+    world.reset_time(t0);
+    WorldStepperStats stats;
+    stats.success = true;
+
+    // windowing and graphics
+    int screenWidth = 960;
+    int screenHeight = 800;
+
+    SetTraceLogLevel(LOG_WARNING);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
+
+    InitWindow(screenWidth, screenHeight, "Basic Window");
+
+    Camera3D camera;
+    vec3f cam_pos = vec3f{1.0, 1.0, 1.0} * 25000;
+    camera.position = eig_to_rl(cam_pos);
+    camera.fovy = 45;
+    camera.projection = CAMERA_PERSPECTIVE;
+    camera.up = eig_to_rl(axis_z);
+    camera.target = eig_to_rl(origin);
+    rlSetClipPlanes(1.0e3, 1.0e6);
+
+    i32 sphere_i = 16;
+    Image checker_pattern = GenImageChecked(sphere_i, sphere_i, 1, 1, RAYWHITE, GRAY);
+    Texture2D texture = LoadTextureFromImage(checker_pattern);
+
+    Mesh sphere_mesh = GenMeshSphere(1., sphere_i, sphere_i);
+    Model sphere_model = LoadModelFromMesh(sphere_mesh);
+    sphere_model.transform = MatrixIdentity();
+    sphere_model.materials[0] = LoadMaterialDefault();
+    sphere_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
+
+    checker_pattern = GenImageChecked(2, 2, 1, 1, RAYWHITE, GRAY);
+    texture = LoadTextureFromImage(checker_pattern);
+    Mesh cube_mesh = GenMeshCube(1.0f, 1.0f, 1.0f);
+    Model cube_model = LoadModelFromMesh(cube_mesh);
+    cube_model.transform = MatrixIdentity();
+    cube_model.materials[0] = LoadMaterialDefault();
+    cube_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
+
+    Mesh cylinder_mesh = GenMeshCylinder(1.0f, 1.0f, sphere_i);
+    Model cylinder_model = LoadModelFromMesh(cylinder_mesh);
+    cylinder_model.transform = MatrixIdentity();
+    cylinder_model.materials[0] = LoadMaterialDefault();
+    cylinder_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
+
+    UnloadImage(checker_pattern);
+
+    SetTargetFPS(60);
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        BeginMode3D(camera);
+        ClearBackground(Color({30, 30, 30, 255}));
+
+        RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets);
+        render_scene_snapshot(scene, sphere_model, cube_model, cylinder_model);
+
+        stats += step_world(world, dt, cfg);
+        if (!stats.success) {
+            std::println("Simulation Failure");
+            break;
+        }
+
+        EndMode3D();
+        EndDrawing();
+    }
 }

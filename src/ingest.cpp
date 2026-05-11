@@ -227,7 +227,7 @@ bool convert_TLE(TLEData& tle, f64 mu, UAngle angle_out) {
     if (!eccen_anom_ok) return false;
 
     // true anomaly
-    f64 ta = std::atan2(
+    tle.ta = std::atan2(
         std::sqrt(1.0 - tle.ecc * tle.ecc) * std::sin(tle.eccen_anom),
         std::cos(tle.eccen_anom) - tle.ecc
     );

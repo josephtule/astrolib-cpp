@@ -5,6 +5,10 @@
 #include "raymath.h"
 #include "util/vecdefs.hpp"
 
+inline const Vector2 rlvec20 = Vector2{0.0f, 0.0f};
+inline const Vector3 rlvec30 = Vector3{0.0f, 0.0f, 0.0f};
+inline const Vector4 rlvec40 = Vector4{0.0f, 0.0f, 0.0f, 0.0f};
+
 template <typename T>
 inline vec3<T> rl_to_eig(const Vector3& v) {
     return vec3<T>{v.x, v.y, v.z};
@@ -33,17 +37,27 @@ inline Vector4 eig_to_rl(const vec4<T>& v) {
 
 template <class T>
 inline void set_rotation(Matrix& M, const mat3<T>& R) {
+    // first row
     M.m0 = R(0, 0);
     M.m4 = R(0, 1);
     M.m8 = R(0, 2);
 
+    // second row
     M.m1 = R(1, 0);
     M.m5 = R(1, 1);
     M.m9 = R(1, 2);
 
+    // third row
     M.m2 = R(2, 0);
     M.m6 = R(2, 1);
     M.m10 = R(2, 2);
+}
+template <class T>
+inline mat3<T> get_scaledrot(const Matrix& M) {
+    mat3<T> R;
+    R << M.m0, M.m4, M.m8, M.m1, M.m5, M.m9, M.m2, M.m6, M.m10;
+
+    return R;
 }
 
 template <class T>
@@ -79,7 +93,7 @@ inline Matrix make_transform(
     const StateTr& x_tr,
     const StateAtt& x_att,
     const vec3f& size,
-    f32 scale = 1
+    f32 scale = 1.0f
 ) {
     mat3f S = size.asDiagonal() * scale;
 

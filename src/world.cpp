@@ -281,13 +281,7 @@ vec3d World::gravity_accel_from(
     const auto source = celestial(source_id);
     if (source == nullptr) return vec3d0;
 
-    return gravity_accel_from(
-        target_id,
-        x_target,
-        source_id,
-        x_source,
-        source->x_att
-    );
+    return gravity_accel_from(target_id, x_target, source_id, x_source, source->x_att);
 }
 
 vec3d World::gravity_accel_from(
@@ -428,6 +422,35 @@ StateTr World::stat_x_tr_inertial(EntityId station_id) const {
     x_tr.r = stat_r_inertial(station_id);
     x_tr.v = stat_v_inertial(station_id);
     return x_tr;
+}
+
+vec4d World::stat_q_inertial(EntityId station_id) const {
+    // passive attitude from sim inertial to station-local ENU or inertial orientation
+    vec4d q_inertial = q_identity;
+    const Station* stat = station(station_id);
+    if (stat == nullptr) return q_inertial;
+    if (!stat->anchored) return stat->x_att.q;
+    if (stat->anchor_id == kInvalidEntityId) return q_inertial;
+
+    const Body* anchor = body(stat->anchor_id);
+    if (anchor == nullptr) return q_inertial;
+
+    return stat_att_enu_from_detic(anchor->x_att, stat->llh_BCBF);
+}
+
+StateAtt World::stat_x_att_inertial(EntityId station_id) const {
+    StateAtt x_att;
+    const Station* stat = station(station_id);
+    if (stat == nullptr) return x_att;
+    if (!stat->anchored) return stat->x_att;
+    if (stat->anchor_id == kInvalidEntityId) return x_att;
+
+    const Body* anchor = body(stat->anchor_id);
+    if (anchor == nullptr) return x_att;
+
+    // anchored stations don't need x_att.w, TODO: maybe add later for sensor
+    x_att.q = stat_q_inertial(station_id);
+    return x_att;
 }
 
 bool World::set_stat_anchor_detic(

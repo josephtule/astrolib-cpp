@@ -71,3 +71,4 @@ void run_moving_source_world_diag();
 void run_tle_diag(std::string filename);
 void run_make_transform_draw_diag();
 void run_staged_attitude_gravity_diag();
+void run_render_pipeline_diag();
