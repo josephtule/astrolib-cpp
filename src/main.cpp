@@ -117,6 +117,7 @@ int main() {
     //     std::cout << "C =\n" << C << std::endl;
     // }
     run_render_pipeline_diag();
+    run_world_workspace_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

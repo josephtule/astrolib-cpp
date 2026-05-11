@@ -15,6 +15,20 @@ struct WorldStepperConfig {
     bool step_attitude = false;
 };
 
+struct WorldStepperWorkspace {
+    svec<EntityId> propagated_tr_ids;
+    svec<EntityId> propagated_att_ids;
+    svec<EntityId> celestial_att_ids;
+    svec<EntityId> gravity_source_ids;
+    svec<EntityId> source_att_ids;
+    bool dirty = true;
+};
+
+void rebuild_world_stepper_workspace(
+    const World& world,
+    WorldStepperWorkspace& workspace
+);
+
 struct WorldStepperStats {
     bool success = true;
     i32 ticks_completed = 0;
@@ -45,3 +59,10 @@ DerivTr derivtr_world(const World& world, EntityId id, const StateTr& x);
 bool step_tr_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg);
 
 WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg);
+
+WorldStepperStats step_world(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& cfg,
+    WorldStepperWorkspace& wksp
+);

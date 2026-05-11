@@ -22,6 +22,7 @@ struct Body {
 
     bool emits_gravity = false;
     bool emits_radiation = false;
+    bool has_atmosphere = false; // currently does nothing
 };
 
 enum struct GravityModel { pointmass, zonal, spherical_harmonics };

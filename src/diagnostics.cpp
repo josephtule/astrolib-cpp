@@ -2471,25 +2471,34 @@ void run_render_pipeline_diag() {
     sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
 
     // station
-    EntityId stat_id = world.spawn_station();
-    Station* stat = world.station(stat_id);
-    world.set_stat_anchor_detic(stat_id, earth_id, vec3d{0.0, 0.0, 0.0});
+    EntityId stat1_id = world.spawn_station();
+    Station* stat1 = world.station(stat1_id);
+    world.set_stat_anchor_detic(stat1_id, earth_id, vec3d{0.0, 0.0, 0.0});
+
+    EntityId stat2_id = world.spawn_station();
+    Station* stat2 = world.station(stat2_id);
+    world.set_stat_anchor_detic(stat2_id, earth_id, vec3d{45.0, 45.0, 0.0});
+
+    EntityId stat3_id = world.spawn_station();
+    Station* stat3 = world.station(stat3_id);
+    world.set_stat_anchor_detic(stat3_id, earth_id, vec3d{90.0, 90.0, 0.0});
 
     // integrator
     WorldStepperConfig cfg;
     cfg.step_translation = true;
     cfg.step_attitude = true;
     cfg.substeps = 1;
-    cfg.ticks = 10000;
+    cfg.ticks = 1000;
     cfg.time_scale = 1.0;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
     f64 t0 = 0.0;
-    f64 dt = 1.0 / cfg.ticks * 10.0;
+    f64 dt = 1.0 / cfg.ticks * 20.0;
     world.reset_time(t0);
     WorldStepperStats stats;
     stats.success = true;
+    WorldStepperWorkspace wksp;
 
     // windowing and graphics
     int screenWidth = 960;
@@ -2509,7 +2518,7 @@ void run_render_pipeline_diag() {
     camera.target = eig_to_rl(origin);
     rlSetClipPlanes(1.0e3, 1.0e6);
 
-    i32 sphere_i = 16;
+    i32 sphere_i = 32;
     Image checker_pattern = GenImageChecked(sphere_i, sphere_i, 1, 1, RAYWHITE, GRAY);
     Texture2D texture = LoadTextureFromImage(checker_pattern);
 
@@ -2544,7 +2553,7 @@ void run_render_pipeline_diag() {
         RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets);
         render_scene_snapshot(scene, sphere_model, cube_model, cylinder_model);
 
-        stats += step_world(world, dt, cfg);
+        stats += step_world(world, dt, cfg, wksp);
         if (!stats.success) {
             std::println("Simulation Failure");
             break;
@@ -2552,5 +2561,74 @@ void run_render_pipeline_diag() {
 
         EndMode3D();
         EndDrawing();
+    }
+}
+
+void run_world_workspace_diag() {
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->name = "Earth";
+    earth->gravity_model = GravityModel::spherical_harmonics;
+    earth->degree = 4;
+    earth->order = 4;
+    bool gfc_ok = read_gfc(
+        pwd + "/assets/EGM2008.gfc.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    earth->propagate_tr = false;
+    earth->propagate_att = true;
+    earth->attitude_model = CelestialAttitudeModel::simple_spin;
+    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
+    earth->set_spin_rate(earth->spin_rate() * 4);
+    BuiltinRenderAssets assets;
+
+    // satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    sat->propagate_tr = true;
+    sat->propagate_att = true;
+    sat->x_tr
+        = classical_to_rv(8000, 0.15, 10.0, 10.0, 10.0, 0, earth->mu, UAngle::degree);
+    sat->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
+    sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
+
+    // station
+    EntityId stat1_id = world.spawn_station();
+    Station* stat1 = world.station(stat1_id);
+    world.set_stat_anchor_detic(stat1_id, earth_id, vec3d{0.0, 0.0, 0.0});
+
+    // integrator
+    WorldStepperConfig cfg;
+    cfg.step_translation = true;
+    cfg.step_attitude = true;
+    cfg.substeps = 1;
+    cfg.ticks = 1;
+    cfg.time_scale = 1.0;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+
+    f64 t_span = 10000;
+    f64 t0 = 0.0;
+    i32 n_steps = 10000;
+    f64 dt = t_span / n_steps;
+    world.reset_time(t0);
+
+    WorldStepperStats stats;
+    stats.success = true;
+
+    WorldStepperWorkspace wksp;
+
+    for (i32 i = 0; i < n_steps; ++i) {
+        stats += step_world(world, dt, cfg, wksp);
+        if (!stats.success) {
+            std::println("Integration Failed");
+            break;
+        }
     }
 }

@@ -109,7 +109,7 @@ inline RenderComponent default_render_component_station(
     rc.tint = tint;
     // TODO: placeholder for visualization
     rc.size << 10.0f, 10.0f, 10.0f;
-    rc.scale = 50.0f;
+    rc.scale = 25.0f;
 
     return rc;
 }

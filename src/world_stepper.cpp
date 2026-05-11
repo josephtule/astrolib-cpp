@@ -75,6 +75,36 @@ static svec<EntityId> celestial_att_ids(const World& world) {
     return ids;
 }
 
+static svec<EntityId> gravity_source_ids(const World& world) {
+    svec<EntityId> ids;
+
+    for (EntityId id : world.active_entity_ids()) {
+        const Body* body = world.body(id);
+        if (body == nullptr) continue;
+        if (!body->emits_gravity) continue;
+        ids.push_back(id);
+    }
+    return ids;
+}
+
+static svec<EntityId> source_att_ids(const World& world) {
+    svec<EntityId> ids;
+
+    for (EntityId id : world.active_entity_ids()) {
+        const Body* body = world.body(id);
+        if (body == nullptr) continue;
+        // NOTE: atmosphere currently always false
+        if (!body->emits_gravity && !body->has_atmosphere) continue;
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr) continue;
+        if (!cel->propagate_att) continue;
+        if (cel->attitude_model == CelestialAttitudeModel::fixed) continue;
+        ids.push_back(id);
+    }
+
+    return ids;
+}
+
 DerivTr derivtr_world(const World& world, EntityId id, const StateTr& x) {
     // TODO: source states still read from world state
     // not fully staged yet for moving sources
@@ -210,10 +240,13 @@ struct DerivAttWeight {
     f64 scale = 0.0;
 };
 
-static WorldTrStage build_tr_stage(const World& world) {
+static WorldTrStage build_tr_stage(
+    const World& world,
+    const WorldStepperWorkspace& wksp
+) {
     WorldTrStage stage;
 
-    svec<EntityId> ids = propagated_tr_ids(world);
+    svec<EntityId> ids = wksp.propagated_tr_ids;
     for (EntityId id : ids) {
         const Body* body = world.body(id);
         if (body == nullptr) continue;
@@ -224,10 +257,15 @@ static WorldTrStage build_tr_stage(const World& world) {
     return stage;
 }
 
-static WorldAttStage build_source_att_stage(const World& world) {
+static WorldAttStage build_source_att_stage(
+    const World& world,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
     WorldAttStage stage;
+    if (!stage_source_att) return stage;
 
-    svec<EntityId> ids = world.active_entity_ids();
+    svec<EntityId> ids = wksp.source_att_ids;
     for (EntityId id : ids) {
         const Body* body = world.body(id);
         if (body == nullptr || !body->emits_gravity) continue; // TODO: add has atmosphere
@@ -326,25 +364,27 @@ static vec3d staged_gravity_accel_on(
     const WorldTrStage& stage_tr,
     const WorldAttStage& stage_att,
     EntityId target_id,
-    const StateTr& x_tr_target
+    const StateTr& x_tr_target,
+    const WorldStepperWorkspace& wksp
 ) {
     vec3d a = vec3d0;
     const Body* target = world.body(target_id);
     if (target == nullptr) return a;
 
-    svec<EntityId> ids = world.active_entity_ids();
-    for (EntityId id : ids) {
-        if (target_id == id) continue;
-        const Body* body = world.body(id);
+    svec<EntityId> source_ids = wksp.gravity_source_ids;
+    for (EntityId source_id : source_ids) {
+        if (target_id == source_id) continue;
+        const Body* body = world.body(source_id);
         if (body == nullptr || !body->emits_gravity) continue;
-        const Celestial* source = world.celestial(id);
+        const Celestial* source = world.celestial(source_id);
         if (source == nullptr) continue;
-        StateTr x_tr_source = source_tr_from_stage_or_world(world, stage_tr, id);
-        StateAtt x_att_source = source_att_from_stage_or_world(world, stage_att, id);
+        StateTr x_tr_source = source_tr_from_stage_or_world(world, stage_tr, source_id);
+        StateAtt x_att_source
+            = source_att_from_stage_or_world(world, stage_att, source_id);
         a += world.gravity_accel_from(
             target_id,
             x_tr_target,
-            id,
+            source_id,
             x_tr_source,
             x_att_source
         );
@@ -358,22 +398,36 @@ static DerivTr derivtr_world_staged(
     const WorldTrStage& stage_tr,
     const WorldAttStage& stage_att,
     EntityId target_id,
-    const StateTr& x_tr_target
+    const StateTr& x_tr_target,
+    const WorldStepperWorkspace& wksp
 ) {
     DerivTr dx;
     dx.dr = x_tr_target.v;
-    dx.dv = staged_gravity_accel_on(world, stage_tr, stage_att, target_id, x_tr_target);
+    dx.dv = staged_gravity_accel_on(
+        world,
+        stage_tr,
+        stage_att,
+        target_id,
+        x_tr_target,
+        wksp
+    );
     return dx;
 }
 
-static bool step_tr_world_staged_rk1(World& world, f64 t, f64 dt) {
+static bool step_tr_world_staged_rk1(
+    World& world,
+    f64 t,
+    f64 dt,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
     // rk1 stage 1
-    WorldTrStage stage0_tr = build_tr_stage(world);
-    WorldAttStage stage0_att = build_source_att_stage(world);
+    WorldTrStage stage0_tr = build_tr_stage(world, wksp);
+    WorldAttStage stage0_att = build_source_att_stage(world, wksp, stage_source_att);
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0);
+        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -388,14 +442,20 @@ static bool step_tr_world_staged_rk1(World& world, f64 t, f64 dt) {
     return true;
 }
 
-static bool step_tr_world_staged_rk2(World& world, f64 t, f64 dt) {
+static bool step_tr_world_staged_rk2(
+    World& world,
+    f64 t,
+    f64 dt,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
     // rk2 stage 1
-    WorldTrStage stage0_tr = build_tr_stage(world);
-    WorldAttStage stage0_att = build_source_att_stage(world);
+    WorldTrStage stage0_tr = build_tr_stage(world, wksp);
+    WorldAttStage stage0_att = build_source_att_stage(world, wksp, stage_source_att);
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0);
+        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk2 stage 2
@@ -407,7 +467,7 @@ static bool step_tr_world_staged_rk2(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1);
+        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -422,15 +482,21 @@ static bool step_tr_world_staged_rk2(World& world, f64 t, f64 dt) {
     return true;
 }
 
-static bool step_tr_world_staged_rk2heun(World& world, f64 t, f64 dt) {
-    WorldTrStage stage0_tr = build_tr_stage(world);
-    WorldAttStage stage0_att = build_source_att_stage(world);
+static bool step_tr_world_staged_rk2heun(
+    World& world,
+    f64 t,
+    f64 dt,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
+    WorldTrStage stage0_tr = build_tr_stage(world, wksp);
+    WorldAttStage stage0_att = build_source_att_stage(world, wksp, stage_source_att);
 
     // rk2 stage 1
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0);
+        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk2 stage 2
@@ -442,7 +508,7 @@ static bool step_tr_world_staged_rk2heun(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1);
+        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -457,14 +523,20 @@ static bool step_tr_world_staged_rk2heun(World& world, f64 t, f64 dt) {
     return true;
 }
 
-static bool step_tr_world_staged_rk2ralston(World& world, f64 t, f64 dt) {
+static bool step_tr_world_staged_rk2ralston(
+    World& world,
+    f64 t,
+    f64 dt,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
     // rk2 stage 1
-    WorldTrStage stage0_tr = build_tr_stage(world);
-    WorldAttStage stage0_att = build_source_att_stage(world);
+    WorldTrStage stage0_tr = build_tr_stage(world, wksp);
+    WorldAttStage stage0_att = build_source_att_stage(world, wksp, stage_source_att);
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0);
+        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk2 stage 2
@@ -476,7 +548,7 @@ static bool step_tr_world_staged_rk2ralston(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1);
+        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -491,14 +563,20 @@ static bool step_tr_world_staged_rk2ralston(World& world, f64 t, f64 dt) {
     return true;
 }
 
-static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
+static bool step_tr_world_staged_rk3(
+    World& world,
+    f64 t,
+    f64 dt,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
     // rk3 stage 1
-    WorldTrStage stage0_tr = build_tr_stage(world);
-    WorldAttStage stage0_att = build_source_att_stage(world);
+    WorldTrStage stage0_tr = build_tr_stage(world, wksp);
+    WorldAttStage stage0_att = build_source_att_stage(world, wksp, stage_source_att);
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0);
+        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk3 stage 2
@@ -510,7 +588,7 @@ static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1);
+        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     // rk3 stage 3
@@ -525,7 +603,7 @@ static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k3;
     for (EntityId id : stage2_tr.ids) {
         const StateTr& x2 = stage2_tr.x.at(id);
-        k3[id] = derivtr_world_staged(world, stage2_tr, stage2_att, id, x2);
+        k3[id] = derivtr_world_staged(world, stage2_tr, stage2_att, id, x2, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -540,14 +618,20 @@ static bool step_tr_world_staged_rk3(World& world, f64 t, f64 dt) {
     return true;
 }
 
-static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
+static bool step_tr_world_staged_rk4(
+    World& world,
+    f64 t,
+    f64 dt,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
     // rk4 stage 1
-    WorldTrStage stage0_tr = build_tr_stage(world);
-    WorldAttStage stage0_att = build_source_att_stage(world);
+    WorldTrStage stage0_tr = build_tr_stage(world, wksp);
+    WorldAttStage stage0_att = build_source_att_stage(world, wksp, stage_source_att);
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0);
+        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk4 stage 2
@@ -559,7 +643,7 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1);
+        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     // rk4 stage 3
@@ -571,7 +655,7 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k3;
     for (EntityId id : stage2_tr.ids) {
         const StateTr& x2 = stage2_tr.x.at(id);
-        k3[id] = derivtr_world_staged(world, stage2_tr, stage2_att, id, x2);
+        k3[id] = derivtr_world_staged(world, stage2_tr, stage2_att, id, x2, wksp);
     }
 
     // rk4 stage 4
@@ -583,7 +667,7 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     umap<EntityId, DerivTr> k4;
     for (EntityId id : stage3_tr.ids) {
         const StateTr& x3 = stage3_tr.x.at(id);
-        k4[id] = derivtr_world_staged(world, stage3_tr, stage3_att, id, x3);
+        k4[id] = derivtr_world_staged(world, stage3_tr, stage3_att, id, x3, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -599,22 +683,47 @@ static bool step_tr_world_staged_rk4(World& world, f64 t, f64 dt) {
     return true;
 }
 
-static bool step_tr_world_staged(World& world, f64 t, f64 dt, IntegratorType integrator) {
-    switch (integrator) {
-    case IntegratorType::rk1: return step_tr_world_staged_rk1(world, t, dt);
-    case IntegratorType::rk2: return step_tr_world_staged_rk2(world, t, dt);
-    case IntegratorType::rk2_heun: return step_tr_world_staged_rk2heun(world, t, dt);
+static bool step_tr_world_staged(
+    World& world,
+    f64 t,
+    f64 dt,
+    const WorldStepperConfig& cfg,
+    const WorldStepperWorkspace& wksp
+) {
+    bool stage_source_att = cfg.step_attitude;
+
+    switch (cfg.integrator_tr) {
+    case IntegratorType::rk1:
+        return step_tr_world_staged_rk1(world, t, dt, wksp, stage_source_att);
+    case IntegratorType::rk2:
+        return step_tr_world_staged_rk2(world, t, dt, wksp, stage_source_att);
+    case IntegratorType::rk2_heun:
+        return step_tr_world_staged_rk2heun(world, t, dt, wksp, stage_source_att);
     case IntegratorType::rk2_ralston:
-        return step_tr_world_staged_rk2ralston(world, t, dt);
-    case IntegratorType::rk3: return step_tr_world_staged_rk3(world, t, dt);
-    case IntegratorType::rk4: return step_tr_world_staged_rk4(world, t, dt);
+        return step_tr_world_staged_rk2ralston(world, t, dt, wksp, stage_source_att);
+    case IntegratorType::rk3:
+        return step_tr_world_staged_rk3(world, t, dt, wksp, stage_source_att);
+    case IntegratorType::rk4:
+        return step_tr_world_staged_rk4(world, t, dt, wksp, stage_source_att);
     }
 
     return false;
 }
 
 WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg) {
+    WorldStepperWorkspace wksp;
+    return step_world(world, dt, cfg, wksp);
+}
+
+WorldStepperStats step_world(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& cfg,
+    WorldStepperWorkspace& wksp
+) {
     WorldStepperStats stats{.success = false};
+    rebuild_world_stepper_workspace(world, wksp);
+
     if (cfg.substeps < 1) return stats;
     if (cfg.ticks < 1) return stats;
     if (!std::isfinite(cfg.time_scale) || cfg.time_scale <= 0.0) return stats;
@@ -622,8 +731,8 @@ WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg
     f64 dt_tick = dt * cfg.time_scale;
     f64 dt_sub = dt_tick / cfg.substeps;
 
-    svec<EntityId> att_ids = propagated_att_ids(world);
-    svec<EntityId> cel_att_ids = celestial_att_ids(world);
+    svec<EntityId> att_ids = wksp.propagated_att_ids;
+    svec<EntityId> cel_att_ids = wksp.celestial_att_ids;
 
     for (i32 tick = 0; tick < cfg.ticks; ++tick) {
         for (i32 substep = 0; substep < cfg.substeps; ++substep) {
@@ -633,7 +742,8 @@ WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg
                     world,
                     world.t_sim(),
                     dt_sub,
-                    cfg.integrator_tr
+                    cfg,
+                    wksp
                 );
                 if (!step_ok) {
                     stats.success = step_ok;
@@ -672,4 +782,16 @@ WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg
 
     stats.success = true;
     return stats;
+}
+
+void rebuild_world_stepper_workspace(const World& world, WorldStepperWorkspace& wksp) {
+    if (wksp.dirty) {
+        wksp.propagated_tr_ids = propagated_tr_ids(world);
+        wksp.propagated_att_ids = propagated_att_ids(world);
+        wksp.celestial_att_ids = celestial_att_ids(world);
+        wksp.gravity_source_ids = gravity_source_ids(world);
+        wksp.source_att_ids = source_att_ids(world);
+    }
+    wksp.dirty
+        = false; // TODO: dirty tracking not ready, use wskp overload for step_world
 }
