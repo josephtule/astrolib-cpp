@@ -2138,6 +2138,14 @@ void run_tle_diag(std::string filename) {
             if (i != num_sats - 1) std::println();
         }
     }
+
+    bool tle_should_fail = read_TLE_converted_single(
+        pwd + "/assets/tle_iss_fail.txt",
+        tle,
+        earth.mu,
+        2000
+    );
+    std::println("Read Bad TLE: {} (should fail)", tle_should_fail);
 }
 
 void run_make_transform_draw_diag() {
@@ -2453,6 +2461,10 @@ void run_render_pipeline_diag() {
         earth->degree,
         earth->order
     );
+    if (!gfc_ok) {
+        std::println("GFC Read Failed");
+        return;
+    }
     earth->propagate_tr = false;
     earth->propagate_att = true;
     earth->attitude_model = CelestialAttitudeModel::simple_spin;
@@ -2545,6 +2557,7 @@ void run_render_pipeline_diag() {
     UnloadImage(checker_pattern);
 
     SetTargetFPS(60);
+    bool paused = false;
     while (!WindowShouldClose()) {
         BeginDrawing();
         BeginMode3D(camera);
@@ -2553,10 +2566,23 @@ void run_render_pipeline_diag() {
         RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets);
         render_scene_snapshot(scene, sphere_model, cube_model, cylinder_model);
 
-        stats += step_world(world, dt, cfg, wksp);
-        if (!stats.success) {
-            std::println("Simulation Failure");
-            break;
+        if (IsKeyPressed(KEY_SPACE)) {
+            paused = !paused;
+        }
+        if (!paused) {
+            stats += step_world(world, dt, cfg, wksp);
+            if (!stats.success) {
+                std::println("Simulation Failure");
+                break;
+            }
+        }
+        svec<EntityId> stat_ids = world.station_ids();
+        for (EntityId stat_id : stat_ids) {
+            draw_axes(
+                world.stat_x_tr_inertial(stat_id),
+                world.stat_x_att_inertial(stat_id),
+                1000.0f
+            );
         }
 
         EndMode3D();
@@ -2565,6 +2591,8 @@ void run_render_pipeline_diag() {
 }
 
 void run_world_workspace_diag() {
+    print_diag_title("World Stepper Workspace");
+
     World world;
 
     // Earth
@@ -2581,12 +2609,15 @@ void run_world_workspace_diag() {
         earth->degree,
         earth->order
     );
+    if (!gfc_ok) {
+        std::println("GFC Load Failed");
+        return;
+    }
     earth->propagate_tr = false;
     earth->propagate_att = true;
     earth->attitude_model = CelestialAttitudeModel::simple_spin;
     earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
     earth->set_spin_rate(earth->spin_rate() * 4);
-    BuiltinRenderAssets assets;
 
     // satellite
     EntityId sat_id = world.spawn_satellite();
@@ -2600,7 +2631,6 @@ void run_world_workspace_diag() {
 
     // station
     EntityId stat1_id = world.spawn_station();
-    Station* stat1 = world.station(stat1_id);
     world.set_stat_anchor_detic(stat1_id, earth_id, vec3d{0.0, 0.0, 0.0});
 
     // integrator
@@ -2624,6 +2654,18 @@ void run_world_workspace_diag() {
 
     WorldStepperWorkspace wksp;
 
+    auto print_workspace = [&](const std::string& label) {
+        std::println("{} Propagated TR IDs = {}", label, wksp.propagated_tr_ids.size());
+        std::println("{} Propagated ATT IDs = {}", label, wksp.propagated_att_ids.size());
+        std::println("{} Celestial ATT IDs = {}", label, wksp.celestial_att_ids.size());
+        std::println("{} Gravity Source IDs = {}", label, wksp.gravity_source_ids.size());
+        std::println("{} Source ATT IDs = {}", label, wksp.source_att_ids.size());
+        std::println("{} Dirty = {}", label, wksp.dirty);
+    };
+
+    rebuild_world_stepper_workspace(world, wksp);
+    print_workspace("WORLD WKSP Initial");
+
     for (i32 i = 0; i < n_steps; ++i) {
         stats += step_world(world, dt, cfg, wksp);
         if (!stats.success) {
@@ -2631,4 +2673,12 @@ void run_world_workspace_diag() {
             break;
         }
     }
+
+    print_workspace("WORLD WKSP Final");
+    std::println("WORLD WKSP Success = {}", stats.success);
+    std::println("WORLD WKSP Ticks Completed = {}", stats.ticks_completed);
+    std::println("WORLD WKSP Substeps Completed = {}", stats.substeps_completed);
+    std::println("WORLD WKSP Time Advanced = {}", stats.dt_sim_advanced);
+    std::println("WORLD WKSP Final Time = {}", world.t_sim());
+    std::println("WORLD WKSP Expected Time = {}", t0 + t_span);
 }

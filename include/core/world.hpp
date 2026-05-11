@@ -127,7 +127,6 @@ class World {
     vec3d stat_v_inertial(EntityId station_id) const;
     StateTr stat_x_tr_inertial(EntityId station_id) const;
     vec4d stat_q_inertial(EntityId station_id) const;
-    vec3d stat_w_inertial(EntityId station_id) const;
     StateAtt stat_x_att_inertial(EntityId station_id) const;
     bool set_stat_anchor_detic(
         EntityId station_id,

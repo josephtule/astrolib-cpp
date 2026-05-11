@@ -5,6 +5,7 @@
 #include "core/state.hpp"
 #include "core/world.hpp"
 #include "graphics/raygen.hpp"
+#include "graphics/rdraw.hpp"
 #include "raylib.h"
 #include "raymath.h"
 #include "util/typedefs.hpp"
@@ -216,8 +217,7 @@ inline void render_scene_snapshot(
 
     // cylinders
     for (const RenderBodyInstance& inst : scene.cylinders) {
-        cylinder_model.transform
-            = inst.transform; // TODO: temporary, need to swap size too
+        cylinder_model.transform = inst.transform;
         DrawModel(cylinder_model, rlvec30, 1.0f, inst.tint);
     }
 

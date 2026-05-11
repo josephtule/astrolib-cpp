@@ -785,13 +785,11 @@ WorldStepperStats step_world(
 }
 
 void rebuild_world_stepper_workspace(const World& world, WorldStepperWorkspace& wksp) {
-    if (wksp.dirty) {
-        wksp.propagated_tr_ids = propagated_tr_ids(world);
-        wksp.propagated_att_ids = propagated_att_ids(world);
-        wksp.celestial_att_ids = celestial_att_ids(world);
-        wksp.gravity_source_ids = gravity_source_ids(world);
-        wksp.source_att_ids = source_att_ids(world);
-    }
-    wksp.dirty
-        = false; // TODO: dirty tracking not ready, use wskp overload for step_world
+    // TODO: add conditional
+    wksp.propagated_tr_ids = propagated_tr_ids(world);
+    wksp.propagated_att_ids = propagated_att_ids(world);
+    wksp.celestial_att_ids = celestial_att_ids(world);
+    wksp.gravity_source_ids = gravity_source_ids(world);
+    wksp.source_att_ids = source_att_ids(world);
+    wksp.dirty = false;
 }
