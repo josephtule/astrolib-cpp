@@ -2963,8 +2963,8 @@ void run_iod_lumve_ekf_init_diag() {
         );
         meas.z(0) += noise_unit(rng) * sigma_range_rate;
         meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
-        lumve_input.measurements.push_back(meas);
-        lumve_input.observer_states.push_back(x_tr_obsv2);
+        ekf_input.measurements.push_back(meas);
+        ekf_input.observer_states.push_back(x_tr_obsv2);
     }
 
     // solve offline ekf
