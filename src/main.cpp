@@ -97,27 +97,15 @@ int main() {
     // run_world_stepper_diag();
     // run_body_fixed_gravity_timing_diag();
     // run_moving_source_world_diag();
-    // run_tle_diag(pwd + "/assets/tle_fake.txt");
     // run_make_transform_draw_diag();
     // run_staged_attitude_gravity_diag();
-
+    // run_world_workspace_diag();
+    
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    // i32 degree = 100, order = 100;
-    // matXd C(degree, order);
-    // matXd S(degree, order);
-    // vecXd J(degree);
-    // bool gfc_ok = read_gfc(pwd + "/assets/EGM2008.gfc.txt", C, S, degree, order);
-    // std::println("GFC File Sucess: {}", gfc_ok);
-    // if (gfc_ok && degree + order < 36) {
-    //     zonal_coefs_from_C(J, C, degree);
-    //     std::println("J = {}", J);
-    //     std::println("J_error =  {}", (J - earth->J.segment(0, degree)));
-    //     std::cout << "C =\n" << C << std::endl;
-    // }
-    run_render_pipeline_diag();
-    run_world_workspace_diag();
+    run_tle_status_reader_diag();
+    // run_render_pipeline_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

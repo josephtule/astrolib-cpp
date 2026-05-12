@@ -2089,63 +2089,168 @@ void run_moving_source_world_diag() {
     std::println("Fixed Source Final Satellite Position = {}", x_sat_fixed.r);
 }
 
-void run_tle_diag(std::string filename) {
-    TLEData tle;
-    Celestial earth = wgs84();
-
-    bool tle_ok = read_TLE_converted_single(filename, tle, earth.mu, 1900);
-    Satellite sat = sat_from_tle_data(tle, earth.mu);
-
-    svec<std::unique_ptr<Satellite>> sats_idx;
-    svec<JulianDate> jds_idx;
-    svec<i32> idx = {0, 2};
-    bool tle_idx_ok = read_TLE_index(filename, sats_idx, jds_idx, idx, earth.mu, 1900);
-
-    print_diag_title("TLE Reader");
-    std::println("TLE Single Success: {} ---", tle_ok);
-    if (tle_ok) {
-        std::println("Satellite: {}", sat.name);
-        print_coe(coe_from_tle(tle));
-    }
-
-    std::println();
-
-    std::println("TLE Index Success: {} ---", tle_idx_ok);
-    if (tle_idx_ok) {
-        for (i32 i = 0; i < idx.size(); ++i) {
-            Satellite& sat_i = *sats_idx[i];
-            OEClassical coe = rv_to_classical(sat_i.x_tr, earth.mu);
-            std::println("Satellite: {}", sat_i.name);
-            print_coe(coe);
-            if (i != idx.size() - 1) std::println();
-        }
-    }
-
-    std::println();
-
-    svec<std::unique_ptr<Satellite>> sats_mult;
-    svec<JulianDate> jds_mult;
-    i32 num_sats = 3;
-    bool tle_mult_ok
-        = read_TLE_multiple(filename, sats_mult, jds_mult, earth.mu, num_sats, 1900);
-    std::println("TLE Multiple Success: {} ---", tle_mult_ok);
-    if (tle_mult_ok) {
-        for (i32 i = 0; i < num_sats; ++i) {
-            Satellite& sat_i = *sats_mult[i];
-            OEClassical coe = rv_to_classical(sat_i.x_tr, earth.mu);
-            std::println("Satellite: {}", sat_i.name);
-            print_coe(coe);
-            if (i != num_sats - 1) std::println();
-        }
-    }
-
-    bool tle_should_fail = read_TLE_converted_single(
-        pwd + "/assets/tle_iss_fail.txt",
-        tle,
-        earth.mu,
-        2000
+void print_tle_data_summary(const std::string& label, const TLEData& tle) {
+    std::println(
+        "{}: sat_id={}, sat_num={}, name='{}', converted={}, units={}, sma={}, "
+        "n_rad_s={}, jd={}",
+        label,
+        tle.sat_id,
+        tle.sat_num,
+        tle.name,
+        tle.converted,
+        i32(tle.units_angle),
+        tle.sma,
+        tle.n_rad_s,
+        jd_to_scalar(tle.jd_utc)
     );
-    std::println("Read Bad TLE: {} (should fail)", tle_should_fail);
+}
+
+void run_tle_status_reader_diag() {
+    print_diag_title("TLE Status Reader");
+
+    Celestial earth = wgs84();
+    TLEReadOptions raw_opts{.millennium = 2000};
+    TLEReadOptions conv_opts{
+        .millennium = 2000,
+        .convert = true,
+        .mu = earth.mu,
+        .angle_out = UAngle::radian
+    };
+
+    std::string tle_single_file = pwd + "/assets/tle_iss.txt";
+    TLEData tle_single;
+    TLEStatus single_status
+        = read_tle_data_single(tle_single_file, tle_single, conv_opts);
+    std::println("Single Status: {}", tle_status_string(single_status));
+    if (single_status == TLEStatus::ok) {
+        print_tle_data_summary("Single", tle_single);
+    }
+
+    std::println();
+
+    std::string tle_count_file = pwd + "/assets/tle_all.txt";
+    svec<TLEData> tles_count;
+    i32 count = 3;
+    TLEStatus count_status
+        = read_tle_data_count(tle_count_file, tles_count, count, conv_opts);
+    std::println(
+        "Count Status: {} --- count = {}",
+        tle_status_string(count_status),
+        tles_count.size()
+    );
+    if (count_status == TLEStatus::ok) {
+        for (i32 i = 0; i < tles_count.size(); ++i) {
+            print_tle_data_summary("Count[" + std::to_string(i) + "]", tles_count[i]);
+        }
+    }
+
+    std::println();
+
+    std::string tle_all_file = pwd + "/assets/tle_trunc.txt";
+    svec<TLEData> tles_all;
+    TLEStatus all_status = read_tle_data_all(tle_all_file, tles_all, raw_opts);
+    std::println(
+        "All Small Status: {} --- count = {}",
+        tle_status_string(all_status),
+        tles_all.size()
+    );
+    if (all_status == TLEStatus::ok && !tles_all.empty()) {
+        print_tle_data_summary("All[0]", tles_all.front());
+        print_tle_data_summary("All[last]", tles_all.back());
+    }
+
+    std::println();
+
+    std::string tle_idx_file = pwd + "/assets/tle_all.txt";
+    svec<TLEData> tles_idx;
+    svec<i32> idx = {0, 2, 4};
+    TLEStatus idx_status = read_tle_data_index(tle_idx_file, tles_idx, idx, conv_opts);
+    std::println(
+        "Index Status: {} --- count = {}",
+        tle_status_string(idx_status),
+        tles_idx.size()
+    );
+    if (idx_status == TLEStatus::ok) {
+        for (i32 i = 0; i < tles_idx.size(); ++i) {
+            print_tle_data_summary("Index[" + std::to_string(i) + "]", tles_idx[i]);
+        }
+    }
+
+    std::println();
+
+    std::string tle_satnum_file = pwd + "/assets/tle_all.txt";
+    TLEData tle_satnum;
+    i32 satnum = 25544;
+    TLEStatus satnum_status
+        = read_tle_data_single_satnum(tle_satnum_file, tle_satnum, satnum, conv_opts);
+    std::println("Single Satnum Status: {}", tle_status_string(satnum_status));
+    if (satnum_status == TLEStatus::ok) {
+        print_tle_data_summary("Satnum", tle_satnum);
+    }
+
+    svec<TLEData> tles_satnums;
+    svec<i32> satnums = {5, 11, 25544};
+    TLEStatus satnums_status
+        = read_tle_data_satnums(tle_satnum_file, tles_satnums, satnums, conv_opts);
+    std::println(
+        "Satnums Status: {} --- count = {}",
+        tle_status_string(satnums_status),
+        tles_satnums.size()
+    );
+    if (satnums_status == TLEStatus::ok) {
+        for (i32 i = 0; i < tles_satnums.size(); ++i) {
+            print_tle_data_summary("Satnums[" + std::to_string(i) + "]", tles_satnums[i]);
+        }
+    }
+
+    std::println();
+
+    TLEData tle_satid;
+    std::string satid = "T0058";
+    TLEStatus satid_status
+        = read_tle_data_single_satid(tle_satnum_file, tle_satid, satid, conv_opts);
+    std::println("Single Satid Status: {}", tle_status_string(satid_status));
+    if (satid_status == TLEStatus::ok) {
+        print_tle_data_summary("Satid", tle_satid);
+    }
+
+    svec<TLEData> tles_satids;
+    svec<std::string> satids = {"T0058", "T0059"};
+    TLEStatus satids_status
+        = read_tle_data_satids(tle_satnum_file, tles_satids, satids, conv_opts);
+    std::println(
+        "Satids Status: {} --- count = {}",
+        tle_status_string(satids_status),
+        tles_satids.size()
+    );
+    if (satids_status == TLEStatus::ok) {
+        for (i32 i = 0; i < tles_satids.size(); ++i) {
+            print_tle_data_summary("Satids[" + std::to_string(i) + "]", tles_satids[i]);
+        }
+    }
+
+    std::println();
+
+    TLEData tle_missing;
+    i32 satnum_missing = 99999999;
+    TLEStatus missing_status = read_tle_data_single_satnum(
+        tle_satnum_file,
+        tle_missing,
+        satnum_missing,
+        raw_opts
+    );
+    std::println(
+        "Missing Satnum Status: {} (should fail)",
+        tle_status_string(missing_status)
+    );
+
+    std::println();
+
+    std::string tle_fail_file = pwd + "/assets/tle_iss_fail.txt";
+    TLEData tle_bad;
+    TLEStatus bad_status
+        = read_tle_data_single(pwd + "/assets/tle_iss_fail.txt", tle_bad, raw_opts);
+    std::println("Bad Checksum Status: {} (should fail)", tle_status_string(bad_status));
 }
 
 void run_make_transform_draw_diag() {
@@ -2207,16 +2312,23 @@ void run_make_transform_draw_diag() {
     svec<std::unique_ptr<Satellite>> sats;
     svec<JulianDate> jds;
     i32 num_sats_tle = 20;
-    bool read_tle_ok = read_TLE_multiple(
-        pwd + "/assets/tle_all.txt",
-        sats,
-        jds,
-        earth->mu,
-        num_sats_tle
-    );
-    if (!read_tle_ok) {
-        std::println("TLE Read Failed");
+    TLEReadOptions tle_opts{
+        .millennium = 2000,
+        .convert = true,
+        .mu = earth->mu,
+        .angle_out = UAngle::radian
+    };
+    svec<TLEData> tles;
+    TLEStatus read_tle_status
+        = read_tle_data_count(pwd + "/assets/tle_all.txt", tles, num_sats_tle, tle_opts);
+    if (read_tle_status != TLEStatus::ok) {
+        std::println("TLE Read Failed: {}", tle_status_string(read_tle_status));
         return;
+    }
+    for (const TLEData& tle : tles) {
+        std::unique_ptr<Satellite> sat_tle = std::make_unique<Satellite>();
+        sat_from_tle_data(*sat_tle, tle, tle_opts);
+        sats.emplace_back(std::move(sat_tle));
     }
 
     for (i32 i = 0; i < sats.size(); ++i) {

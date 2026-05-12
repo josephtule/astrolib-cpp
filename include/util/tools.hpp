@@ -16,3 +16,15 @@ inline bool is_numeric(const std::string& s) {
 
     return !t.empty() && t.find_first_not_of("+-0123456789.eE") == std::string::npos;
 }
+
+inline std::string remove_returns(const std::string& s) {
+    std::string str;
+
+    for (char c : s) {
+        if (c != '\r' && c != '\n') {
+            str += c;
+        }
+    }
+
+    return str;
+}
