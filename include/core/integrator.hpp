@@ -2,7 +2,7 @@
 
 #include "util/typedefs.hpp"
 
-// generic explicit integrator steps live here
+// generic (unstaged) explicit integrator steps live here
 
 enum struct IntegratorType : i32 {
     rk1,

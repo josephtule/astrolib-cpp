@@ -33,14 +33,27 @@ struct Measurement {
 
 enum struct AzelInputFrame : i32 { enu, bcbf };
 struct MeasurementContext {
-    StateTr x_observer;
-    StateTr x_target;
+    StateTr x_tr_observer;
+    StateTr x_tr_target;
 
     // local station geometry, used only for azel
     bool has_station_local = false;
     AzelInputFrame azel_frame = AzelInputFrame::bcbf;
     vec3d station_llh = vec3d0; // [lat, lon, h], angle units from angle_in
 };
+
+inline MeasurementContext make_measurement_context(
+    const StateTr& x_tr_target,
+    const StateTr& x_tr_observer
+) {
+    // for non-azel measurements only, TODO: create one for azel
+
+    MeasurementContext ctx;
+    ctx.x_tr_observer = x_tr_observer;
+    ctx.x_tr_target = x_tr_target;
+
+    return ctx;
+}
 
 inline i32 measurement_dim(ObservationType type) {
     switch (type) {
@@ -63,8 +76,8 @@ inline vecXd predict_measurement(
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 ) {
-    const StateTr& x_target = ctx.x_target;
-    const StateTr& x_observer = ctx.x_observer;
+    const StateTr& x_target = ctx.x_tr_target;
+    const StateTr& x_observer = ctx.x_tr_observer;
     i32 dim = measurement_dim(type);
     vecXd measurement(dim);
 
@@ -81,13 +94,14 @@ inline vecXd predict_measurement(
         }
         switch (ctx.azel_frame) {
         case AzelInputFrame::enu: {
-            vec3d azel = azel_from_enu(ctx.x_target.r - ctx.x_observer.r, angle_out, tol);
+            vec3d azel
+                = azel_from_enu(ctx.x_tr_target.r - ctx.x_tr_observer.r, angle_out, tol);
             measurement = azel.segment(0, dim);
         } break;
         case AzelInputFrame::bcbf: {
             vec3d azel = azel_from_bcbf(
-                ctx.x_target.r,
-                ctx.x_observer.r,
+                ctx.x_tr_target.r,
+                ctx.x_tr_observer.r,
                 ctx.station_llh(0),
                 ctx.station_llh(1),
                 angle_in,
@@ -135,8 +149,8 @@ inline vecXd predict_measurement(
         return vecXd{}; // NOTE: azel unsupported in this overload
 
     MeasurementContext ctx;
-    ctx.x_target = x_target;
-    ctx.x_observer = x_observer;
+    ctx.x_tr_target = x_target;
+    ctx.x_tr_observer = x_observer;
     return predict_measurement(type, ctx, UAngle::degree, angle_out, tol);
 }
 
@@ -180,10 +194,10 @@ inline matXd jacobian_fd_measurement(
     for (i32 i = 0; i < cols; ++i) {
         f64 eps_i = i < 3 ? eps_pos : eps_vel;
 
-        vec6d x_target_pert_vec = statetr_to_vec6(ctx.x_target);
+        vec6d x_target_pert_vec = statetr_to_vec6(ctx.x_tr_target);
         x_target_pert_vec(i) += eps_i;
         StateTr x_target_pert = vec6_to_statetr(x_target_pert_vec);
-        ctx_pert.x_target = x_target_pert;
+        ctx_pert.x_tr_target = x_target_pert;
         vecXd z_pert = predict_measurement(type, ctx_pert, angle_in, angle_out, tol);
         if (z_pert.size() != rows) return matXd{};
         vecXd residual = measurement_residual(type, z_pert, z0, angle_out);
@@ -198,7 +212,7 @@ inline matXd jacobian_radec(
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 ) {
-    vec3d r_rel = ctx.x_target.r - ctx.x_observer.r;
+    vec3d r_rel = ctx.x_tr_target.r - ctx.x_tr_observer.r;
     f64 rho2 = r_rel.squaredNorm();
     f64 rho = std::sqrt(rho2);
     f64 rhoxy2 = r_rel.segment<2>(0).squaredNorm();

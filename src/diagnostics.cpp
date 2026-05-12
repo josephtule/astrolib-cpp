@@ -842,12 +842,12 @@ void run_od_prop_diag(const Celestial& body) {
 void run_measurement_jacobian_diag() {
     MeasurementContext ctx;
     // zero observer state
-    ctx.x_observer.r = vec3d{0.0, 0.0, 0.0};
-    ctx.x_observer.v = vec3d{0.0, 0.0, 0.0};
+    ctx.x_tr_observer.r = vec3d{0.0, 0.0, 0.0};
+    ctx.x_tr_observer.v = vec3d{0.0, 0.0, 0.0};
 
     // arbitrary target state
-    ctx.x_target.r = vec3d{7000.0, 1000.0, 1300.0};
-    ctx.x_target.v = vec3d{-0.5, 7.2, 1.0};
+    ctx.x_tr_target.r = vec3d{7000.0, 1000.0, 1300.0};
+    ctx.x_tr_target.v = vec3d{-0.5, 7.2, 1.0};
 
     matXd H_fd = jacobian_fd_measurement(ObservationType::radec, ctx);
     matXd H_an = jacobian_radec(ctx);
@@ -963,9 +963,11 @@ void run_batch_od_diag() {
                 input.dyn_config
             );
             world.set_stat_anchor_detic(stat_id, earth_id, llh);
-            StateTr x_obs = world.stat_x_tr_inertial(stat_id);
+            StateTr x_tr_obsv = world.stat_x_tr_inertial(stat_id);
 
             Measurement meas;
+            meas.target_id = sat_id;
+            meas.observer_id = stat_id;
 
             if (diag_case.use_radec) {
                 // get measurement (RADec)
@@ -983,7 +985,7 @@ void run_batch_od_diag() {
                 meas.z(1) += noise_unit(rng) * sigma_rad;
                 meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_range) {
                 // get measurement (range)
@@ -1000,7 +1002,7 @@ void run_batch_od_diag() {
                 meas.z(0) += noise_unit(rng) * sigma_range;
                 meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_range_rate) {
                 // get measurement (range_rate)
@@ -1017,7 +1019,7 @@ void run_batch_od_diag() {
                 meas.z(0) += noise_unit(rng) * sigma_range_rate;
                 meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_pos) {
                 // get measurement (pos)
@@ -1036,7 +1038,7 @@ void run_batch_od_diag() {
                 meas.z(2) += noise_unit(rng) * sigma_r;
                 meas.R = matXd::Identity(3, 3) * sigma_r * sigma_r;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_pos_vel) {
                 // get measurement (posvel)
@@ -1060,7 +1062,7 @@ void run_batch_od_diag() {
                 meas.R.block(0, 0, 3, 3) = mat3d1 * sigma_r * sigma_r;
                 meas.R.block(3, 3, 3, 3) = mat3d1 * sigma_v * sigma_v;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
         }
 
@@ -1436,9 +1438,11 @@ void run_ekf_world_diag() {
 
             // use stationary observer for now
             world.set_stat_anchor_detic(stat_id, earth_id, llh);
-            StateTr x_obs = world.stat_x_tr_inertial(stat_id);
+            StateTr x_tr_obsv = world.stat_x_tr_inertial(stat_id);
 
             Measurement meas;
+            meas.target_id = sat_id;
+            meas.observer_id = stat_id;
 
             if (diag_case.use_radec) {
                 // get measurement (RADec)
@@ -1456,7 +1460,7 @@ void run_ekf_world_diag() {
                 meas.z(1) += noise_unit(rng) * sigma_rad;
                 meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_range) {
                 // get measurement (range)
@@ -1473,7 +1477,7 @@ void run_ekf_world_diag() {
                 meas.z(0) += noise_unit(rng) * sigma_range;
                 meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_range_rate) {
                 // get measurement (range_rate)
@@ -1490,7 +1494,7 @@ void run_ekf_world_diag() {
                 meas.z(0) += noise_unit(rng) * sigma_range_rate;
                 meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_pos) {
                 // get measurement (pos)
@@ -1509,7 +1513,7 @@ void run_ekf_world_diag() {
                 meas.z(2) += noise_unit(rng) * sigma_r;
                 meas.R = matXd::Identity(3, 3) * sigma_r * sigma_r;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
             if (diag_case.use_pos_vel) {
                 // get measurement (posvel)
@@ -1533,7 +1537,7 @@ void run_ekf_world_diag() {
                 meas.R.block(0, 0, 3, 3) = mat3d1 * sigma_r * sigma_r;
                 meas.R.block(3, 3, 3, 3) = mat3d1 * sigma_v * sigma_v;
                 input.measurements.push_back(meas);
-                input.observer_states.push_back(x_obs);
+                input.observer_states.push_back(x_tr_obsv);
             }
         }
 
@@ -2618,4 +2622,403 @@ void run_world_workspace_diag() {
     std::println("WORLD WKSP Time Advanced = {}", stats.dt_sim_advanced);
     std::println("WORLD WKSP Final Time = {}", world.t_sim());
     std::println("WORLD WKSP Expected Time = {}", t0 + t_span);
+}
+
+void run_world_measurement_context_diag() {
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->name = "Earth";
+
+    // satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    sat->x_tr
+        = classical_to_rv(8000, 0.15, 10.0, 10.0, 10.0, 0, earth->mu, UAngle::degree);
+
+    // station
+    EntityId stat_id = world.spawn_station();
+    world.set_stat_anchor_detic(stat_id, earth_id, vec3d{0.0, 0.0, 0.0});
+
+    print_diag_title("World Measurement Context Diagnostic");
+
+    struct MeasurementContextDiagCase {
+        const char* name = "";
+        ObservationType type = ObservationType::radec;
+        UAngle angle_out = UAngle::radian;
+    };
+
+    svec<MeasurementContextDiagCase> cases{
+        {.name = "RA/Dec", .type = ObservationType::radec, .angle_out = UAngle::degree},
+        {.name = "Range", .type = ObservationType::range, .angle_out = UAngle::radian},
+        {.name = "Range Rate",
+         .type = ObservationType::range_rate,
+         .angle_out = UAngle::radian},
+        {.name = "Az/El", .type = ObservationType::azel, .angle_out = UAngle::degree}
+    };
+
+    for (const auto& diag_case : cases) {
+        vecXd z_world = world_predict_measurement(
+            world,
+            diag_case.type,
+            stat_id,
+            sat_id,
+            UAngle::radian,
+            diag_case.angle_out
+        );
+
+        MeasurementContext ctx;
+        ODStatus ctx_status = make_world_station_measurement_context(
+            world,
+            ctx,
+            stat_id,
+            sat->x_tr,
+            diag_case.type
+        );
+
+        vecXd z_ctx = predict_measurement(
+            diag_case.type,
+            ctx,
+            UAngle::radian,
+            diag_case.angle_out
+        );
+
+        std::println("{} Status: {}", diag_case.name, od_status_string(ctx_status));
+        std::println("{} via World: {}", diag_case.name, z_world);
+        std::println("{} via Context: {}", diag_case.name, z_ctx);
+        std::println("{} Error: {}", diag_case.name, (z_world - z_ctx).norm());
+    }
+}
+
+void run_iod_lumve_ekf_init_diag() {
+    vec3d llh1 = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    vec3d llh2 = vec3d{45.0, 30.0, 0.0};
+    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh1);
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId stat1_id = scenario.stat_id;
+    EntityId stat2_id = world.spawn_station();
+    world.set_stat_anchor_detic(stat2_id, earth_id, llh2);
+    EntityId sat_id = scenario.sat_id;
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
+
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+    sat->x_tr = x0_truth;
+
+    f64 t_meas0 = 0.0;
+    f64 t_measf = 600.0;
+    i32 N_meas = 100 * 2; // half lumve, half ekf
+    i32 split_idx = N_meas / 2;
+    vecXd t_meas = vecXd::LinSpaced(N_meas, t_meas0, t_measf);
+    f64 sigma_rad = 1e-5;
+    f64 sigma_range = 1e-3;
+    f64 sigma_range_rate = 1e-6;
+    f64 sigma_r = 1e-3;
+    f64 sigma_v = 1e-6;
+
+    WorldStepperConfig cfg;
+    cfg.step_translation = true;
+    cfg.step_attitude = true;
+    cfg.substeps = 1;
+    cfg.ticks = 10;
+    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+    // radec + range measurements only
+
+    WorldStateSnapshot world_snapshot = world.capture_checkpoint();
+
+    i32 n_steps = 100;
+    f64 dt;
+
+    WorldStepperStats stats;
+    auto prop = [&]() {
+        stats.success = true;
+        for (i32 i = 0; i < n_steps; ++i) {
+            stats += step_world(world, dt, cfg);
+            if (!stats.success) break;
+        }
+    };
+
+    // IOD
+    std::array<f64, 3> ts;
+    std::array<vec2d, 3> radecs;
+    std::array<vec3d, 3> Rs;
+    std::array<vec3d, 3> rs;
+
+    f64 t0 = 0.0;
+    ts[1] = t0;
+    radecs[1]
+        = world_predict_measurement(world, ObservationType::radec, stat1_id, sat_id);
+    Rs[1] = world.stat_x_tr_inertial(stat1_id).r; // ignore checks for now
+    rs[1] = sat->x_tr.r;
+
+    f64 t_span = -30.0;
+    dt = t_span / n_steps;
+    prop();
+    ts[0] = t0 + t_span;
+    radecs[0]
+        = world_predict_measurement(world, ObservationType::radec, stat1_id, sat_id);
+    Rs[0] = world.stat_x_tr_inertial(stat1_id).r; // ignore checks for now
+    rs[0] = sat->x_tr.r;
+
+    world.restore_checkpoint_state(world_snapshot);
+
+    t_span = 30.0;
+    dt = t_span / n_steps;
+    prop();
+    ts[2] = t0 + t_span;
+    radecs[2]
+        = world_predict_measurement(world, ObservationType::radec, stat1_id, sat_id);
+    Rs[2] = world.stat_x_tr_inertial(stat1_id).r; // ignore checks for now
+    rs[2] = sat->x_tr.r;
+
+    world.restore_checkpoint_state(world_snapshot);
+
+    IODAnglesObs3 gauss_input = iod_angles3_from_radec(ts, radecs, Rs, UAngle::radian);
+    IODResult iod_res = iod_gauss(gauss_input, earth->mu);
+    // IODResult iod_res
+    //     = iod_herrickgibbs(ts[0], ts[1], ts[2], rs[0], rs[1], rs[2], earth->mu);
+
+    bool use_iod_initial_guess = true; // keep IOD optional for now
+    // LUMVE
+    ODBatchInput lumve_input;
+    bool iod_guess_ok = iod_res.success && statetr_to_vec6(iod_res.x).allFinite();
+    if (use_iod_initial_guess && iod_guess_ok) {
+        lumve_input.x0_guess = iod_res.x;
+    } else {
+        lumve_input.x0_guess = x0_truth;
+        lumve_input.x0_guess.r += vec3d{1.0, -1.0, 0.5};
+        lumve_input.x0_guess.v += vec3d{1e-4, -1e-4, 2.5e-4};
+    }
+    lumve_input.dyn_config.model = ODDynamicsModel::two_body;
+    lumve_input.dyn_config.mu = earth->mu;
+    lumve_input.t0 = 0.0;
+    lumve_input.max_iters = 10;
+    lumve_input.prop_steps = 100;
+    lumve_input.tol_dx = 1e-6;
+    lumve_input.tol_residual = 1e-8;
+
+    std::mt19937_64 rng(12345);
+    std::normal_distribution<f64> noise_unit(0.0, 1.0);
+
+    // create measurements
+    for (i32 i = 0; i < split_idx; ++i) {
+        sat->x_tr = propagate_tr_od(
+            0.0,
+            x0_truth,
+            t_meas(i),
+            lumve_input.prop_steps,
+            lumve_input.dyn_config
+        ); // TODO: use world stepper?
+        // stat1 -> radec + range
+        world.set_stat_anchor_detic(stat1_id, earth_id, llh1);
+        StateTr x_tr_obsv1 = world.stat_x_tr_inertial(stat1_id);
+
+        // stat2 -> range-rate
+        world.set_stat_anchor_detic(stat2_id, earth_id, llh2);
+        StateTr x_tr_obsv2 = world.stat_x_tr_inertial(stat2_id);
+
+        Measurement meas;
+        meas.target_id = sat_id;
+        meas.observer_id = stat1_id;
+
+        // get measurement (RADec)
+        meas.t = t_meas(i);
+        meas.type = ObservationType::radec;
+        meas.z = world_predict_measurement(
+            world,
+            meas.type,
+            stat1_id,
+            sat_id,
+            UAngle::radian,
+            UAngle::radian
+        );
+        meas.z(0) += noise_unit(rng) * sigma_rad;
+        meas.z(1) += noise_unit(rng) * sigma_rad;
+        meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+        lumve_input.measurements.push_back(meas);
+        lumve_input.observer_states.push_back(x_tr_obsv1);
+
+        // get measurement (range)
+        meas.t = t_meas(i);
+        meas.type = ObservationType::range;
+        meas.z = world_predict_measurement(
+            world,
+            meas.type,
+            stat1_id,
+            sat_id,
+            UAngle::radian,
+            UAngle::radian
+        );
+        meas.z(0) += noise_unit(rng) * sigma_range;
+        meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+        lumve_input.measurements.push_back(meas);
+        lumve_input.observer_states.push_back(x_tr_obsv1);
+
+        // get measurement (range-rate)
+        meas.t = t_meas(i);
+        meas.type = ObservationType::range_rate;
+        meas.z = world_predict_measurement(
+            world,
+            meas.type,
+            stat2_id,
+            sat_id,
+            UAngle::radian,
+            UAngle::radian
+        );
+        meas.z(0) += noise_unit(rng) * sigma_range_rate;
+        meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
+        lumve_input.measurements.push_back(meas);
+        lumve_input.observer_states.push_back(x_tr_obsv2);
+    }
+
+    // solve LUMVE
+    ODBatchResult lumve_result = od_batch_lumve(lumve_input);
+
+    // offline EKF
+    ODEKFInput ekf_input;
+    bool lumve_state_ok
+        = lumve_result.success && statetr_to_vec6(lumve_result.x0_est).allFinite();
+    ekf_input.initial_filter.x
+        = lumve_state_ok ? lumve_result.x0_est : lumve_input.x0_guess;
+    ekf_input.initial_filter.t = lumve_input.t0;
+
+    bool lumve_cov_ok = lumve_result.covariance.allFinite()
+                        && lumve_result.covariance.diagonal().minCoeff() > 0.0;
+    ekf_input.initial_filter.P = lumve_cov_ok ? lumve_result.covariance : mat6d1;
+    ekf_input.dyn_config.model = ODDynamicsModel::two_body;
+    ekf_input.dyn_config.mu = earth->mu;
+    ekf_input.prop_steps = 200;
+    ekf_input.Q = mat6d1 * 1e-4;
+
+    for (i32 i = split_idx; i < N_meas; ++i) {
+        sat->x_tr = propagate_tr_od(
+            0.0,
+            x0_truth,
+            t_meas(i),
+            ekf_input.prop_steps,
+            ekf_input.dyn_config
+        );
+        // stat1 -> radec + range
+        world.set_stat_anchor_detic(stat1_id, earth_id, llh1);
+        StateTr x_tr_obsv1 = world.stat_x_tr_inertial(stat1_id);
+
+        // stat2 -> range-rate
+        world.set_stat_anchor_detic(stat2_id, earth_id, llh2);
+        StateTr x_tr_obsv2 = world.stat_x_tr_inertial(stat2_id);
+
+        Measurement meas;
+        meas.target_id = sat_id;
+        meas.observer_id = stat1_id;
+
+        // get measurement (RADec)
+        meas.t = t_meas(i);
+        meas.type = ObservationType::radec;
+        meas.z = world_predict_measurement(
+            world,
+            meas.type,
+            stat1_id,
+            sat_id,
+            UAngle::radian,
+            UAngle::radian
+        );
+        meas.z(0) += noise_unit(rng) * sigma_rad;
+        meas.z(1) += noise_unit(rng) * sigma_rad;
+        meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+        ekf_input.measurements.push_back(meas);
+        ekf_input.observer_states.push_back(x_tr_obsv1);
+
+        // get measurement (range)
+        meas.t = t_meas(i);
+        meas.type = ObservationType::range;
+        meas.z = world_predict_measurement(
+            world,
+            meas.type,
+            stat1_id,
+            sat_id,
+            UAngle::radian,
+            UAngle::radian
+        );
+        meas.z(0) += noise_unit(rng) * sigma_range;
+        meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+        ekf_input.measurements.push_back(meas);
+        ekf_input.observer_states.push_back(x_tr_obsv1);
+
+        // get measurement (range-rate)
+        meas.t = t_meas(i);
+        meas.type = ObservationType::range_rate;
+        meas.z = world_predict_measurement(
+            world,
+            meas.type,
+            stat2_id,
+            sat_id,
+            UAngle::radian,
+            UAngle::radian
+        );
+        meas.z(0) += noise_unit(rng) * sigma_range_rate;
+        meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
+        lumve_input.measurements.push_back(meas);
+        lumve_input.observer_states.push_back(x_tr_obsv2);
+    }
+
+    // solve offline ekf
+    ODEKFResult ekf_result = od_ekf_offline(ekf_input);
+
+    StateTr x_truth_final = propagate_tr_od(
+        0.0,
+        x0_truth,
+        t_meas(N_meas - 1),
+        ekf_input.prop_steps,
+        ekf_input.dyn_config
+    );
+
+    f64 iod_err = iod_guess_ok ? statetr_to_vec6(iod_res.x - x0_truth).norm() : 0.0;
+    f64 lumve_initial_err = statetr_to_vec6(lumve_input.x0_guess - x0_truth).norm();
+    f64 lumve_final_err = statetr_to_vec6(lumve_result.x0_est - x0_truth).norm();
+    f64 ekf_initial_err = statetr_to_vec6(ekf_input.initial_filter.x - x0_truth).norm();
+    f64 ekf_final_err = statetr_to_vec6(ekf_result.filter.x - x_truth_final).norm();
+    f64 ekf_final_r_err = (ekf_result.filter.x.r - x_truth_final.r).norm();
+    f64 ekf_final_v_err = (ekf_result.filter.x.v - x_truth_final.v).norm();
+
+    print_diag_title("IOD -> LUMVE -> EKF Pipeline Diagnostic");
+    std::println("IOD Used As Initial Guess = {}", use_iod_initial_guess && iod_guess_ok);
+    std::println("IOD Success = {}", iod_res.success);
+    std::println("IOD Status: {}", iod_status_string(iod_res.status));
+    std::println("IOD Initial Error = {}", iod_err);
+
+    std::println();
+
+    std::println("LUMVE Success = {}", lumve_result.success);
+    std::println("LUMVE Status: {}", od_status_string(lumve_result.status));
+    std::println("LUMVE Initial Error = {}", lumve_initial_err);
+    std::println("LUMVE Final Error = {}", lumve_final_err);
+    std::println("LUMVE Measurements = {}", lumve_input.measurements.size());
+    std::println("LUMVE Iterations = {}", lumve_result.iterations);
+    std::println("LUMVE Residual Norm = {}", lumve_result.residual_norm);
+    std::println("LUMVE Raw Residual Norm = {}", lumve_result.raw_residual_norm);
+    std::println("LUMVE Delta x Norm = {}", lumve_result.dx_norm);
+    std::println("LUMVE Covariance Used = {}", lumve_cov_ok);
+    std::println("LUMVE Covariance Norm = {}", lumve_result.covariance.norm());
+
+    std::println();
+
+    std::println("EKF Success = {}", ekf_result.success);
+    std::println("EKF Status: {}", od_status_string(ekf_result.status));
+    std::println("EKF Initial Error = {}", ekf_initial_err);
+    std::println("EKF Final Error = {}", ekf_final_err);
+    std::println("EKF Final Position Error = {}", ekf_final_r_err);
+    std::println("EKF Final Velocity Error = {}", ekf_final_v_err);
+    std::println("EKF Final Time = {}", ekf_result.filter.t);
+    std::println("EKF Expected Final Time = {}", t_meas(N_meas - 1));
+    std::println("EKF Processed Measurements = {}", ekf_result.processed_measurements);
+    std::println("EKF Total Measurements = {}", ekf_input.measurements.size());
+    std::println("EKF Residual Norm = {}", ekf_result.residual_norm);
+    std::println("EKF Raw Residual Norm = {}", ekf_result.raw_residual_norm);
+    std::println("EKF Final Covariance Norm = {}", ekf_result.filter.P.norm());
 }

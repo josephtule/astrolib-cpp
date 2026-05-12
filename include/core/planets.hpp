@@ -1,3 +1,5 @@
+#pragma once
+
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/world.hpp"

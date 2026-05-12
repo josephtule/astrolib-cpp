@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string>
 
 #include "core/observations.hpp"
 #include "core/state.hpp"
@@ -18,6 +19,18 @@ enum struct IODStatus : i32 {
     root_solve_failed,
     unsupported_method,
 };
+
+inline std::string iod_status_string(IODStatus status) {
+    switch (status) {
+    case IODStatus::ok: return "Ok";
+    case IODStatus::invalid_input: return "invalid_input";
+    case IODStatus::non_coplanar: return "non_coplanar";
+    case IODStatus::degenerate_geometry: return "degenerate_geometry";
+    case IODStatus::root_solve_failed: return "root_solve_failed";
+    case IODStatus::unsupported_method: return "unsupported_method";
+    default: return "unknown";
+    }
+}
 
 struct IODResult {
     bool success = false;

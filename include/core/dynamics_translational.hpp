@@ -2,7 +2,7 @@
 
 #include "util/constants.hpp"
 #include "util/vecdefs.hpp"
-#include <cmath>
+
 #include <cstddef>
 
 

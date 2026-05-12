@@ -13,6 +13,8 @@ enum struct ODStatus {
     correction_rejected,
     invalid_covariance,
     singular_innovation,
+    observer_not_found,
+    target_not_found,
 };
 
 inline std::string od_status_string(ODStatus status) {
@@ -47,6 +49,12 @@ inline std::string od_status_string(ODStatus status) {
     } break;
     case ODStatus::singular_innovation: {
         str = "Singular Innovation";
+    } break;
+    case ODStatus::observer_not_found: {
+        str = "Observer not found";
+    } break;
+    case ODStatus::target_not_found: {
+        str = "Target not found";
     } break;
     }
     return str;

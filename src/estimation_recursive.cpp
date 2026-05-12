@@ -1,4 +1,5 @@
 #include "core/estimation_recursive.hpp"
+#include "core/measurement.hpp"
 
 #include <cmath>
 
@@ -63,7 +64,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     ODEKFStepResult result;
     const ODEKFState& filter = input.filter;
     const Measurement& meas = input.measurement;
-    const StateTr& x_obsv = input.observer_state;
+    const StateTr& x_tr_obsv = input.x_tr_observer;
     i32 dim = measurement_dim(meas.type);
 
     result.status = od_ekf_step_validate_input(input);
@@ -99,13 +100,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // propagate prediction state and STM
     VarStateTr yf;
     if (propagate) {
-        yf = propagate_var_tr_od(
-            filter.t,
-            y0,
-            dt,
-            input.prop_steps,
-            input.dyn_config
-        );
+        yf = propagate_var_tr_od(filter.t, y0, dt, input.prop_steps, input.dyn_config);
     } else {
         yf = y0;
     }
@@ -126,9 +121,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     result.filter.t = t_pred;
 
     // measurement prediction
-    MeasurementContext ctx;
-    ctx.x_target = x_pred;
-    ctx.x_observer = x_obsv;
+    MeasurementContext ctx = make_measurement_context(x_pred, x_tr_obsv);
     vecXd z_pred = predict_measurement(meas.type, ctx);
     if (z_pred.size() != dim) {
         result.status = ODStatus::invalid_input;
@@ -232,7 +225,7 @@ ODEKFResult od_ekf_offline(const ODEKFInput& input) {
         ODEKFStepInput step_input{
             .filter = filter,
             .measurement = meas,
-            .observer_state = input.observer_states[i],
+            .x_tr_observer = input.observer_states[i],
             .dyn_config = input.dyn_config,
             .prop_steps = input.prop_steps,
             .Q = input.Q,

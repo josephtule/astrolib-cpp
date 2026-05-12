@@ -72,3 +72,5 @@ void run_tle_status_reader_diag();
 void run_staged_attitude_gravity_diag();
 void run_render_pipeline_diag();
 void run_world_workspace_diag();
+void run_world_measurement_context_diag();
+void run_iod_lumve_ekf_init_diag();

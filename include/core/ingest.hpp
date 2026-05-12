@@ -5,7 +5,6 @@
 #include "core/time.hpp"
 #include "util/tools.hpp"
 #include "util/units.hpp"
-#include <memory>
 
 enum struct TLEStatus {
     ok,

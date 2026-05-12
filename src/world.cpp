@@ -518,6 +518,26 @@ vec3d World::stat_rel_enu(EntityId station_id, EntityId target_id) const {
     return R_ENU_BCBF * r_rel_bcbf;
 }
 
+vec3d World::stat_rel_enu(EntityId station_id, const StateTr& x_tr_target) const {
+    const Station* stat = station(station_id);
+    if (stat == nullptr) return vec3d0;
+    if (!stat->anchored) return vec3d0;
+    if (stat->anchor_id == kInvalidEntityId) return vec3d0;
+
+    const Body* anchor = body(stat->anchor_id);
+    if (anchor == nullptr) return vec3d0;
+
+    // target relative to body, inertial then bcbf
+    vec3d r_target_body_BCI = x_tr_target.r - anchor->x_tr.r;
+    vec3d r_target_body_BCBF = ep_rotate_fast_passive(anchor->x_att.q, r_target_body_BCI);
+
+    // target relative to station
+    vec3d r_rel_bcbf = r_target_body_BCBF - stat->r_body_BCBF;
+    mat3d R_ENU_BCBF = stat_rot_enu_from_body(station_id);
+
+    return R_ENU_BCBF * r_rel_bcbf;
+}
+
 vec3d World::body_z_inertial(EntityId body_id) const {
     vec3d z_inertial = vec3d0;
     const Body* body = this->body(body_id);

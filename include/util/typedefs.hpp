@@ -3,6 +3,7 @@
 #include <complex>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -32,6 +33,8 @@ template <class T1>
 using uset = std::unordered_set<T1>;
 template <class C>
 using uptr = std::unique_ptr<C>;
+template <class C>
+using sptr = std::shared_ptr<C>;
 
 template <typename T>
 inline constexpr T qNaN = std::numeric_limits<T>::quiet_NaN();

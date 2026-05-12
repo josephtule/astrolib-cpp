@@ -16,7 +16,7 @@ struct ODEKFState {
 struct ODEKFStepInput {
     ODEKFState filter;
     Measurement measurement;
-    StateTr observer_state;
+    StateTr x_tr_observer;
     ODDynamicsConfig dyn_config;
     i32 prop_steps = 100;
     mat6d Q = mat6d0; // process noise covariance (process uncertainty)

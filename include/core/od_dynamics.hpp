@@ -7,8 +7,8 @@
 
 enum struct ODDynamicsModel : i32 {
     two_body,
-    zonal,
-    n_body,
+    zonal, // TODO: add jacobian
+    // n_body,
 };
 
 struct ODDynamicsConfig {

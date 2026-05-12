@@ -1,4 +1,5 @@
 #include "core/estimation_batch.hpp"
+#include "core/measurement.hpp"
 
 #include <Eigen/Core>
 #include <cmath>
@@ -28,7 +29,7 @@ ODBatchResidualEval od_batch_eval_residual_norm(
 
     for (i32 i = 0; i < input.measurements.size(); ++i) {
         const Measurement& meas = input.measurements[i];
-        const StateTr& x_obs = input.observer_states[i];
+        const StateTr& x_obsv = input.observer_states[i];
         i32 dim = measurement_dim(meas.type);
         if (dim <= 0 || meas.z.size() != dim) {
             eval.status = ODStatus::invalid_input;
@@ -46,22 +47,15 @@ ODBatchResidualEval od_batch_eval_residual_norm(
 
         // propagate candidate state to measurement time
         f64 dt = meas.t - input.t0;
-        StateTr x_pred_i = propagate_tr_od(
-            input.t0,
-            x0_ref,
-            dt,
-            input.prop_steps,
-            input.dyn_config
-        );
+        StateTr x_pred_i
+            = propagate_tr_od(input.t0, x0_ref, dt, input.prop_steps, input.dyn_config);
         if (!statetr_to_vec6(x_pred_i).allFinite()) {
             eval.status = ODStatus::propagation_failed;
             return eval;
         }
 
         // measurement prediction
-        MeasurementContext ctx;
-        ctx.x_target = x_pred_i;
-        ctx.x_observer = x_obs;
+        MeasurementContext ctx = make_measurement_context(x_pred_i, x_obsv);
         vecXd z_pred = predict_measurement(meas.type, ctx);
         if (z_pred.size() != dim) {
             eval.status = ODStatus::invalid_input;
@@ -196,9 +190,8 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             }
 
             // measurement prediction
-            MeasurementContext ctx;
-            ctx.x_target = yf.x;
-            ctx.x_observer = x_obsv;
+            MeasurementContext ctx = make_measurement_context(yf.x, x_obsv);
+
             vecXd z_pred = predict_measurement(meas.type, ctx);
             if (z_pred.size() != dim) {
                 result.status = ODStatus::invalid_input;
@@ -298,6 +291,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
         if (input.use_line_search) {
             bool accepted = false;
             for (i32 attempt = 0; attempt < 8; ++attempt) {
+                // TODO: add attempts as option
                 f64 alpha = 1.0 / std::pow(2.0, attempt);
                 vec6d dx_cand_vec = alpha * dx_vec;
                 StateTr x0_cand = x0_ref + vec6_to_statetr(dx_cand_vec);
@@ -315,10 +309,21 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 }
             }
             if (!accepted) {
-                result.status = ODStatus::correction_rejected;
                 result.residual_norm = current_weighted_norm;
                 result.raw_residual_norm = current_raw_norm;
                 result.x0_est = x0_ref;
+                result.normal_inv = Lambda.inverse();
+                result.covariance = result.normal_inv;
+                if (iter > 0 && statetr_to_vec6(result.x0_est).allFinite()
+                    && result.covariance.allFinite()) {
+                    // residual probably already in noise floor so accept
+                    // TODO: NOTE: this isn't totally valid, fix later, add stalled or
+                    // local min status
+                    result.success = true;
+                    result.status = ODStatus::ok;
+                    return result;
+                }
+                result.status = ODStatus::correction_rejected;
                 return result;
             }
         } else {

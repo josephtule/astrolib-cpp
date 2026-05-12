@@ -5,7 +5,6 @@
 #include "core/state.hpp"
 #include "core/world.hpp"
 #include "graphics/raygen.hpp"
-#include "graphics/rdraw.hpp"
 #include "raylib.h"
 #include "raymath.h"
 #include "util/typedefs.hpp"

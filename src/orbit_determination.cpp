@@ -1,8 +1,6 @@
 #include "core/orbit_determination.hpp"
 
-bool iod_vec_valid(ecref<vec3d> v, f64 tol) {
-    return v.allFinite() && v.norm() > tol;
-}
+bool iod_vec_valid(ecref<vec3d> v, f64 tol) { return v.allFinite() && v.norm() > tol; }
 
 bool iod_time_valid(f64 t1, f64 t2, f64 t3, f64 tol) {
     return std::isfinite(t1) && std::isfinite(t2) && std::isfinite(t3)
@@ -14,7 +12,8 @@ IODAnglesObs3 iod_angles3_from_radec(
     const std::array<f64, 3>& t,
     const std::array<vec2d, 3>& radecs,
     const std::array<vec3d, 3>& R,
-    UAngle angle_in) {
+    UAngle angle_in
+) {
     IODAnglesObs3 iod_input;
     for (i32 i = 0; i < 3; ++i) {
         iod_input.t(i) = t[i];
@@ -29,7 +28,8 @@ IODAnglesObs3 iod_angles3_from_radec(
     const vec3d& t,
     const matd<2, 3>& radecs,
     const mat3d& R,
-    UAngle angle_in) {
+    UAngle angle_in
+) {
     IODAnglesObs3 iod_input;
     for (i32 i = 0; i < 3; ++i) {
         iod_input.L.col(i) = los_from_radec(vec2d{radecs.col(i)}, angle_in);
@@ -44,7 +44,8 @@ IODAnglesObs3 iod_angles3_from_radec(
     const vec3d& ra,
     const vec3d& dec,
     const mat3d& R,
-    UAngle angle_in) {
+    UAngle angle_in
+) {
     IODAnglesObs3 iod_input;
     for (i32 i = 0; i < 3; ++i) {
         iod_input.L.col(i) = los_from_radec(vec2d{ra(i), dec(i)}, angle_in);
@@ -68,7 +69,8 @@ IODResult iod_gauss(
     ecref<vec3d> R2,
     ecref<vec3d> R3,
     f64 mu,
-    f64 tol) {
+    f64 tol
+) {
     if (mu <= 0.0 || !iod_time_valid(t1, t2, t3, tol) || !iod_vec_valid(L1, tol)
         || !iod_vec_valid(L2, tol) || !iod_vec_valid(L3, tol) || !R1.allFinite()
         || !R2.allFinite() || !R3.allFinite()) {
@@ -262,7 +264,8 @@ IODResult iod_gauss(
     const std::array<vec3d, 3>& L,
     const std::array<vec3d, 3>& R,
     f64 mu,
-    f64 tol) {
+    f64 tol
+) {
     return iod_gauss(t[0], t[1], t[2], L[0], L[1], L[2], R[0], R[1], R[2], mu, tol);
 }
 
@@ -271,19 +274,15 @@ IODResult iod_gauss(
     const svec<vec3d>& L,
     const svec<vec3d>& R,
     f64 mu,
-    f64 tol) {
+    f64 tol
+) {
     if (t.size() < 3 || L.size() < 3 || R.size() < 3) {
         return IODResult{.success = false, .status = IODStatus::invalid_input};
     }
     return iod_gauss(t[0], t[1], t[2], L[0], L[1], L[2], R[0], R[1], R[2], mu, tol);
 }
 
-IODResult iod_gauss(
-    ecref<vec3d> t,
-    ecref<mat3d> L,
-    ecref<mat3d> R,
-    f64 mu,
-    f64 tol) {
+IODResult iod_gauss(ecref<vec3d> t, ecref<mat3d> L, ecref<mat3d> R, f64 mu, f64 tol) {
     const vec3d L1 = L.col(0);
     const vec3d L2 = L.col(1);
     const vec3d L3 = L.col(2);
@@ -298,12 +297,7 @@ IODResult iod_gauss(const IODAnglesObs3& arc, f64 mu, f64 tol) {
     return iod_gauss(arc.t, arc.L, arc.R, mu, tol);
 }
 
-IODResult iod_gibbs(
-    ecref<vec3d> r1,
-    ecref<vec3d> r2,
-    ecref<vec3d> r3,
-    f64 mu,
-    f64 tol) {
+IODResult iod_gibbs(ecref<vec3d> r1, ecref<vec3d> r2, ecref<vec3d> r3, f64 mu, f64 tol) {
     // Precompute cross prodcuts
     vec3d r2x3 = r2.cross(r3);
     vec3d r3x1 = r3.cross(r1);
@@ -352,7 +346,8 @@ IODResult iod_herrickgibbs(
     ecref<vec3d> r2,
     ecref<vec3d> r3,
     f64 mu,
-    f64 tol) {
+    f64 tol
+) {
     // Precompute cross prodcuts
     vec3d r2x3 = r2.cross(r3);
 
@@ -408,7 +403,8 @@ IODResult iod_laplace(
     ecref<vec3d> R3,
     f64 mu,
     vec3d w, // angular velocity of body
-    f64 tol) {
+    f64 tol
+) {
     if (mu <= 0.0 || !iod_time_valid(t1, t2, t3, tol) || !iod_vec_valid(L1, tol)
         || !iod_vec_valid(L2, tol) || !iod_vec_valid(L3, tol) || !R1.allFinite()
         || !R2.allFinite() || !R3.allFinite() || !w.allFinite()) {
@@ -600,4 +596,3 @@ IODResult iod_laplace(
         .iterations = iter
     };
 }
-

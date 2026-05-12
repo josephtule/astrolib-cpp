@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/state.hpp"
@@ -139,6 +137,7 @@ class World {
     );
     mat3d stat_rot_enu_from_body(EntityId station_id) const;
     vec3d stat_rel_enu(EntityId station_id, EntityId target_id) const;
+    vec3d stat_rel_enu(EntityId station_id, const StateTr& x_tr_target) const;
 
     // Inertial frame helpers
     vec3d body_z_inertial(EntityId body_id) const;

@@ -92,19 +92,21 @@ int main() {
     // run_checkpoint_diag();
     // run_station_anchor_diag();
     // run_world_measurement_diag();
-    // run_batch_od_diag();
-    // run_ekf_world_diag();
     // run_world_stepper_diag();
     // run_body_fixed_gravity_timing_diag();
     // run_moving_source_world_diag();
     // run_staged_attitude_gravity_diag();
     // run_world_workspace_diag();
+    // run_tle_status_reader_diag();
+    // run_world_measurement_context_diag();
     
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    // run_tle_status_reader_diag();
-    run_render_pipeline_diag();
+    // run_render_pipeline_diag();
+    // run_batch_od_diag();
+    // run_ekf_world_diag();
+    run_iod_lumve_ekf_init_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 
