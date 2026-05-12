@@ -2253,216 +2253,6 @@ void run_tle_status_reader_diag() {
     std::println("Bad Checksum Status: {} (should fail)", tle_status_string(bad_status));
 }
 
-void run_make_transform_draw_diag() {
-    World world;
-
-    // Earth
-    EntityId earth_id = wgs84(world);
-    Celestial* earth = world.celestial(earth_id);
-    earth->name = "Earth";
-    earth->gravity_model = GravityModel::spherical_harmonics;
-    earth->degree = 4;
-    earth->order = 4;
-    bool gfc_ok = read_gfc(
-        pwd + "/assets/EGM2008.gfc.txt",
-        earth->C,
-        earth->S,
-        earth->degree,
-        earth->order
-    );
-    earth->propagate_att = true;
-    earth->attitude_model = CelestialAttitudeModel::simple_spin;
-    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
-
-    // Urath
-    EntityId urath_id = wgs84(world);
-    Celestial* urath = world.celestial(urath_id);
-    urath->gravity_model = GravityModel::pointmass;
-    urath->name = "Urath";
-    urath->propagate_att = true;
-    urath->degree = 4;
-    urath->attitude_model = CelestialAttitudeModel::simple_spin;
-    urath->set_spin_rate(urath->spin_rate() * 3.);
-    // urath->mu /= 10.0;
-
-    // satellite
-    EntityId sat_id = world.spawn_satellite();
-    Satellite* sat = world.satellite(sat_id);
-    sat->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
-    sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
-    sat->propagate_att = true;
-
-    // binary body orbit initial conditions
-    f64 separation = 100'000.0;
-    f64 r_mag = separation / 2.0;
-    f64 v_mag = std::sqrt(earth->mu / (2.0 * separation));
-    f64 period = (2.0 * pi * r_mag) / v_mag;
-    earth->x_tr.r = vec3d{r_mag, 0.0, 0.0};
-    earth->x_tr.v = vec3d{0.0, -v_mag, 0.0};
-    urath->x_tr.r = vec3d{-r_mag, 0.0, 0.0};
-    urath->x_tr.v = vec3d{0.0, v_mag, 0.0};
-    // sat orbit around urath
-    // sat->propagate_tr = false;
-    f64 r_mag_sat = urath->semimajor_axis + 1000.0;
-    f64 v_mag_sat = std::sqrt(urath->mu / r_mag_sat);
-    sat->x_tr.r = urath->x_tr.r + vec3d{r_mag_sat, 0.0, 0.0};
-    sat->x_tr.v = urath->x_tr.v + vec3d{0.0, v_mag_sat, 0.0};
-
-    // TLE satellites
-    svec<std::unique_ptr<Satellite>> sats;
-    svec<JulianDate> jds;
-    i32 num_sats_tle = 20;
-    TLEReadOptions tle_opts{
-        .millennium = 2000,
-        .convert = true,
-        .mu = earth->mu,
-        .angle_out = UAngle::radian
-    };
-    svec<TLEData> tles;
-    TLEStatus read_tle_status
-        = read_tle_data_count(pwd + "/assets/tle_all.txt", tles, num_sats_tle, tle_opts);
-    if (read_tle_status != TLEStatus::ok) {
-        std::println("TLE Read Failed: {}", tle_status_string(read_tle_status));
-        return;
-    }
-    for (const TLEData& tle : tles) {
-        std::unique_ptr<Satellite> sat_tle = std::make_unique<Satellite>();
-        sat_from_tle_data(*sat_tle, tle, tle_opts);
-        sats.emplace_back(std::move(sat_tle));
-    }
-
-    for (i32 i = 0; i < sats.size(); ++i) {
-        EntityId sat_i_id = world.insert_satellite(std::move(sats[i]));
-        Satellite* sat_i = world.satellite(sat_i_id);
-        if (sat_i == nullptr) {
-            std::println("TLE Satellite Insert Failed");
-            continue;
-        }
-        // for visuals only, TLE/SGP4 is TEME, not sim inertial
-        sat_i->x_tr.r = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.r);
-        sat_i->x_tr.v = ep_rotate_fast_passive(earth->x_att.q, sat_i->x_tr.v);
-        sat_i->x_tr += earth->x_tr;
-        sat_i->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
-        sat_i->x_att.w = vec3d{0.000001, 0.0001, 0.000001} * i;
-        sat_i->propagate_tr = true;
-        sat_i->propagate_att = false;
-    }
-    svec<EntityId> sat_ids = world.satellite_ids();
-
-    // integration options
-    WorldStepperConfig cfg;
-    cfg.step_translation = true;
-    cfg.step_attitude = true;
-    cfg.substeps = 1;
-    cfg.ticks = 1;
-    cfg.time_scale = 1.0;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
-
-    WorldStateSnapshot world_snapshot = world.capture_checkpoint();
-
-    WorldStepperStats stats;
-    stats.success = true;
-
-    int screenWidth = 960;
-    int screenHeight = 800;
-
-    SetTraceLogLevel(LOG_WARNING);
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
-
-    InitWindow(screenWidth, screenHeight, "Basic Window");
-
-    Camera3D camera;
-    vec3f cam_pos = vec3f{1.0, 1.0, 1.0} * 75000;
-    camera.position = eig_to_rl(cam_pos);
-    camera.fovy = 45;
-    camera.projection = CAMERA_PERSPECTIVE;
-    camera.up = eig_to_rl(axis_z);
-    camera.target = eig_to_rl(origin);
-    rlSetClipPlanes(1.0e3, 1.0e6);
-
-    f64 dt = 50.0;
-
-    i32 sphere_i = 16;
-    Image checker_pattern = GenImageChecked(sphere_i, sphere_i, 1, 1, RAYWHITE, GRAY);
-    Texture2D texture = LoadTextureFromImage(checker_pattern);
-
-    Mesh sphere_mesh = GenMeshSphere(1., sphere_i, sphere_i);
-    Model sphere_model = LoadModelFromMesh(sphere_mesh);
-    sphere_model.transform = MatrixIdentity();
-    sphere_model.materials[0] = LoadMaterialDefault();
-    sphere_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
-
-    checker_pattern = GenImageChecked(2, 2, 1, 1, RAYWHITE, GRAY);
-    texture = LoadTextureFromImage(checker_pattern);
-    Mesh cube_mesh = GenMeshCube(1.f, 1.f, 1.f);
-    Model cube_model = LoadModelFromMesh(cube_mesh);
-    cube_model.transform = MatrixIdentity();
-    cube_model.materials[0] = LoadMaterialDefault();
-    cube_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
-
-    vec3f earth_size;
-    earth_size << earth->semimajor_axis, earth->semimajor_axis, earth->semimajor_axis;
-    vec3f sat_size = vec3f{100.0, 200.0, 300.0} / 1000.0; // km
-
-    UnloadImage(checker_pattern);
-
-    SetTargetFPS(60);
-    while (!WindowShouldClose()) {
-        BeginDrawing();
-        BeginMode3D(camera);
-        ClearBackground(Color({30, 30, 30, 255}));
-
-        stats += step_world(world, dt, cfg);
-        if (!stats.success) {
-            std::println("Simulation Failure");
-            break;
-        }
-
-        f32 o_axis_scale = 25000.0f;
-        draw_axes(StateTr{}, StateAtt{}, o_axis_scale);
-        draw_axes(StateTr{}, StateAtt{}, -o_axis_scale);
-
-        f32 grid_scale = 100000;
-        f32 grid_increment = 1000;
-        vec2f grid_min = vec2f{-1, -1} * grid_scale;
-        vec2f grid_max = vec2f{1, 1} * grid_scale;
-        draw_grid(
-            grid_min,
-            grid_max,
-            vec2f{grid_increment, grid_increment},
-            GridPlane::XY,
-            true,
-            Color{240, 240, 240, 45}
-        );
-
-        Matrix M_earth = make_transform(earth->x_tr, earth->x_att, earth_size);
-        sphere_model.transform = M_earth;
-        DrawModel(sphere_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, BLUE);
-        draw_axes(earth->x_tr, earth->x_att, earth->semimajor_axis * 2.0f);
-
-        Matrix M_urath = make_transform(urath->x_tr, urath->x_att, earth_size);
-        sphere_model.transform = M_urath;
-        DrawModel(sphere_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, DARKGREEN);
-        draw_axes(urath->x_tr, urath->x_att, urath->semimajor_axis * 2.0f);
-
-        f32 sat_scale = 5000.0f;
-        for (i32 i = 0; i < sat_ids.size(); ++i) {
-            Satellite* sat_i = world.satellite(sat_ids[i]);
-            if (sat_i == nullptr) continue;
-            Matrix M_sat = make_transform(sat_i->x_tr, sat_i->x_att, sat_size, sat_scale);
-            cube_model.transform = M_sat;
-            DrawModel(cube_model, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, RED);
-            if (sat_i->propagate_att) {
-                draw_axes(sat_i->x_tr, sat_i->x_att, sat_scale);
-            }
-        }
-
-        EndMode3D();
-        EndDrawing();
-    }
-}
-
 void run_staged_attitude_gravity_diag() {
     print_diag_title("Staged Attitude Diagnostic");
 
@@ -2594,6 +2384,41 @@ void run_render_pipeline_diag() {
     sat->set_I(vec3d{100.0, 200.0, 300.0}.asDiagonal());
     sat->x_att.w = vec3d{0.000001, 0.0025, 0.000001}; // intermediate axis rotation
 
+    // tle satellites
+    bool load_tle_sats = true;
+    if (load_tle_sats) {
+        TLEReadOptions tle_opts{
+            .convert = true,
+            .millennium = 2000,
+            .angle_out = UAngle::radian,
+            .mu = earth->mu
+        };
+        svec<TLEData> tles;
+        svec<std::unique_ptr<Satellite>> tle_sats;
+        svec<i32> sat_nums = {25544, 11, 5};
+        TLEStatus tle_status = read_tle_data_satnums(
+            pwd + "/assets/tle_all.txt",
+            tles,
+            sat_nums,
+            tle_opts
+        );
+        if (tle_status != TLEStatus::ok) {
+            std::println("TLE Read Failure: {}", tle_status_string(tle_status));
+            return;
+        }
+        tle_status = sats_from_tle_data(tle_sats, tles, tle_opts);
+        if (tle_status != TLEStatus::ok) {
+            std::println("TLE Read Failure: {}", tle_status_string(tle_status));
+            return;
+        }
+        for (auto& tle_sat : tle_sats) {
+            tle_sat->propagate_tr = true;
+            tle_sat->propagate_att = false;
+        }
+        world.insert_satellites(std::move(tle_sats));
+        // NOTE: these are in TEME and not rotated into sim inertial, just for visual
+    }
+
     // station
     EntityId stat1_id = world.spawn_station();
     Station* stat1 = world.station(stat1_id);
@@ -2612,13 +2437,13 @@ void run_render_pipeline_diag() {
     cfg.step_translation = true;
     cfg.step_attitude = true;
     cfg.substeps = 1;
-    cfg.ticks = 1000;
-    cfg.time_scale = 1.0;
+    cfg.ticks = 100;
+    cfg.time_scale = 2.0;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
     f64 t0 = 0.0;
-    f64 dt = 1.0 / cfg.ticks * 20.0;
+    f64 dt = 1.0 / cfg.ticks * cfg.time_scale;
     world.reset_time(t0);
     WorldStepperStats stats;
     stats.success = true;

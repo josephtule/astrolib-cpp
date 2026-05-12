@@ -160,6 +160,12 @@ EntityId World::insert_station(std::unique_ptr<Station> stat) {
     return insert_body(std::move(stat));
 }
 
+void World::insert_satellites(svec<uptr<Satellite>> sats) {
+    for (auto& sat : sats) {
+        insert_satellite(std::move(sat));
+    }
+}
+
 i32 World::num_celestials() const {
     i32 count = 0;
     for (EntityId id : active_ids) {

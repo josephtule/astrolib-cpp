@@ -84,6 +84,9 @@ class World {
     EntityId insert_celestial(std::unique_ptr<Celestial> cel);
     EntityId insert_satellite(std::unique_ptr<Satellite> sat);
     EntityId insert_station(std::unique_ptr<Station> stat);
+    // void insert_celestials(svec<uptr<Celestial>> cels);
+    void insert_satellites(svec<uptr<Satellite>> sats);
+    // void insert_stations(svec<uptr<Station>>stats);
     i32 num_celestials() const;
     i32 num_satellites() const;
     i32 num_stations() const;

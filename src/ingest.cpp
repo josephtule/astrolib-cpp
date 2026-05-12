@@ -819,6 +819,28 @@ TLEStatus sat_from_tle_data(
     return TLEStatus::ok;
 }
 
+TLEStatus sats_from_tle_data(
+    svec<std::unique_ptr<Satellite>>& sats,
+    const svec<TLEData>& tles,
+    const TLEReadOptions& opts
+) {
+    sats.clear();
+    sats.reserve(tles.size());
+
+    for (const TLEData& tle : tles) {
+        auto sat = std::make_unique<Satellite>();
+        TLEStatus sat_status = sat_from_tle_data(*sat, tle, opts);
+        if (sat_status != TLEStatus::ok) {
+            sats.clear();
+            return sat_status;
+        }
+
+        sats.emplace_back(std::move(sat));
+    }
+
+    return TLEStatus::ok;
+}
+
 std::string tle_status_string(const TLEStatus& status) {
     switch (status) {
     case TLEStatus::ok: return "ok";

@@ -30,6 +30,8 @@ template <class T1, class T2>
 using umap = std::unordered_map<T1, T2>;
 template <class T1>
 using uset = std::unordered_set<T1>;
+template <class C>
+using uptr = std::unique_ptr<C>;
 
 template <typename T>
 inline constexpr T qNaN = std::numeric_limits<T>::quiet_NaN();

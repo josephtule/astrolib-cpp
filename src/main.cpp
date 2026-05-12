@@ -97,15 +97,14 @@ int main() {
     // run_world_stepper_diag();
     // run_body_fixed_gravity_timing_diag();
     // run_moving_source_world_diag();
-    // run_make_transform_draw_diag();
     // run_staged_attitude_gravity_diag();
     // run_world_workspace_diag();
     
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    run_tle_status_reader_diag();
-    // run_render_pipeline_diag();
+    // run_tle_status_reader_diag();
+    run_render_pipeline_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

@@ -69,7 +69,6 @@ void run_world_stepper_diag();
 void run_body_fixed_gravity_timing_diag();
 void run_moving_source_world_diag();
 void run_tle_status_reader_diag();
-void run_make_transform_draw_diag();
 void run_staged_attitude_gravity_diag();
 void run_render_pipeline_diag();
 void run_world_workspace_diag();

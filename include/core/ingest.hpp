@@ -127,6 +127,11 @@ TLEStatus sat_from_tle_data(
     const TLEData& tle,
     const TLEReadOptions& opts
 );
+TLEStatus sats_from_tle_data(
+    svec<std::unique_ptr<Satellite>>& sats,
+    const svec<TLEData>& tles,
+    const TLEReadOptions& opts
+);
 
 
 inline OEClassical coe_from_tle(const TLEData& tle) {
