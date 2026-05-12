@@ -2394,7 +2394,7 @@ void run_render_pipeline_diag() {
             .mu = earth->mu
         };
         svec<TLEData> tles;
-        svec<std::unique_ptr<Satellite>> tle_sats;
+        svec<uptr<Satellite>> tle_sats;
         svec<i32> sat_nums = {25544, 11, 5};
         TLEStatus tle_status = read_tle_data_satnums(
             pwd + "/assets/tle_all.txt",

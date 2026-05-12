@@ -44,14 +44,14 @@ class World {
     // Entity storage
     EntityId next_id = 1;
     svec<EntityId> active_ids;
-    umap<EntityId, std::unique_ptr<Body>> bodies;
+    umap<EntityId, uptr<Body>> bodies;
 
     // Simulation state
     f64 t_sim_ = 0.0;
     bool paused = false;
 
     EntityId allocate_id();
-    EntityId insert_body(std::unique_ptr<Body> body);
+    EntityId insert_body(uptr<Body> body);
 
   public:
     f64 t_sim() const;
@@ -81,9 +81,9 @@ class World {
     EntityId spawn_celestial();
     EntityId spawn_satellite();
     EntityId spawn_station();
-    EntityId insert_celestial(std::unique_ptr<Celestial> cel);
-    EntityId insert_satellite(std::unique_ptr<Satellite> sat);
-    EntityId insert_station(std::unique_ptr<Station> stat);
+    EntityId insert_celestial(uptr<Celestial> cel);
+    EntityId insert_satellite(uptr<Satellite> sat);
+    EntityId insert_station(uptr<Station> stat);
     // void insert_celestials(svec<uptr<Celestial>> cels);
     void insert_satellites(svec<uptr<Satellite>> sats);
     // void insert_stations(svec<uptr<Station>>stats);

@@ -137,7 +137,7 @@ EntityId World::allocate_id() {
     active_ids.push_back(next_id);
     return next_id++;
 }
-EntityId World::insert_body(std::unique_ptr<Body> body) {
+EntityId World::insert_body(uptr<Body> body) {
     if (body == nullptr) return kInvalidEntityId;
     EntityId id = allocate_id();
     body->id = id;
@@ -150,13 +150,13 @@ EntityId World::spawn_celestial() { return insert_body(std::make_unique<Celestia
 EntityId World::spawn_satellite() { return insert_body(std::make_unique<Satellite>()); }
 EntityId World::spawn_station() { return insert_body(std::make_unique<Station>()); }
 
-EntityId World::insert_celestial(std::unique_ptr<Celestial> cel) {
+EntityId World::insert_celestial(uptr<Celestial> cel) {
     return insert_body(std::move(cel));
 }
-EntityId World::insert_satellite(std::unique_ptr<Satellite> sat) {
+EntityId World::insert_satellite(uptr<Satellite> sat) {
     return insert_body(std::move(sat));
 }
-EntityId World::insert_station(std::unique_ptr<Station> stat) {
+EntityId World::insert_station(uptr<Station> stat) {
     return insert_body(std::move(stat));
 }
 

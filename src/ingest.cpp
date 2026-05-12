@@ -820,7 +820,7 @@ TLEStatus sat_from_tle_data(
 }
 
 TLEStatus sats_from_tle_data(
-    svec<std::unique_ptr<Satellite>>& sats,
+    svec<uptr<Satellite>>& sats,
     const svec<TLEData>& tles,
     const TLEReadOptions& opts
 ) {
