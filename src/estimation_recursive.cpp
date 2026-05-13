@@ -65,7 +65,8 @@ ODStatus od_ekf_validate_input(const ODEKFInput& input) {
 }
 
 ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
-    // NOTE: for sensor fusion, add three measurements at the same timestamp
+    // NOTE: for sensor fusion, add multiple measurements at the same timestamp
+    // can be from same or different sources
     ODEKFStepResult result;
     const ODEKFState& filter = input.filter;
     const Measurement& meas = input.measurement;
@@ -210,7 +211,6 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     result.residual_norm = std::sqrt(res_norm2);
     // result.residual_norm = std::sqrt(res.transpose() * S.inverse() * res);
     result.raw_residual_norm = res.norm();
-    result.success = true;
     result.status = ODStatus::ok;
     return result;
 }
@@ -238,7 +238,7 @@ ODEKFResult od_ekf_offline(const ODEKFInput& input) {
         };
 
         ODEKFStepResult step_result = od_ekf_step(step_input);
-        if (!step_result.success) {
+        if (!od_status_success(step_result.status)) {
             result.filter = step_result.filter;
             result.status = step_result.status;
             result.processed_measurements = i;
@@ -252,7 +252,6 @@ ODEKFResult od_ekf_offline(const ODEKFInput& input) {
 
     result.filter = filter;
     result.status = ODStatus::ok;
-    result.success = true;
     result.filter = filter;
 
     return result;

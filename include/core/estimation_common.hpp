@@ -9,6 +9,7 @@ enum struct ODStatus {
     size_mismatch,
     propagation_failed,
     singular_normal_matrix,
+    prediction_only,
     max_iters_reached,
     correction_rejected,
     invalid_covariance,
@@ -38,6 +39,9 @@ inline std::string od_status_string(ODStatus status) {
     case ODStatus::singular_normal_matrix: {
         str = "Singular Normal Matrix";
     } break;
+    case ODStatus::prediction_only: {
+        str = "Prediction Only";
+    } break;
     case ODStatus::max_iters_reached: {
         str = "Max Iterations reached";
     } break;
@@ -58,4 +62,8 @@ inline std::string od_status_string(ODStatus status) {
     } break;
     }
     return str;
+}
+
+inline bool od_status_success(ODStatus status) {
+    return status == ODStatus::ok || status == ODStatus::prediction_only;
 }

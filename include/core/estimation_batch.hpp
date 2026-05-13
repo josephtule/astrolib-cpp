@@ -25,7 +25,6 @@ struct ODBatchInput {
 };
 
 struct ODBatchResult {
-    bool success = false;
     ODStatus status = ODStatus::invalid_input;
     StateTr x0_est;
     mat6d covariance = mat6d0;
@@ -37,7 +36,6 @@ struct ODBatchResult {
 };
 
 struct ODBatchResidualEval {
-    bool success = false;
     ODStatus status = ODStatus::invalid_input;
     f64 weighted_norm = 0.0;
     f64 raw_norm = 0.0;

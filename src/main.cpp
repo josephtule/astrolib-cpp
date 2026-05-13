@@ -103,11 +103,11 @@ int main() {
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
-    // run_render_pipeline_diag();
+    run_render_pipeline_diag();
     // run_batch_od_diag();
     // run_ekf_world_diag();
     // run_iod_lumve_ekf_init_diag();
-    run_od_zonal_jacobian_diag();
+    // run_od_zonal_jacobian_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

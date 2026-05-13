@@ -35,6 +35,7 @@ inline ODAttDynamicsModel worldattmodel_to_odattmodel(CelestialAttitudeModel mod
 }
 
 struct ODDynamicsConfig {
+    // what the station knows of the dynamics
     ODTrDynamicsModel tr_model = ODTrDynamicsModel::two_body;
     ODAttDynamicsModel att_model = ODAttDynamicsModel::fixed;
     f64 t0 = 0.0;

@@ -26,6 +26,14 @@ struct Body {
 };
 
 enum struct GravityModel { pointmass, zonal, spherical_harmonics };
+inline std::string gravity_model_name(GravityModel model) {
+        switch (model) {
+        case GravityModel::pointmass: return "pointmass";
+        case GravityModel::zonal: return "zonal";
+        case GravityModel::spherical_harmonics: return "spherical_harmonics";
+        }
+        return "unknown";
+    };
 enum struct RadiationModel { none, isotropic };
 enum struct CelestialAttitudeModel { fixed, simple_spin, provider };
 struct Celestial : public Body {

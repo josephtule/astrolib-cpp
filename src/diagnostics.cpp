@@ -1095,7 +1095,7 @@ void run_batch_od_diag() {
         std::println("LUMVE Final Error = {}", final_err);
         std::println("LUMVE Final Position Error = {}", final_r_err);
         std::println("LUMVE Final Velocity Error = {}", final_v_err);
-        std::println("LUMVE Success = {}", result.success);
+        std::println("LUMVE Success = {}", od_status_success(result.status));
         std::println("LUMVE Status: {}", od_status_string(result.status));
         std::println("LUMVE Measurements = {}", input.measurements.size());
         std::println("LUMVE Iterations = {}", result.iterations);
@@ -1572,7 +1572,7 @@ void run_ekf_world_diag() {
         std::println("MIXED EKF Final Position Error = {}", final_r_err);
         std::println("MIXED EKF Final Velocity Error = {}", final_v_err);
         std::println("MIXED EKF Final Time = {}", result.filter.t);
-        std::println("MIXED EKF Success = {}", result.success);
+        std::println("MIXED EKF Success = {}", od_status_success(result.status));
         std::println("MIXED EKF Status: {}", od_status_string(result.status));
         std::println(
             "MIXED EKF Processed Measurements = {}",
@@ -2692,17 +2692,24 @@ void run_world_measurement_context_diag() {
         std::println("{} Error: {}", diag_case.name, (z_world - z_ctx).norm());
     }
 }
-
+// -------------------------------------------------------------------------------------------------
 void run_iod_lumve_ekf_init_diag() {
     World world;
+
+    // Diagnostic parameters
+    GravityModel truth_model = GravityModel::spherical_harmonics;
+    i32 truth_deg_ord = 32;
+    GravityModel est_model = GravityModel::zonal;
+    i32 est_degree = 4;
+    bool use_iod_initial_guess = true; // keep IOD optional for now
 
     // Earth
     EntityId earth_id = wgs84(world);
     Celestial* earth = world.celestial(earth_id);
     earth->name = "Earth";
-    earth->gravity_model = GravityModel::spherical_harmonics;
-    earth->degree = 6;
-    earth->order = 6;
+    earth->gravity_model = truth_model;
+    earth->degree = truth_deg_ord;
+    earth->order = truth_deg_ord;
     bool gfc_ok = read_gfc(
         pwd + "/assets/EGM2008.gfc.txt",
         earth->C,
@@ -2740,9 +2747,9 @@ void run_iod_lumve_ekf_init_diag() {
     sat->x_tr = x0_truth;
 
     // Orbit Determination Config
-    i32 zonal_degree = 4; // have od model and "truth" model discrepancy
+    i32 zonal_degree = est_degree; // have od model and "truth" model discrepancy
     ODDynamicsConfig dyn_config;
-    dyn_config.tr_model = ODTrDynamicsModel::zonal;
+    dyn_config.tr_model = worldtrmodel_to_odtrmodel(est_model);
     dyn_config.update_body_attitude = true;
     dyn_config.att_model = ODAttDynamicsModel::simple_spin;
     dyn_config.J = earth->J;
@@ -2827,8 +2834,6 @@ void run_iod_lumve_ekf_init_diag() {
     IODResult iod_res = iod_gauss(gauss_input, earth->mu);
     // IODResult iod_res
     //     = iod_herrickgibbs(ts[0], ts[1], ts[2], rs[0], rs[1], rs[2], earth->mu);
-
-    bool use_iod_initial_guess = true; // keep IOD optional for now
 
     // LUMVE
     ODBatchInput lumve_input;
@@ -2922,8 +2927,8 @@ void run_iod_lumve_ekf_init_diag() {
 
     // offline EKF
     ODEKFInput ekf_input;
-    bool lumve_state_ok
-        = lumve_result.success && statetr_to_vec6(lumve_result.x0_est).allFinite();
+    bool lumve_state_ok = od_status_success(lumve_result.status)
+                          && statetr_to_vec6(lumve_result.x0_est).allFinite();
     ekf_input.initial_filter.x
         = lumve_state_ok ? lumve_result.x0_est : lumve_input.x0_guess;
     ekf_input.initial_filter.t = lumve_input.t0;
@@ -3020,6 +3025,11 @@ void run_iod_lumve_ekf_init_diag() {
     f64 ekf_final_v_err = (ekf_result.filter.x.v - x_truth_final.v).norm();
 
     print_diag_title("IOD -> LUMVE -> EKF Pipeline Diagnostic");
+    std::println("Truth Model = {}", gravity_model_name(truth_model));
+    std::println("Truth Degree/Order = {}", truth_deg_ord);
+    std::println("Estimator Model = {}", gravity_model_name(est_model));
+    std::println("Estimator Zonal Degree = {}", est_degree);
+    std::println();
     std::println("IOD Used As Initial Guess = {}", use_iod_initial_guess && iod_guess_ok);
     std::println("IOD Success = {}", iod_res.success);
     std::println("IOD Status: {}", iod_status_string(iod_res.status));
@@ -3027,7 +3037,7 @@ void run_iod_lumve_ekf_init_diag() {
 
     std::println();
 
-    std::println("LUMVE Success = {}", lumve_result.success);
+    std::println("LUMVE Success = {}", od_status_success(lumve_result.status));
     std::println("LUMVE Status: {}", od_status_string(lumve_result.status));
     std::println("LUMVE Initial Error = {}", lumve_initial_err);
     std::println("LUMVE Final Error = {}", lumve_final_err);
@@ -3041,7 +3051,7 @@ void run_iod_lumve_ekf_init_diag() {
 
     std::println();
 
-    std::println("EKF Success = {}", ekf_result.success);
+    std::println("EKF Success = {}", od_status_success(ekf_result.status));
     std::println("EKF Status: {}", od_status_string(ekf_result.status));
     std::println("EKF Initial Error = {}", ekf_initial_err);
     std::println("EKF Final Error = {}", ekf_final_err);
@@ -3054,6 +3064,9 @@ void run_iod_lumve_ekf_init_diag() {
     std::println("EKF Residual Norm = {}", ekf_result.residual_norm);
     std::println("EKF Raw Residual Norm = {}", ekf_result.raw_residual_norm);
     std::println("EKF Final Covariance Norm = {}", ekf_result.filter.P.norm());
+
+    std::println();
+    std::println("World Steps: {}", stats.substeps_completed * stats.ticks_completed);
 }
 
 void run_od_zonal_jacobian_diag() {

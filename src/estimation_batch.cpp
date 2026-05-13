@@ -106,7 +106,6 @@ ODBatchResidualEval od_batch_eval_residual_norm(
 
     eval.weighted_norm = std::sqrt(weighted_norm2);
     eval.raw_norm = std::sqrt(raw_norm2);
-    eval.success = true;
     eval.status = ODStatus::ok;
     return eval;
 }
@@ -118,7 +117,6 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
 
     result.status = od_batch_validate_input(input);
     if (result.status != ODStatus::ok) {
-        result.success = false;
         return result;
     } else {
         result.status = ODStatus::ok;
@@ -131,7 +129,6 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
     StateTr x0_ref = input.x0_guess;
     result.x0_est = x0_ref;
     result.status = ODStatus::max_iters_reached;
-    result.success = false;
 
     for (i32 iter = 0; iter < input.max_iters; ++iter) {
         result.iterations = iter + 1;
@@ -289,7 +286,6 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
 
         StateTr x0_next = x0_ref;
         ODBatchResidualEval next_eval{
-            .success = true,
             .status = ODStatus::ok,
             .weighted_norm = current_weighted_norm,
             .raw_norm = current_raw_norm
@@ -304,7 +300,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 StateTr x0_cand = x0_ref + vec6_to_statetr(dx_cand_vec);
                 ODBatchResidualEval cand_eval
                     = od_batch_eval_residual_norm(input, x0_cand);
-                if (!cand_eval.success) {
+                if (!od_status_success(cand_eval.status)) {
                     continue;
                 }
                 if (cand_eval.weighted_norm < current_weighted_norm) {
@@ -326,7 +322,6 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                     // residual probably already in noise floor so accept
                     // TODO: NOTE: this isn't totally valid, fix later, add stalled or
                     // local min status
-                    result.success = true;
                     result.status = ODStatus::ok;
                     return result;
                 }
@@ -349,7 +344,6 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
 
         if (result.dx_norm < input.tol_dx || result.residual_norm < input.tol_residual) {
             // tolerances should be looser for angle-only measurements
-            result.success = true;
             result.status = ODStatus::ok;
             return result;
         }

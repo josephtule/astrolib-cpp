@@ -24,7 +24,6 @@ struct ODEKFStepInput {
 };
 
 struct ODEKFStepResult {
-    bool success = false;
     ODStatus status = ODStatus::invalid_input;
     ODEKFState filter;
     vecXd residual;
@@ -44,7 +43,6 @@ struct ODEKFInput {
 };
 
 struct ODEKFResult {
-    bool success = false;
     ODStatus status = ODStatus::invalid_input;
     ODEKFState filter;
     i32 processed_measurements = 0;
