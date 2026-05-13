@@ -1,5 +1,7 @@
 #include "core/estimation_batch.hpp"
+#include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
+#include "core/od_dynamics.hpp"
 
 #include <Eigen/Core>
 #include <cmath>
@@ -11,6 +13,11 @@ ODStatus od_batch_validate_input(const ODBatchInput& input) {
     }
     if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0 || input.max_iters <= 0)
         return ODStatus::invalid_input;
+
+    if (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6) {
+        return ODStatus::invalid_input;
+    }
+
     return ODStatus::ok;
 }
 

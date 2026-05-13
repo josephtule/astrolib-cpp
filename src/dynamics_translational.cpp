@@ -7,10 +7,7 @@ f64 inv_r3_safe(const ecref<vec3d> r, f64 epsilon) {
     return inv_r * inv_r * inv_r;
 }
 
-vec3d accel_gravity_pointmass(
-    ecref<vec3d> r_rel,
-    f64 mu,
-    f64 epsilon) {
+vec3d accel_gravity_pointmass(ecref<vec3d> r_rel, f64 mu, f64 epsilon) {
     return -mu * r_rel * inv_r3_safe(r_rel, epsilon);
 }
 
@@ -20,7 +17,9 @@ vec3d accel_gravity_zonal(
     f64 R_cb,           // target body radius
     i32 degree,
     vec7d J, // zonal gravity parameters [J0, J1, J2, J3, J4, J5, J6]
-    f64 epsilon) {
+    // TODO: use vecXd for J and allow higher degree
+    f64 epsilon
+) {
     vec3d a = accel_gravity_pointmass(r_rel, mu);
     degree = std::min(degree, 6);
 
@@ -38,6 +37,7 @@ vec3d accel_gravity_zonal(
     f64 zr4 = zr2 * zr2;
     f64 Rr2 = Rr * Rr;
 
+    // TODO: remove reliance on switch and allow multi-degree zonals, e.g. [J2, J4]
     switch (degree) {
     case 6: {
         f64 Rr6 = Rr2 * Rr2 * Rr2;
@@ -108,7 +108,8 @@ void norm_legendre(
     i32 order,
     eref<matXd> P,
     eref<matXd> scales,
-    f64 tol) {
+    f64 tol
+) {
     f64 cphi = std::cos(pio2 - phi);
     f64 sphi = std::sin(pio2 - phi);
 
@@ -156,7 +157,8 @@ vec3d accel_gravity_spherical_harmonics(
     i32 order,
     ecref<matXd> C,
     ecref<matXd> S,
-    f64 tol) {
+    f64 tol
+) {
     vec3d a = vec3d0;
 
     // Order and degree guards
@@ -250,4 +252,3 @@ vec3d accel_gravity_spherical_harmonics(
 
     return a;
 }
-

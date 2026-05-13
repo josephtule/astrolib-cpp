@@ -31,6 +31,7 @@
 #include "raymath.h"
 #include "rlgl.h"
 
+#include <limits>
 #include <memory>
 #include <random>
 
@@ -782,7 +783,7 @@ void run_od_prop_diag(const Celestial& body) {
     i32 n_steps = 100;
     f64 dt = tof / n_steps;
 
-    ODDynamicsConfig cfg{.model = ODDynamicsModel::two_body, .mu = body.mu};
+    ODDynamicsConfig cfg{.tr_model = ODTrDynamicsModel::two_body, .mu = body.mu};
     StateTr x2_prop = propagate_tr_od(0.0, x1, dt, n_steps, cfg);
 
     std::println("OD Propagation Error");
@@ -938,7 +939,7 @@ void run_batch_od_diag() {
     auto run_case = [&](const BatchDiagCase& diag_case) {
         ODBatchInput input;
         input.x0_guess = x0_truth;
-        input.dyn_config.model = ODDynamicsModel::two_body;
+        input.dyn_config.tr_model = ODTrDynamicsModel::two_body;
         input.dyn_config.mu = earth->mu;
         input.t0 = 0.0;
         input.max_iters = 10;
@@ -1414,7 +1415,7 @@ void run_ekf_world_diag() {
         input.initial_filter.x = x0_truth;
         input.initial_filter.t = 0.0;
         input.initial_filter.P = mat6d1;
-        input.dyn_config.model = ODDynamicsModel::two_body;
+        input.dyn_config.tr_model = ODTrDynamicsModel::two_body;
         input.dyn_config.mu = earth->mu;
         input.prop_steps = 200;
         input.Q = mat6d1 * 1e-4;
@@ -1665,8 +1666,8 @@ void run_world_stepper_diag() {
         sat->propagate_att = true;
 
         WorldStepperConfig cfg;
-        cfg.step_translation = true;
-        cfg.step_attitude = true;
+        cfg.step_tr = true;
+        cfg.step_att = true;
         cfg.substeps = 1;
         cfg.ticks = 10;
         cfg.time_scale = 1.0 / cfg.ticks;
@@ -1680,10 +1681,10 @@ void run_world_stepper_diag() {
         world.reset_time(t0);
 
         ODDynamicsConfig ODcfg;
-        ODcfg.body_radius = earth->mean_radius;
+        ODcfg.R_cb_ref = earth->mean_radius;
         ODcfg.integrator = integrator_tr;
         ODcfg.mu = earth->mu;
-        ODcfg.model = ODDynamicsModel::two_body;
+        ODcfg.tr_model = ODTrDynamicsModel::two_body;
 
         // "truth"
         i32 n_ref_steps = n_steps * cfg.ticks * cfg.substeps;
@@ -1748,8 +1749,8 @@ void run_body_fixed_gravity_timing_diag() {
         earth->propagate_att = true;
 
         WorldStepperConfig cfg;
-        cfg.step_translation = false;
-        cfg.step_attitude = true;
+        cfg.step_tr = false;
+        cfg.step_att = true;
         cfg.integrator_tr = IntegratorType::rk1;
         cfg.integrator_att = IntegratorType::rk4;
         cfg.substeps = 1;
@@ -1798,8 +1799,8 @@ void run_body_fixed_gravity_timing_diag() {
 
         // integration options
         WorldStepperConfig cfg;
-        cfg.step_translation = true;
-        cfg.step_attitude = true;
+        cfg.step_tr = true;
+        cfg.step_att = true;
         cfg.substeps = 1;
         cfg.ticks = 10;
         cfg.time_scale = 1.0 / cfg.ticks;
@@ -1985,8 +1986,8 @@ void run_moving_source_world_diag() {
 
     // integration options
     WorldStepperConfig cfg;
-    cfg.step_translation = true;
-    cfg.step_attitude = true;
+    cfg.step_tr = true;
+    cfg.step_att = true;
     cfg.substeps = 10;
     cfg.ticks = 1;
     cfg.time_scale = 1.0;
@@ -2294,8 +2295,8 @@ void run_staged_attitude_gravity_diag() {
 
     // integration options
     WorldStepperConfig cfg;
-    cfg.step_translation = true;
-    cfg.step_attitude = true;
+    cfg.step_tr = true;
+    cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 1;
     cfg.time_scale = 1.0;
@@ -2438,8 +2439,8 @@ void run_render_pipeline_diag() {
 
     // integrator
     WorldStepperConfig cfg;
-    cfg.step_translation = true;
-    cfg.step_attitude = true;
+    cfg.step_tr = true;
+    cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 100;
     cfg.time_scale = 2.0;
@@ -2576,8 +2577,8 @@ void run_world_workspace_diag() {
 
     // integrator
     WorldStepperConfig cfg;
-    cfg.step_translation = true;
-    cfg.step_attitude = true;
+    cfg.step_tr = true;
+    cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 1;
     cfg.time_scale = 1.0;
@@ -2693,22 +2694,64 @@ void run_world_measurement_context_diag() {
 }
 
 void run_iod_lumve_ekf_init_diag() {
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->name = "Earth";
+    earth->gravity_model = GravityModel::spherical_harmonics;
+    earth->degree = 6;
+    earth->order = 6;
+    bool gfc_ok = read_gfc(
+        pwd + "/assets/EGM2008.gfc.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    if (!gfc_ok) {
+        std::println("GFC Load Failed");
+        return;
+    }
+    earth->propagate_tr = true;
+    earth->propagate_att = true;
+    earth->attitude_model = CelestialAttitudeModel::simple_spin;
+    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
+    earth->set_spin_rate(earth->spin_rate());
+
+    // Stations
     vec3d llh1 = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
     vec3d llh2 = vec3d{45.0, 30.0, 0.0};
-    EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh1);
-    World& world = scenario.world;
-    EntityId earth_id = scenario.earth_id;
-    EntityId stat1_id = scenario.stat_id;
-    EntityId stat2_id = world.spawn_station();
-    world.set_stat_anchor_detic(stat2_id, earth_id, llh2);
-    EntityId sat_id = scenario.sat_id;
-    Celestial* earth = world.celestial(earth_id);
-    Satellite* sat = world.satellite(sat_id);
+    EntityId stat1_id = world.spawn_station();
+    Station* stat1 = world.station(stat1_id);
+    world.set_stat_anchor_detic(stat1_id, earth_id, llh1);
 
+    EntityId stat2_id = world.spawn_station();
+    Station* stat2 = world.station(stat2_id);
+    world.set_stat_anchor_detic(stat2_id, earth_id, llh2);
+
+    // Satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
     StateTr x0_truth;
     x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
     x0_truth.v = vec3d{-0.5, 7.2, 1.0};
     sat->x_tr = x0_truth;
+
+    // Orbit Determination Config
+    i32 zonal_degree = 4; // have od model and "truth" model discrepancy
+    ODDynamicsConfig dyn_config;
+    dyn_config.tr_model = ODTrDynamicsModel::zonal;
+    dyn_config.update_body_attitude = true;
+    dyn_config.att_model = ODAttDynamicsModel::simple_spin;
+    dyn_config.J = earth->J;
+    dyn_config.R_cb_ref = earth->semimajor_axis;
+    dyn_config.zonal_degree = zonal_degree;
+    dyn_config.q_cb0 = earth->x_att.q;
+    dyn_config.w_cb = earth->x_att.w;
+    dyn_config.mu = earth->mu;
+    dyn_config = dyn_config;
 
     f64 t_meas0 = 0.0;
     f64 t_measf = 600.0;
@@ -2722,8 +2765,8 @@ void run_iod_lumve_ekf_init_diag() {
     f64 sigma_v = 1e-6;
 
     WorldStepperConfig cfg;
-    cfg.step_translation = true;
-    cfg.step_attitude = true;
+    cfg.step_tr = true;
+    cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 10;
     cfg.time_scale = 1.0 / cfg.ticks;
@@ -2786,6 +2829,7 @@ void run_iod_lumve_ekf_init_diag() {
     //     = iod_herrickgibbs(ts[0], ts[1], ts[2], rs[0], rs[1], rs[2], earth->mu);
 
     bool use_iod_initial_guess = true; // keep IOD optional for now
+
     // LUMVE
     ODBatchInput lumve_input;
     bool iod_guess_ok = iod_res.success && statetr_to_vec6(iod_res.x).allFinite();
@@ -2796,8 +2840,8 @@ void run_iod_lumve_ekf_init_diag() {
         lumve_input.x0_guess.r += vec3d{1.0, -1.0, 0.5};
         lumve_input.x0_guess.v += vec3d{1e-4, -1e-4, 2.5e-4};
     }
-    lumve_input.dyn_config.model = ODDynamicsModel::two_body;
-    lumve_input.dyn_config.mu = earth->mu;
+
+    lumve_input.dyn_config = dyn_config;
     lumve_input.t0 = 0.0;
     lumve_input.max_iters = 10;
     lumve_input.prop_steps = 100;
@@ -2809,19 +2853,14 @@ void run_iod_lumve_ekf_init_diag() {
 
     // create measurements
     for (i32 i = 0; i < split_idx; ++i) {
-        sat->x_tr = propagate_tr_od(
-            0.0,
-            x0_truth,
-            t_meas(i),
-            lumve_input.prop_steps,
-            lumve_input.dyn_config
-        ); // TODO: use world stepper?
+        dt = t_meas(i) - world.t_sim();
+        stats += step_world(world, dt, cfg);
+        if (!stats.success) break;
+
         // stat1 -> radec + range
-        world.set_stat_anchor_detic(stat1_id, earth_id, llh1);
         StateTr x_tr_obsv1 = world.stat_x_tr_inertial(stat1_id);
 
         // stat2 -> range-rate
-        world.set_stat_anchor_detic(stat2_id, earth_id, llh2);
         StateTr x_tr_obsv2 = world.stat_x_tr_inertial(stat2_id);
 
         Measurement meas;
@@ -2892,25 +2931,19 @@ void run_iod_lumve_ekf_init_diag() {
     bool lumve_cov_ok = lumve_result.covariance.allFinite()
                         && lumve_result.covariance.diagonal().minCoeff() > 0.0;
     ekf_input.initial_filter.P = lumve_cov_ok ? lumve_result.covariance : mat6d1;
-    ekf_input.dyn_config.model = ODDynamicsModel::two_body;
-    ekf_input.dyn_config.mu = earth->mu;
+
+    ekf_input.dyn_config = dyn_config;
     ekf_input.prop_steps = 200;
     ekf_input.Q = mat6d1 * 1e-4;
 
     for (i32 i = split_idx; i < N_meas; ++i) {
-        sat->x_tr = propagate_tr_od(
-            0.0,
-            x0_truth,
-            t_meas(i),
-            ekf_input.prop_steps,
-            ekf_input.dyn_config
-        );
+        dt = t_meas(i) - world.t_sim();
+        stats += step_world(world, dt, cfg);
+        if (!stats.success) break;
         // stat1 -> radec + range
-        world.set_stat_anchor_detic(stat1_id, earth_id, llh1);
         StateTr x_tr_obsv1 = world.stat_x_tr_inertial(stat1_id);
 
         // stat2 -> range-rate
-        world.set_stat_anchor_detic(stat2_id, earth_id, llh2);
         StateTr x_tr_obsv2 = world.stat_x_tr_inertial(stat2_id);
 
         Measurement meas;
@@ -3021,4 +3054,79 @@ void run_iod_lumve_ekf_init_diag() {
     std::println("EKF Residual Norm = {}", ekf_result.residual_norm);
     std::println("EKF Raw Residual Norm = {}", ekf_result.raw_residual_norm);
     std::println("EKF Final Covariance Norm = {}", ekf_result.filter.P.norm());
+}
+
+void run_od_zonal_jacobian_diag() {
+    World world;
+
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    if (!earth) {
+        std::println("OD Zonal Jacobian Diagnostic: Earth Spawn Failed");
+        return;
+    }
+
+    earth->name = "Earth";
+    earth->attitude_model = CelestialAttitudeModel::simple_spin;
+    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
+    earth->set_spin_rate(earth->spin_rate());
+
+    StateTr x0;
+    x0.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0.v = vec3d{-0.5, 7.2, 1.0};
+
+    auto print_case = [&](const std::string& name, f64 t, const ODDynamicsConfig& cfg) {
+        mat6d G = jacobian_tr_od(t, x0, cfg);
+        mat6d G_fd = jacobian_fd_od_dynamics(t, x0, cfg);
+
+        mat6d G_err = G - G_fd;
+        mat3d A_err = G.block<3, 3>(3, 0) - G_fd.block<3, 3>(3, 0); // accel block
+        f64 G_fd_norm = G_fd.norm();
+        f64 A_fd_norm = G_fd.block<3, 3>(3, 0).norm();
+        if (G_fd_norm < 1.0) G_fd_norm = 1.0;
+        if (A_fd_norm < 1.0) A_fd_norm = 1.0;
+
+        // consider fd as "truth"
+        std::println("{}", name);
+        std::println("G error = {}", G_err.norm());
+        std::println("G rel error = {}", G_err.norm() / G_fd_norm);
+        std::println("A error = {}", A_err.norm());
+        std::println("A rel error = {}", A_err.norm() / A_fd_norm);
+        std::println();
+    };
+
+    print_diag_title("OD Zonal Jacobian Diagnostic");
+
+    ODDynamicsConfig cfg;
+    cfg.mu = earth->mu;
+    cfg.R_cb_ref = earth->semimajor_axis;
+    cfg.J = earth->J;
+    cfg.q_cb0 = earth->x_att.q;
+    cfg.w_cb = earth->x_att.w;
+    cfg.t0 = 0.0;
+
+    cfg.tr_model = ODTrDynamicsModel::two_body;
+    print_case("Two Body", 0.0, cfg);
+
+    for (i32 degree = 2; degree <= 6; ++degree) {
+        cfg.tr_model = ODTrDynamicsModel::zonal;
+        cfg.zonal_degree = degree;
+
+        cfg.update_body_attitude = false;
+        cfg.att_model = ODAttDynamicsModel::fixed;
+        cfg.q_cb0 = q_identity;
+        print_case("J" + std::to_string(degree) + " Fixed Identity", 0.0, cfg);
+
+        cfg.update_body_attitude = false;
+        cfg.att_model = ODAttDynamicsModel::fixed;
+        cfg.q_cb0 = earth->x_att.q;
+        print_case("J" + std::to_string(degree) + " Fixed Tilted", 0.0, cfg);
+
+        cfg.update_body_attitude = true;
+        cfg.att_model = ODAttDynamicsModel::simple_spin;
+        cfg.q_cb0 = earth->x_att.q;
+        print_case("J" + std::to_string(degree) + " Simple Spin", 1000.0, cfg);
+    }
+
+    std::println("------------------------------------------------------------");
 }

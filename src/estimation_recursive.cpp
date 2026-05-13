@@ -25,6 +25,11 @@ ODStatus od_ekf_step_validate_input(const ODEKFStepInput& input) {
     if (input.measurement.z.size() != dim || !input.measurement.z.allFinite()) {
         return ODStatus::invalid_input;
     }
+
+    if (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6) {
+        return ODStatus::invalid_input;
+    }
+
     return ODStatus::ok;
 }
 

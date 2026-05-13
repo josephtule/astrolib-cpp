@@ -2,6 +2,7 @@
 
 #include "core/entity.hpp"
 #include "core/observations.hpp"
+#include "core/od_dynamics.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
 #include "util/constants.hpp"
@@ -192,6 +193,7 @@ inline matXd jacobian_fd_measurement(
 
     MeasurementContext ctx_pert = ctx;
     for (i32 i = 0; i < cols; ++i) {
+        // forward differencing
         f64 eps_i = i < 3 ? eps_pos : eps_vel;
 
         vec6d x_target_pert_vec = statetr_to_vec6(ctx.x_tr_target);

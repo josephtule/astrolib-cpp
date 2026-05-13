@@ -74,3 +74,4 @@ void run_render_pipeline_diag();
 void run_world_workspace_diag();
 void run_world_measurement_context_diag();
 void run_iod_lumve_ekf_init_diag();
+void run_od_zonal_jacobian_diag();

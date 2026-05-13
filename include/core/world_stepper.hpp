@@ -11,8 +11,8 @@ struct WorldStepperConfig {
     i32 substeps = 1;     // subdivisions per tick
     i32 ticks = 1;        // repeated integration ticks per call
     f64 time_scale = 1.0; // simulated-time multiplier applied to input dt
-    bool step_translation = true;
-    bool step_attitude = false;
+    bool step_tr = true;
+    bool step_att = false;
 };
 
 struct WorldStepperWorkspace {

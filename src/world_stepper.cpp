@@ -690,7 +690,7 @@ static bool step_tr_world_staged(
     const WorldStepperConfig& cfg,
     const WorldStepperWorkspace& wksp
 ) {
-    bool stage_source_att = cfg.step_attitude;
+    bool stage_source_att = cfg.step_att;
 
     switch (cfg.integrator_tr) {
     case IntegratorType::rk1:
@@ -737,7 +737,7 @@ WorldStepperStats step_world(
     for (i32 tick = 0; tick < cfg.ticks; ++tick) {
         for (i32 substep = 0; substep < cfg.substeps; ++substep) {
             // translational
-            if (cfg.step_translation) {
+            if (cfg.step_tr) {
                 bool step_ok = step_tr_world_staged(
                     world,
                     world.t_sim(),
@@ -753,7 +753,7 @@ WorldStepperStats step_world(
 
             // attitude
             for (EntityId id : att_ids) {
-                if (cfg.step_attitude) {
+                if (cfg.step_att) {
                     bool step_ok = step_att_world(world, id, dt_sub, cfg);
                     if (!step_ok) {
                         stats.success = step_ok;
@@ -764,7 +764,7 @@ WorldStepperStats step_world(
 
             // celestial attitude
             for (EntityId id : cel_att_ids) {
-                if (cfg.step_attitude) {
+                if (cfg.step_att) {
                     bool step_ok = step_cel_att_world(world, id, dt_sub);
                     if (!step_ok) {
                         stats.success = step_ok;
