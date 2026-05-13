@@ -1,5 +1,10 @@
 #include "core/estimation_recursive.hpp"
+#include "core/entity.hpp"
+#include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
+#include "core/od_dynamics.hpp"
+#include "core/state.hpp"
+#include "core/world.hpp"
 
 #include <cmath>
 
@@ -33,7 +38,7 @@ ODStatus od_ekf_step_validate_input(const ODEKFStepInput& input) {
     return ODStatus::ok;
 }
 
-ODStatus od_ekf_validate_input(const ODEKFInput& input) {
+ODStatus od_ekf_validate_input(const ODEKFOfflineInput& input) {
     if (input.measurements.size() == 0) return ODStatus::empty_measurements;
     if (input.measurements.size() != input.observer_states.size()) {
         return ODStatus::size_mismatch;
@@ -64,6 +69,59 @@ ODStatus od_ekf_validate_input(const ODEKFInput& input) {
     return ODStatus::ok;
 }
 
+ODEKFPredictResult od_ekf_predict(
+    const ODEKFState& filter,
+    f64 t_target,
+    const ODDynamicsConfig& dyn_config,
+    i32 prop_steps,
+    const mat6d& Q,
+    f64 tol
+) {
+    ODEKFPredictResult result;
+    f64 dt = t_target - filter.t;
+    if (dt < -tol) {
+        result.status = ODStatus::invalid_input;
+        return result;
+    } else if (std::abs(dt) <= tol) {
+        // same epoch
+        dt = 0.0;
+    }
+    bool propagate = dt != 0.0;
+    mat6d Q_eff;
+    if (std::abs(dt) <= tol) { // sensor fusion mode
+        Q_eff = mat6d0;
+    } else {
+        Q_eff = Q;
+    }
+    VarStateTr y0;
+    y0.x = filter.x;
+    y0.Phi = mat6d1;
+
+    // propagate prediction state and STM
+    VarStateTr yf;
+    if (propagate) {
+        yf = propagate_var_tr_od(filter.t, y0, dt, prop_steps, dyn_config);
+    } else {
+        yf = y0;
+    }
+
+    // state and covariance prediction
+    // process noise belongs to elapsed dynamics, not each sensor update
+    result.y.x = yf.x;
+    result.y.Phi = yf.Phi;
+    result.P = result.y.Phi * filter.P * result.y.Phi.transpose() + Q_eff;
+    if (!statetr_to_vec6(result.y.x).allFinite() || !result.y.Phi.allFinite()
+        || !result.P.allFinite()) {
+        result.status = ODStatus::propagation_failed;
+        return result;
+    }
+
+    result.t = filter.t + dt;
+
+    result.status = ODStatus::ok;
+    return result;
+}
+
 ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // NOTE: for sensor fusion, add multiple measurements at the same timestamp
     // can be from same or different sources
@@ -83,48 +141,28 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
         result.raw_residual_norm = 0.0;
     }
 
-    f64 dt = meas.t - filter.t;
-    if (dt < -input.tol_time) {
-        // reject negative for now, TODO: create separate for smoothing/backward filtering
-        result.status = ODStatus::invalid_input;
-        return result;
-    } else if (std::abs(dt) <= input.tol_time) {
-        // same epoch
-        dt = 0.0;
-    }
-    bool propagate = dt != 0.0;
-    mat6d Q_eff;
-    if (std::abs(dt) <= input.tol_time) { // sensor fusion mode
-        Q_eff = mat6d0;
-    } else {
-        Q_eff = input.Q;
-    }
-    VarStateTr y0;
-    y0.x = input.filter.x;
-    y0.Phi = mat6d1;
+    ODEKFPredictResult prediction = od_ekf_predict(
+        filter,
+        meas.t,
+        input.dyn_config,
+        input.prop_steps,
+        input.Q,
+        input.tol_time
+    );
 
-    // propagate prediction state and STM
-    VarStateTr yf;
-    if (propagate) {
-        yf = propagate_var_tr_od(filter.t, y0, dt, input.prop_steps, input.dyn_config);
-    } else {
-        yf = y0;
-    }
-
-    // state and covariance prediction
-    // process noise belongs to elapsed dynamics, not each sensor update
-    StateTr x_pred = yf.x;
-    mat6d Phi = yf.Phi;
-    mat6d P_pred = Phi * filter.P * Phi.transpose() + Q_eff;
-    f64 t_pred = filter.t + dt;
-    if (!statetr_to_vec6(x_pred).allFinite() || !Phi.allFinite() || !P_pred.allFinite()) {
-        result.status = ODStatus::propagation_failed;
+    if (prediction.status != ODStatus::ok) {
+        result.status = prediction.status;
         return result;
     }
-    // predicted state fallback
+
+    StateTr& x_pred = prediction.y.x;
+    mat6d& P_pred = prediction.P;
+    f64& t_pred = prediction.t;
+
     result.filter.x = x_pred;
     result.filter.P = P_pred;
     result.filter.t = t_pred;
+
 
     // measurement prediction
     MeasurementContext ctx = make_measurement_context(x_pred, x_tr_obsv);
@@ -215,7 +253,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     return result;
 }
 
-ODEKFResult od_ekf_offline(const ODEKFInput& input) {
+ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input) {
     ODEKFResult result;
     ODEKFState filter = input.initial_filter;
 

@@ -32,7 +32,7 @@ struct ODEKFStepResult {
 };
 
 // offline ekf
-struct ODEKFInput {
+struct ODEKFOfflineInput {
     ODEKFState initial_filter;
     svec<Measurement> measurements;
     svec<StateTr> observer_states;
@@ -51,6 +51,22 @@ struct ODEKFResult {
 };
 
 ODStatus od_ekf_step_validate_input(const ODEKFStepInput& input);
-ODStatus od_ekf_validate_input(const ODEKFInput& input);
+ODStatus od_ekf_validate_input(const ODEKFOfflineInput& input);
 ODEKFStepResult od_ekf_step(const ODEKFStepInput& input);
-ODEKFResult od_ekf_offline(const ODEKFInput& input);
+ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input);
+
+struct ODEKFPredictResult {
+    VarStateTr y;
+    mat6d P = mat6d1;
+    f64 t = 0.0;
+    ODStatus status = ODStatus::invalid_input;
+};
+
+ODEKFPredictResult od_ekf_predict(
+    const ODEKFState& filter,
+    f64 t_target,
+    const ODDynamicsConfig& dyn_config,
+    i32 prop_steps,
+    const mat6d& Q,
+    f64 tol = tol12
+);

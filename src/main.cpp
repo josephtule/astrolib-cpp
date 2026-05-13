@@ -99,15 +99,18 @@ int main() {
     // run_world_workspace_diag();
     // run_tle_status_reader_diag();
     // run_world_measurement_context_diag();
-    
-    // Current diagnostic(s)
-    std::println("-----------------------------------------------------------");
-    auto start = std::chrono::high_resolution_clock::now();
-    run_render_pipeline_diag();
     // run_batch_od_diag();
     // run_ekf_world_diag();
     // run_iod_lumve_ekf_init_diag();
     // run_od_zonal_jacobian_diag();
+
+    // Current diagnostic(s)
+    std::println("-----------------------------------------------------------");
+    auto start = std::chrono::high_resolution_clock::now();
+    // run_render_pipeline_diag();
+    run_world_ekf_step_diag();
+    print_diag_title("");
+    run_ekf_prediction_only_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

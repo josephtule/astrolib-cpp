@@ -267,12 +267,16 @@ static WorldAttStage build_source_att_stage(
 
     svec<EntityId> ids = wksp.source_att_ids;
     for (EntityId id : ids) {
-        const Body* body = world.body(id);
-        if (body == nullptr || !body->emits_gravity) continue; // TODO: add has atmosphere
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr || !cel->emits_gravity) {
+            // || cel->gravity_model == GravityModel::pointmass){
+            continue;
+        }
+        // TODO: add has atmosphere
         // only bodies that affect force via their attitude used
 
         stage.ids.push_back(id);
-        stage.x.emplace(id, body->x_att);
+        stage.x.emplace(id, cel->x_att);
     }
 
     return stage;
@@ -738,13 +742,8 @@ WorldStepperStats step_world(
         for (i32 substep = 0; substep < cfg.substeps; ++substep) {
             // translational
             if (cfg.step_tr) {
-                bool step_ok = step_tr_world_staged(
-                    world,
-                    world.t_sim(),
-                    dt_sub,
-                    cfg,
-                    wksp
-                );
+                bool step_ok
+                    = step_tr_world_staged(world, world.t_sim(), dt_sub, cfg, wksp);
                 if (!step_ok) {
                     stats.success = step_ok;
                     return stats;

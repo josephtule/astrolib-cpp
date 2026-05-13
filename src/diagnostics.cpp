@@ -4,6 +4,7 @@
 #include "core/entity.hpp"
 #include "core/estimation_batch.hpp"
 #include "core/estimation_recursive.hpp"
+#include "core/estimation_world.hpp"
 #include "core/ingest.hpp"
 #include "core/integrator.hpp"
 #include "core/measurement.hpp"
@@ -67,7 +68,6 @@ void run_gravity_diag(
     std::println("a_earth = {}, mag = {}", a_from_earth, a_from_earth.norm());
     std::println("a_urath = {}, mag = {}", a_from_urath, a_from_urath.norm());
     std::println("a_total = {}, mag = {}", a_total, a_total.norm());
-    std::println("------------------------------------------------------------");
 }
 
 void run_station_geo_diag(
@@ -91,7 +91,6 @@ void run_station_geo_diag(
 
     // std::println("stat_r_inertial: {}", world.stat_x_tr_inertial(stat_id).r);
     // std::println("stat_v_inertial: {}", world.stat_x_tr_inertial(stat_id).v);
-    std::println("------------------------------------------------------------");
 }
 
 void run_zonal_orientation_diag(
@@ -143,7 +142,6 @@ void run_zonal_orientation_diag(
         a_zonal - a_zonal_tilt,
         (a_zonal - a_zonal_tilt).norm()
     );
-    std::println("------------------------------------------------------------");
 }
 
 void run_spherical_harmonics_diag(
@@ -193,7 +191,6 @@ void run_spherical_harmonics_diag(
     std::println("a_sphh = {} (mag = {})", a_sphh, a_sphh.norm());
     vec3d error = a_zonal - a_sphh;
     std::println("error= {} (mag = {})", error, error.norm());
-    std::println("------------------------------------------------------------");
 }
 
 void run_sphh_longitude_diag(
@@ -274,7 +271,6 @@ void run_sphh_longitude_diag(
         sphh_long_error,
         sphh_long_error.norm()
     );
-    std::println("------------------------------------------------------------");
 }
 
 void run_epkde(
@@ -1411,7 +1407,7 @@ void run_ekf_world_diag() {
     };
 
     auto run_case = [&](const EKFDiagCase& diag_case) {
-        ODEKFInput input;
+        ODEKFOfflineInput input;
         input.initial_filter.x = x0_truth;
         input.initial_filter.t = 0.0;
         input.initial_filter.P = mat6d1;
@@ -2358,7 +2354,7 @@ void run_render_pipeline_diag() {
     EntityId earth_id = wgs84(world);
     Celestial* earth = world.celestial(earth_id);
     earth->name = "Earth";
-    earth->gravity_model = GravityModel::spherical_harmonics;
+    earth->gravity_model = GravityModel::zonal;
     earth->degree = 4;
     earth->order = 4;
     bool gfc_ok = read_gfc(
@@ -2400,13 +2396,15 @@ void run_render_pipeline_diag() {
         };
         svec<TLEData> tles;
         svec<uptr<Satellite>> tle_sats;
-        svec<i32> sat_nums = {25544, 11, 5};
-        TLEStatus tle_status = read_tle_data_satnums(
-            pwd + "/assets/tle_all.txt",
-            tles,
-            sat_nums,
-            tle_opts
-        );
+        // svec<i32> sat_nums = {25544, 11, 5};
+        // TLEStatus tle_status = read_tle_data_satnums(
+        //     pwd + "/assets/tle_all.txt",
+        //     tles,
+        //     sat_nums,
+        //     tle_opts
+        // );
+        TLEStatus tle_status
+            = read_tle_data_count(pwd + "/assets/tle_all.txt", tles, 32, tle_opts);
         if (tle_status != TLEStatus::ok) {
             std::println("TLE Read Failure: {}", tle_status_string(tle_status));
             return;
@@ -2501,6 +2499,7 @@ void run_render_pipeline_diag() {
     SetTargetFPS(60);
     bool paused = false;
     while (!WindowShouldClose()) {
+        // std::cout << 1.0f/GetFrameTime() << '\n';
         BeginDrawing();
         BeginMode3D(camera);
         ClearBackground(Color({30, 30, 30, 255}));
@@ -2747,18 +2746,12 @@ void run_iod_lumve_ekf_init_diag() {
     sat->x_tr = x0_truth;
 
     // Orbit Determination Config
-    i32 zonal_degree = est_degree; // have od model and "truth" model discrepancy
-    ODDynamicsConfig dyn_config;
-    dyn_config.tr_model = worldtrmodel_to_odtrmodel(est_model);
+    ODDynamicsConfig dyn_config = make_od_cfg_from_celestial(*earth);
+    dyn_config.tr_model = worldtrmodel_to_odtrmodel(
+        est_model
+    ); // have od model and "truth" model discrepancy
+    dyn_config.zonal_degree = est_degree;
     dyn_config.update_body_attitude = true;
-    dyn_config.att_model = ODAttDynamicsModel::simple_spin;
-    dyn_config.J = earth->J;
-    dyn_config.R_cb_ref = earth->semimajor_axis;
-    dyn_config.zonal_degree = zonal_degree;
-    dyn_config.q_cb0 = earth->x_att.q;
-    dyn_config.w_cb = earth->x_att.w;
-    dyn_config.mu = earth->mu;
-    dyn_config = dyn_config;
 
     f64 t_meas0 = 0.0;
     f64 t_measf = 600.0;
@@ -2926,7 +2919,7 @@ void run_iod_lumve_ekf_init_diag() {
     ODBatchResult lumve_result = od_batch_lumve(lumve_input);
 
     // offline EKF
-    ODEKFInput ekf_input;
+    ODEKFOfflineInput ekf_input;
     bool lumve_state_ok = od_status_success(lumve_result.status)
                           && statetr_to_vec6(lumve_result.x0_est).allFinite();
     ekf_input.initial_filter.x
@@ -3140,6 +3133,197 @@ void run_od_zonal_jacobian_diag() {
         cfg.q_cb0 = earth->x_att.q;
         print_case("J" + std::to_string(degree) + " Simple Spin", 1000.0, cfg);
     }
+}
 
-    std::println("------------------------------------------------------------");
+void run_world_ekf_step_diag() {
+    World world;
+
+    // Diagnostic parameters
+    GravityModel truth_model = GravityModel::zonal;
+    i32 truth_deg_ord = 4;
+    GravityModel est_model = GravityModel::pointmass;
+    i32 est_degree = 4;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->name = "Earth";
+    earth->gravity_model = truth_model;
+    earth->degree = truth_deg_ord;
+    earth->order = truth_deg_ord;
+    bool gfc_ok = read_gfc(
+        pwd + "/assets/EGM2008.gfc.txt",
+        earth->C,
+        earth->S,
+        earth->degree,
+        earth->order
+    );
+    if (!gfc_ok) {
+        std::println("GFC Load Failed");
+        return;
+    }
+    earth->propagate_tr = true;
+    earth->propagate_att = true;
+    earth->attitude_model = CelestialAttitudeModel::simple_spin;
+    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
+    earth->set_spin_rate(earth->spin_rate());
+
+    // Stations
+    vec3d llh1 = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
+    EntityId stat_id = world.spawn_station();
+    world.set_stat_anchor_detic(stat_id, earth_id, llh1);
+
+    // Satellite
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+    sat->x_tr = x0_truth;
+
+    // Orbit Determination Config
+    ODDynamicsConfig dyn_config = make_od_cfg_from_celestial(*earth);
+    dyn_config.tr_model = worldtrmodel_to_odtrmodel(
+        est_model
+    ); // have od model and "truth" model discrepancy
+    dyn_config.zonal_degree = est_degree;
+    dyn_config.update_body_attitude = true;
+
+    f64 t_meas = 0.0;
+    f64 sigma_range = 1e-3;
+
+    ODEKFState filter;
+    filter.x = x0_truth + StateTr{.r = {1.0, 0.25, 0.1}, .v = {0.001, 0.0005, 0.0}};
+    filter.P = mat6d1;
+    filter.t = t_meas;
+
+    ObservationType obsv_type = ObservationType::range;
+    vecXd z = world_predict_measurement(world, obsv_type, stat_id, sat_id);
+
+    Measurement meas;
+    meas.t = t_meas;
+    meas.type = obsv_type;
+    meas.z = z;
+    meas.observer_id = stat_id;
+    meas.target_id = sat_id;
+    meas.R.resize(1, 1);
+    meas.R << sigma_range * sigma_range;
+
+    ODWorldMeasurementEvent event;
+    event.measurement = meas;
+    event.observer_id = stat_id;
+    event.target_id = sat_id;
+
+    i32 prop_steps = 100;
+    mat6d Q = mat6d1 * sigma_range;
+
+    ODEKFStepResult world_step_result
+        = od_ekf_step_world(world, filter, event, dyn_config, prop_steps, Q);
+
+    StateTr x_tr_observer = world.stat_x_tr_inertial(stat_id);
+    ODEKFStepInput input;
+    input.filter = filter;
+    input.dyn_config = dyn_config;
+    input.measurement = meas;
+    input.prop_steps = prop_steps;
+    input.Q = Q;
+    input.tol_time = tol12;
+    input.x_tr_observer = x_tr_observer;
+    ODEKFStepResult step_result = od_ekf_step(input);
+
+    StateTr world_err = world_step_result.filter.x - x0_truth;
+    StateTr direct_err = step_result.filter.x - x0_truth;
+    StateTr world_direct_err = world_step_result.filter.x - step_result.filter.x;
+    f64 initial_err = statetr_to_vec6(filter.x - x0_truth).norm();
+    f64 world_state_err = statetr_to_vec6(world_err).norm();
+    f64 direct_state_err = statetr_to_vec6(direct_err).norm();
+    f64 world_direct_state_err = statetr_to_vec6(world_direct_err).norm();
+    f64 covariance_err = (world_step_result.filter.P - step_result.filter.P).norm();
+    f64 residual_err = (world_step_result.residual - step_result.residual).norm();
+
+    print_diag_title("World EKF Step Diagnostic");
+    std::println("Observer ID = {}", event.observer_id);
+    std::println("Target ID = {}", event.target_id);
+    std::println("Measurement Type = {}", observation_type_str(obsv_type));
+    std::println();
+
+    std::println("Initial Error = {}", initial_err);
+    std::println("World EKF Success = {}", od_status_success(world_step_result.status));
+    std::println("World EKF Status: {}", od_status_string(world_step_result.status));
+    std::println("World EKF Final Error = {}", world_state_err);
+    std::println("World EKF Position Error = {}", world_err.r.norm());
+    std::println("World EKF Velocity Error = {}", world_err.v.norm());
+    std::println("World EKF Residual Norm = {}", world_step_result.residual_norm);
+    std::println("World EKF Raw Residual Norm = {}", world_step_result.raw_residual_norm);
+    std::println();
+
+    std::println("Direct EKF Success = {}", od_status_success(step_result.status));
+    std::println("Direct EKF Status: {}", od_status_string(step_result.status));
+    std::println("Direct EKF Final Error = {}", direct_state_err);
+    std::println("Direct EKF Position Error = {}", direct_err.r.norm());
+    std::println("Direct EKF Velocity Error = {}", direct_err.v.norm());
+    std::println("Direct EKF Residual Norm = {}", step_result.residual_norm);
+    std::println("Direct EKF Raw Residual Norm = {}", step_result.raw_residual_norm);
+    std::println();
+
+    std::println("World/Direct State Error = {}", world_direct_state_err);
+    std::println("World/Direct Position Error = {}", world_direct_err.r.norm());
+    std::println("World/Direct Velocity Error = {}", world_direct_err.v.norm());
+    std::println("World/Direct Covariance Error = {}", covariance_err);
+    std::println("World/Direct Residual Error = {}", residual_err);
+}
+
+void run_ekf_prediction_only_diag() {
+    World world;
+
+    // Earth
+    EntityId earth_id = wgs84(world);
+    Celestial* earth = world.celestial(earth_id);
+    earth->name = "Earth";
+    earth->gravity_model = GravityModel::pointmass;
+    earth->degree = 0;
+    earth->order = 0;
+
+    // Satellite truth/estimate
+    StateTr x0_truth;
+    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
+    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
+
+    ODEKFState filter;
+    filter.x = x0_truth + StateTr{.r = {1.0, 0.25, 0.1}, .v = {0.001, 0.0005, 0.0}};
+    filter.P = mat6d1;
+    filter.t = 0.0;
+
+    ODDynamicsConfig dyn_config = make_od_cfg_from_celestial(*earth);
+    dyn_config.tr_model = ODTrDynamicsModel::two_body;
+
+    f64 t_target = 60.0;
+    i32 prop_steps = 100;
+    mat6d Q = mat6d1 * 1e-6;
+
+    ODEKFStepResult step_result
+        = od_ekf_predict_step(filter, t_target, dyn_config, prop_steps, Q);
+    ODEKFPredictResult predict_result
+        = od_ekf_predict(filter, t_target, dyn_config, prop_steps, Q);
+
+    StateTr step_direct_err = step_result.filter.x - predict_result.y.x;
+    f64 state_err = statetr_to_vec6(step_direct_err).norm();
+    f64 covariance_err = (step_result.filter.P - predict_result.P).norm();
+    bool step_state_finite = statetr_to_vec6(step_result.filter.x).allFinite();
+    bool step_cov_finite = step_result.filter.P.allFinite();
+
+    print_diag_title("EKF Prediction Only Diagnostic");
+    std::println("Predict Target Time = {}", t_target);
+    std::println("Prediction Only Success = {}", od_status_success(step_result.status));
+    std::println("Prediction Only Status: {}", od_status_string(step_result.status));
+    std::println("Raw Predict Status: {}", od_status_string(predict_result.status));
+    std::println("Predicted Time = {}", step_result.filter.t);
+    std::println("Expected Time = {}", t_target);
+    std::println("Predicted State Finite = {}", step_state_finite);
+    std::println("Predicted Covariance Finite = {}", step_cov_finite);
+    std::println("Step/Raw State Error = {}", state_err);
+    std::println("Step/Raw Position Error = {}", step_direct_err.r.norm());
+    std::println("Step/Raw Velocity Error = {}", step_direct_err.v.norm());
+    std::println("Step/Raw Covariance Error = {}", covariance_err);
+    std::println("Prediction Covariance Norm = {}", step_result.filter.P.norm());
 }

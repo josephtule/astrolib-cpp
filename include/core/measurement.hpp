@@ -23,6 +23,19 @@ enum struct ObservationType : i32 {
     rel_pos_vel,
 };
 
+inline std::string observation_type_str(ObservationType type) {
+    switch (type) {
+    case ObservationType::radec: return "Right-Ascension + Declination";
+    case ObservationType::azel: return "Azimuth + Elevation";
+    case ObservationType::range: return "Range";
+    case ObservationType::range_rate: return "Range-Rate";
+    case ObservationType::pos: return "Position";
+    case ObservationType::pos_vel: return "Position + Velocity";
+    case ObservationType::rel_pos: return "Relative Position";
+    case ObservationType::rel_pos_vel: return "Relative Position + Velocity";
+    }
+}
+
 struct Measurement {
     f64 t = 0.0;
     ObservationType type = ObservationType::radec;

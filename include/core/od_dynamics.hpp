@@ -49,6 +49,20 @@ struct ODDynamicsConfig {
     IntegratorType integrator = IntegratorType::rk4;
 };
 
+inline ODDynamicsConfig make_od_cfg_from_celestial(const Celestial& cel) {
+    ODDynamicsConfig cfg;
+    cfg.tr_model = worldtrmodel_to_odtrmodel(cel.gravity_model);
+    cfg.att_model = worldattmodel_to_odattmodel(cel.attitude_model);
+    cfg.mu = cel.mu;
+    cfg.J = cel.J;
+    cfg.R_cb_ref = cel.semimajor_axis;
+    cfg.zonal_degree = cel.degree;
+    cfg.q_cb0 = cel.x_att.q;
+    cfg.w_cb = cel.x_att.w;
+
+    return cfg;
+}
+
 inline DerivTr derivtr_two_body(const StateTr& x_rel, f64 mu) {
     // x is state of target relative to the central body at the OD model origin
     DerivTr dx;
@@ -501,8 +515,7 @@ inline mat6d jacobian_tr_od(f64 t, const StateTr& x, const ODDynamicsConfig& cfg
         }
         return jacobian_tr_zonal(x, cfg.mu, cfg.R_cb_ref, cfg.zonal_degree, q_cb, cfg.J);
     }
-    default:
-        return jacobian_fd_od_dynamics(t, x, cfg);
+    default: return jacobian_fd_od_dynamics(t, x, cfg);
     }
 }
 
