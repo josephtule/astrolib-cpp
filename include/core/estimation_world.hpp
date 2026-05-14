@@ -26,6 +26,17 @@ ODStatus ekf_observer_state_from_world(
     StateTr& x_tr_observer
 );
 
+struct ODRealtimeEKFInput {
+    const World* world;
+     ODEKFState filter;
+    const ODWorldMeasurementEvent* event;
+    f64 t_target = 0.0;
+    ODDynamicsConfig dyn_config;
+    i32 prop_steps = 100;
+    mat6d Q = mat6d0;
+    f64 tol_time = tol12;
+};
+
 ODEKFStepResult od_ekf_predict_step(
     const ODEKFState& filter,
     f64 t_target,
@@ -34,3 +45,5 @@ ODEKFStepResult od_ekf_predict_step(
     const mat6d& Q,
     f64 tol_time = tol12
 );
+
+ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input);

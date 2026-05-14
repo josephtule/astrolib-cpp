@@ -108,9 +108,10 @@ int main() {
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
     // run_render_pipeline_diag();
-    run_world_ekf_step_diag();
-    print_diag_title("");
-    run_ekf_prediction_only_diag();
+    // run_world_ekf_step_diag();
+    // print_diag_title("");
+    // run_ekf_prediction_only_diag();
+    run_realtime_ekf_world_update_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

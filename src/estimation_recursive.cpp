@@ -80,7 +80,7 @@ ODEKFPredictResult od_ekf_predict(
     ODEKFPredictResult result;
     f64 dt = t_target - filter.t;
     if (dt < -tol) {
-        result.status = ODStatus::invalid_input;
+        result.status = ODStatus::propagation_failed;
         return result;
     } else if (std::abs(dt) <= tol) {
         // same epoch

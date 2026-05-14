@@ -95,3 +95,37 @@ ODEKFStepResult od_ekf_predict_step(
 
     return step_result;
 }
+
+ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
+    ODEKFStepResult result;
+
+    if (input.world == nullptr) {
+        result.status = ODStatus::invalid_input;
+        return result;
+    }
+
+    if (input.event == nullptr) {
+        // prediction only
+        result = od_ekf_predict_step(
+            input.filter,
+            input.t_target,
+            input.dyn_config,
+            input.prop_steps,
+            input.Q,
+            input.tol_time
+        );
+    } else {
+        // estimate
+        result = od_ekf_step_world(
+            *input.world,
+            input.filter,
+            *input.event,
+            input.dyn_config,
+            input.prop_steps,
+            input.Q,
+            input.tol_time
+        );
+    }
+
+    return result;
+}
