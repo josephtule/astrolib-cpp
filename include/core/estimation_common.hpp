@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/observation_type.hpp"
 #include <string>
 
 enum struct ODStatus {
@@ -18,6 +19,7 @@ enum struct ODStatus {
     singular_innovation,
     observer_not_found,
     target_not_found,
+    instrument_not_found,
 };
 
 inline std::string od_status_string(ODStatus status) {
@@ -67,6 +69,9 @@ inline std::string od_status_string(ODStatus status) {
     } break;
     case ODStatus::empty_events: {
         str = "Empty Events";
+    } break;
+    case ODStatus::instrument_not_found: {
+        str = "Instrument not found";
     } break;
     }
     return str;

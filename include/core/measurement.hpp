@@ -2,7 +2,7 @@
 
 #include "core/entity.hpp"
 #include "core/observations.hpp"
-#include "core/od_dynamics.hpp"
+#include "core/observation_type.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
 #include "util/constants.hpp"
@@ -10,31 +10,6 @@
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
-enum struct ObservationType : i32 {
-    radec,
-    azel,
-    range,
-    range_rate,
-    // in estimation frame (not observer relative)
-    pos,
-    pos_vel,
-    // relative
-    rel_pos,
-    rel_pos_vel,
-};
-
-inline std::string observation_type_str(ObservationType type) {
-    switch (type) {
-    case ObservationType::radec: return "Right-Ascension + Declination";
-    case ObservationType::azel: return "Azimuth + Elevation";
-    case ObservationType::range: return "Range";
-    case ObservationType::range_rate: return "Range-Rate";
-    case ObservationType::pos: return "Position";
-    case ObservationType::pos_vel: return "Position + Velocity";
-    case ObservationType::rel_pos: return "Relative Position";
-    case ObservationType::rel_pos_vel: return "Relative Position + Velocity";
-    }
-}
 
 struct Measurement {
     f64 t = 0.0;

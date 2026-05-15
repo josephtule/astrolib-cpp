@@ -77,6 +77,11 @@ inline ODStatus world_predict_measurement(
         angle_out,
         tol
     );
+
+    if (z.size() == 0) {
+        return ODStatus::empty_measurements;
+    }
+
     return ODStatus::ok;
 }
 

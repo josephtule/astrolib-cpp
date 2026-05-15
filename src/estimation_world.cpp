@@ -135,6 +135,36 @@ ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
     return result;
 }
 
+// ODStatus make_world_measurement_event(
+//     const World& world,
+//     ObservationType type,
+//     EntityId observer_id,
+//     EntityId target_id,
+//     f64 t,
+//     ODWorldMeasurementEvent& event,
+//     UAngle angle_out,
+//     f64 tol
+// ) {
+//     const Station* station = world.station(observer_id);
+//     if (station == nullptr) {
+//         return ODStatus::observer_not_found;
+//     }
+
+//     auto it = station->instruments.at(instrument_id);
+
+//     return make_world_measurement_event(
+//         world,
+//         type,
+//         observer_id,
+//         target_id,
+//         t,
+//         R,
+//         event,
+//         angle_out,
+//         tol
+//     );
+// }
+
 ODStatus make_world_measurement_event(
     const World& world,
     ObservationType type,
@@ -146,7 +176,6 @@ ODStatus make_world_measurement_event(
     UAngle angle_out,
     f64 tol
 ) {
-
     vecXd z;
     ODStatus meas_status = world_predict_measurement(
         world,

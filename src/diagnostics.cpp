@@ -10,6 +10,7 @@
 #include "core/integrator.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
+#include "core/observation_type.hpp"
 #include "core/observations.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/orbit_determination.hpp"
@@ -960,7 +961,7 @@ void run_batch_od_diag() {
                 );
                 meas.z(0) += noise_unit(rng) * sigma_rad;
                 meas.z(1) += noise_unit(rng) * sigma_rad;
-                meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+                meas.R = matXd1<2> * sigma_rad * sigma_rad;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_tr_obsv);
             }
@@ -977,7 +978,7 @@ void run_batch_od_diag() {
                     UAngle::radian
                 );
                 meas.z(0) += noise_unit(rng) * sigma_range;
-                meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+                meas.R = matXd1<1> * sigma_range * sigma_range;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_tr_obsv);
             }
@@ -994,7 +995,7 @@ void run_batch_od_diag() {
                     UAngle::radian
                 );
                 meas.z(0) += noise_unit(rng) * sigma_range_rate;
-                meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
+                meas.R = matXd1<1> * sigma_range_rate * sigma_range_rate;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_tr_obsv);
             }
@@ -1435,7 +1436,7 @@ void run_ekf_world_diag() {
                 );
                 meas.z(0) += noise_unit(rng) * sigma_rad;
                 meas.z(1) += noise_unit(rng) * sigma_rad;
-                meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+                meas.R = matXd1<2> * sigma_rad * sigma_rad;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_tr_obsv);
             }
@@ -1452,7 +1453,7 @@ void run_ekf_world_diag() {
                     UAngle::radian
                 );
                 meas.z(0) += noise_unit(rng) * sigma_range;
-                meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+                meas.R = matXd1<1> * sigma_range * sigma_range;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_tr_obsv);
             }
@@ -1469,7 +1470,7 @@ void run_ekf_world_diag() {
                     UAngle::radian
                 );
                 meas.z(0) += noise_unit(rng) * sigma_range_rate;
-                meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
+                meas.R = matXd1<1> * sigma_range_rate * sigma_range_rate;
                 input.measurements.push_back(meas);
                 input.observer_states.push_back(x_tr_obsv);
             }
@@ -2858,7 +2859,7 @@ void run_iod_lumve_ekf_init_diag() {
         );
         meas.z(0) += noise_unit(rng) * sigma_rad;
         meas.z(1) += noise_unit(rng) * sigma_rad;
-        meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+        meas.R = matXd1<2> * sigma_rad * sigma_rad;
         lumve_input.measurements.push_back(meas);
         lumve_input.observer_states.push_back(x_tr_obsv1);
 
@@ -2874,7 +2875,7 @@ void run_iod_lumve_ekf_init_diag() {
             UAngle::radian
         );
         meas.z(0) += noise_unit(rng) * sigma_range;
-        meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+        meas.R = matXd1<1> * sigma_range * sigma_range;
         lumve_input.measurements.push_back(meas);
         lumve_input.observer_states.push_back(x_tr_obsv1);
 
@@ -2890,7 +2891,7 @@ void run_iod_lumve_ekf_init_diag() {
             UAngle::radian
         );
         meas.z(0) += noise_unit(rng) * sigma_range_rate;
-        meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
+        meas.R = matXd1<1> * sigma_range_rate * sigma_range_rate;
         lumve_input.measurements.push_back(meas);
         lumve_input.observer_states.push_back(x_tr_obsv2);
     }
@@ -2941,7 +2942,7 @@ void run_iod_lumve_ekf_init_diag() {
         );
         meas.z(0) += noise_unit(rng) * sigma_rad;
         meas.z(1) += noise_unit(rng) * sigma_rad;
-        meas.R = matXd::Identity(2, 2) * sigma_rad * sigma_rad;
+        meas.R = matXd1<2> * sigma_rad * sigma_rad;
         ekf_input.measurements.push_back(meas);
         ekf_input.observer_states.push_back(x_tr_obsv1);
 
@@ -2957,7 +2958,7 @@ void run_iod_lumve_ekf_init_diag() {
             UAngle::radian
         );
         meas.z(0) += noise_unit(rng) * sigma_range;
-        meas.R = matXd::Identity(1, 1) * sigma_range * sigma_range;
+        meas.R = matXd1<1> * sigma_range * sigma_range;
         ekf_input.measurements.push_back(meas);
         ekf_input.observer_states.push_back(x_tr_obsv1);
 
@@ -2973,7 +2974,7 @@ void run_iod_lumve_ekf_init_diag() {
             UAngle::radian
         );
         meas.z(0) += noise_unit(rng) * sigma_range_rate;
-        meas.R = matXd::Identity(1, 1) * sigma_range_rate * sigma_range_rate;
+        meas.R = matXd1<1> * sigma_range_rate * sigma_range_rate;
         ekf_input.measurements.push_back(meas);
         ekf_input.observer_states.push_back(x_tr_obsv2);
     }
@@ -3372,6 +3373,8 @@ static ODStatus make_realtime_ekf_diag_events_from_schedule(
                 R = R_radec;
             } else if (item.type == ObservationType::range) {
                 R = R_range;
+            } else {
+                return ODStatus::invalid_input;
             }
 
             ODStatus status = make_world_measurement_event(
@@ -3434,7 +3437,7 @@ void run_realtime_ekf_world_update_diag() {
     f64 sigma_range = 1e-3;
 
     mat2d R_rad = mat2d1 * sigma_rad * sigma_rad;
-    matXd R_range = matXd::Identity(1, 1) * sigma_range * sigma_range;
+    matXd R_range = matXd1<1> * sigma_range * sigma_range;
 
     WorldStepperConfig cfg;
     cfg.step_tr = true;
@@ -3577,5 +3580,69 @@ void run_realtime_ekf_world_update_diag() {
     std::println("Final Position Error = {}", final_err.r.norm());
     std::println("Final Velocity Error = {}", final_err.v.norm());
     std::println("Final Covariance Norm = {}", filter.P.norm());
+    print_diag_title();
+}
+
+void run_station_instrument_diag() {
+
+    auto scenario = make_earth_sats_stats_scenario();
+
+    World& world = scenario.world;
+    Station* stat1 = world.station(scenario.stat1_id);
+    if (stat1 == nullptr) {
+        std::println("Station Instrument Diagnostic: station not found");
+        return;
+    }
+
+    f64 sigma_rad = 1e-5;
+    f64 sigma_range = 1e-3;
+
+    StationInstrument radec_instr1;
+    radec_instr1.type = ObservationType::radec;
+    radec_instr1.enabled = true;
+    radec_instr1.name = "Ra/Dec Observer";
+    radec_instr1.R = mat2d1 * sigma_rad * sigma_rad;
+    ODStatus radec_status1
+        = add_station_instrument(*stat1, radec_instr1, radec_instr1.id);
+
+    StationInstrument radec_instr2;
+    radec_instr2.type = ObservationType::radec;
+    radec_instr2.enabled = true;
+    radec_instr2.name = "Ra/Dec Observer";
+    radec_instr2.R = mat2d1 * sigma_rad * sigma_rad;
+    ODStatus radec_status2
+        = add_station_instrument(*stat1, radec_instr2, radec_instr2.id);
+
+    StationInstrument range_instr;
+    range_instr.type = ObservationType::range;
+    range_instr.enabled = true;
+    range_instr.name = "Range Observer";
+    range_instr.R = matXd1<1> * sigma_range * sigma_range;
+    ODStatus range_status = add_station_instrument(*stat1, range_instr, range_instr.id);
+
+    matXd R_radec;
+    ODStatus radec_id_status = stat_meas_cov(*stat1, radec_instr1.id, R_radec);
+
+    matXd R_range;
+    ODStatus range_type_status = stat_meas_cov(*stat1, ObservationType::range, R_range);
+
+    matXd R_radec_type;
+    ODStatus radec_type_status = stat_meas_cov(*stat1, ObservationType::radec, R_radec_type);
+
+    print_diag_title("Station Instrument Diagnostic");
+    std::println("Add RA/Dec 1 Status: {}", od_status_string(radec_status1));
+    std::println("Add RA/Dec 1 ID: {}", radec_instr1.id);
+    std::println("Add RA/Dec 2 Status: {}", od_status_string(radec_status2));
+    std::println("Add RA/Dec 2 ID: {}", radec_instr2.id);
+    std::println("Add Range Status: {}", od_status_string(range_status));
+    std::println("Add Range ID: {}", range_instr.id);
+    std::println("Station Instrument Count: {}", stat1->instruments.size());
+    std::println("Next Instrument ID: {}", stat1->next_instrument_id);
+    std::println("RA/Dec Query By ID Status: {}", od_status_string(radec_id_status));
+    std::println("RA/Dec Query By ID R Norm: {}", R_radec.norm());
+    std::println("Range Query By Type Status: {}", od_status_string(range_type_status));
+    std::println("Range Query By Type R Norm: {}", R_range.norm());
+    std::println("RA/Dec Query By Type Status: {}", od_status_string(radec_type_status));
+    std::println("RA/Dec Query By Type Expected Ambiguous = true");
     print_diag_title();
 }

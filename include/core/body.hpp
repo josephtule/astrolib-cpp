@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/entity.hpp"
+#include "core/estimation_common.hpp"
+#include "core/observation_type.hpp"
 #include "core/state.hpp"
 #include "util/vecdefs.hpp"
 #include <string>
@@ -27,13 +29,13 @@ struct Body {
 
 enum struct GravityModel { pointmass, zonal, spherical_harmonics };
 inline std::string gravity_model_name(GravityModel model) {
-        switch (model) {
-        case GravityModel::pointmass: return "pointmass";
-        case GravityModel::zonal: return "zonal";
-        case GravityModel::spherical_harmonics: return "spherical_harmonics";
-        }
-        return "unknown";
-    };
+    switch (model) {
+    case GravityModel::pointmass: return "pointmass";
+    case GravityModel::zonal: return "zonal";
+    case GravityModel::spherical_harmonics: return "spherical harmonics";
+    }
+    return "unknown";
+};
 enum struct RadiationModel { none, isotropic };
 enum struct CelestialAttitudeModel { fixed, simple_spin, provider };
 struct Celestial : public Body {
@@ -94,12 +96,24 @@ struct Satellite : public Body {
     }
 };
 
+using InstrumentId = u32;
+constexpr InstrumentId kInvalidInstrumentId = 0;
+struct StationInstrument {
+    u32 id = kInvalidInstrumentId;
+    std::string name;
+    ObservationType type = ObservationType::radec;
+    matXd R;
+    bool enabled = true;
+};
+
 struct Station : public Body {
     bool anchored = true;
     EntityId anchor_id = kInvalidEntityId;
     vec3d r_body_BCBF = vec3d0; // Position of station relative to anchor in bcbf
     vec3d llh_BCBF = vec3d0;    // Planetodetic coordinates
     // [lat, lon, h] - [rad, rad, sim units]
+    InstrumentId next_instrument_id = 1;
+    umap<u32, StationInstrument> instruments;
 
     MassProperties mass_properties;
 
@@ -110,3 +124,13 @@ struct Station : public Body {
         propagate_tr = false;
     }
 };
+
+ODStatus stat_meas_cov(const Station& station, u32 instrument_id, matXd& R);
+ODStatus stat_meas_cov(const Station& station, ObservationType type, matXd& R);
+ODStatus set_station_instrument(Station& station, const StationInstrument& instrument);
+ODStatus add_station_instrument(
+    Station& station,
+    const StationInstrument& instrument,
+    InstrumentId& out_id
+);
+ODStatus add_station_instrument(Station& station, const StationInstrument& instrument);
