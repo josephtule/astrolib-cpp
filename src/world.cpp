@@ -191,19 +191,19 @@ i32 World::num_stations() const {
 }
 
 bool World::is_celestial(EntityId id) const {
-    const auto ptr = body(id);
+    const auto ptr = celestial(id);
     if (ptr == nullptr) return false;
     if (ptr->body_type != BodyType::celestial) return false;
     return true;
 }
 bool World::is_satellite(EntityId id) const {
-    const auto ptr = body(id);
+    const auto ptr = satellite(id);
     if (ptr == nullptr) return false;
     if (ptr->body_type != BodyType::satellite) return false;
     return true;
 }
 bool World::is_station(EntityId id) const {
-    const auto ptr = body(id);
+    const auto ptr = station(id);
     if (ptr == nullptr) return false;
     if (ptr->body_type != BodyType::station) return false;
     return true;

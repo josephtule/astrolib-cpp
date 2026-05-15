@@ -3,7 +3,9 @@
 #include "core/estimation_common.hpp"
 #include "core/estimation_recursive.hpp"
 #include "core/measurement.hpp"
+#include "core/measurement_world.hpp"
 #include "core/state.hpp"
+#include "util/units.hpp"
 
 ODStatus ekf_observer_state_from_world(
     const World& world,
@@ -99,11 +101,6 @@ ODEKFStepResult od_ekf_predict_step(
 ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
     ODEKFStepResult result;
 
-    if (input.world == nullptr) {
-        result.status = ODStatus::invalid_input;
-        return result;
-    }
-
     if (input.event == nullptr) {
         // prediction only
         result = od_ekf_predict_step(
@@ -116,6 +113,14 @@ ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
         );
     } else {
         // estimate
+        if (input.world == nullptr) {
+            result.status = ODStatus::invalid_input;
+            return result;
+        }
+        if (std::abs(input.t_target - input.event->measurement.t) > input.tol_time) {
+            result.status = ODStatus::time_mismatch;
+            return result;
+        }
         result = od_ekf_step_world(
             *input.world,
             input.filter,
@@ -125,6 +130,134 @@ ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
             input.Q,
             input.tol_time
         );
+    }
+
+    return result;
+}
+
+ODStatus make_world_measurement_event(
+    const World& world,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    const matXd& R,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_out,
+    f64 tol
+) {
+
+    vecXd z;
+    ODStatus meas_status = world_predict_measurement(
+        world,
+        type,
+        observer_id,
+        target_id,
+        z,
+        UAngle::radian,
+        angle_out,
+        tol
+    );
+    if (!od_status_success(meas_status)) {
+        return meas_status;
+    }
+
+    Measurement meas;
+    meas.z = z;
+    meas.t = t;
+    meas.R = R;
+    meas.type = type;
+    meas.observer_id = observer_id;
+    meas.target_id = target_id;
+
+    event.measurement = meas;
+    event.observer_id = observer_id;
+    event.target_id = target_id;
+
+    return ODStatus::ok;
+}
+
+ODStatus validate_realtime_ekf_events(
+    const svec<ODRealtimeEvent>& events,
+    f64 t_prev,
+    f64 tol_time
+) {
+    if (events.empty()) {
+        return ODStatus::empty_events;
+    }
+    for (const auto event : events) {
+        if (event.t < t_prev - tol_time) {
+            return ODStatus::time_mismatch;
+        }
+        if (event.has_measurement) {
+            if (event.event.observer_id == kInvalidEntityId) {
+                return ODStatus::observer_not_found;
+            }
+            if (event.event.target_id == kInvalidEntityId) {
+                return ODStatus::target_not_found;
+            }
+            if (event.event.measurement.z.size()
+                != measurement_dim(event.event.measurement.type)) {
+                return ODStatus::invalid_input;
+            }
+            if (std::abs(event.event.measurement.t - event.t) > tol_time) {
+                return ODStatus::time_mismatch;
+            }
+        }
+    }
+
+    return ODStatus::ok;
+}
+
+ODRealtimeEKFResult od_ekf_update_world_events(
+    const World& world,
+    const ODEKFState& initial_filter,
+    const svec<ODRealtimeEvent>& events,
+    const ODDynamicsConfig& dyn_config,
+    i32 prop_steps,
+    const mat6d& Q,
+    f64 tol_time
+) {
+    ODRealtimeEKFResult result;
+    result.filter = initial_filter;
+
+    if (events.empty()) {
+        result.status = ODStatus::empty_events;
+        return result;
+    }
+
+    for (const ODRealtimeEvent& event : events) {
+        ODRealtimeEKFInput input{
+            .world = &world,
+            .event = event.has_measurement ? &event.event : nullptr
+        };
+        input.dyn_config = dyn_config;
+        input.Q = Q;
+        input.prop_steps = prop_steps;
+        input.filter = result.filter;
+        input.t_target = event.t;
+        input.tol_time = tol_time;
+
+        ODEKFStepResult step_result = od_ekf_update_world(input);
+        if (!od_status_success(step_result.status)) {
+            result.status = step_result.status;
+            result.raw_residual_norm = step_result.raw_residual_norm;
+            result.residual_norm = step_result.residual_norm;
+            result.filter = step_result.filter;
+            return result;
+        }
+
+        if (step_result.status == ODStatus::ok) {
+            ++result.measurement_updates;
+        } else if (step_result.status == ODStatus::prediction_only) {
+            ++result.prediction_updates;
+        }
+
+        result.filter = step_result.filter;
+        result.status = step_result.status;
+        result.raw_residual_norm = step_result.raw_residual_norm;
+        result.residual_norm = step_result.residual_norm;
+        ++result.processed_events;
     }
 
     return result;

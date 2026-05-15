@@ -49,6 +49,37 @@ inline vecXd world_predict_measurement(
     return z;
 }
 
+inline ODStatus world_predict_measurement(
+    const World& world,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    vecXd& z,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+) {
+    const Station* observer = world.station(observer_id);
+    const Body* target = world.body(target_id);
+    if (observer == nullptr) {
+        return ODStatus::observer_not_found;
+    }
+    if (target == nullptr) {
+        return ODStatus::target_not_found;
+    }
+
+    z = world_predict_measurement(
+        world,
+        type,
+        observer_id,
+        target_id,
+        angle_in,
+        angle_out,
+        tol
+    );
+    return ODStatus::ok;
+}
+
 inline ODStatus make_world_station_measurement_context(
     const World& world,
     MeasurementContext& ctx,

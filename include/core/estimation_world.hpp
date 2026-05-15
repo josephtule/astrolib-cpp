@@ -28,7 +28,7 @@ ODStatus ekf_observer_state_from_world(
 
 struct ODRealtimeEKFInput {
     const World* world;
-     ODEKFState filter;
+    ODEKFState filter;
     const ODWorldMeasurementEvent* event;
     f64 t_target = 0.0;
     ODDynamicsConfig dyn_config;
@@ -47,3 +47,55 @@ ODEKFStepResult od_ekf_predict_step(
 );
 
 ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input);
+
+ODStatus make_world_measurement_event(
+    const World& world,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    const matXd& R,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+);
+
+struct ODRealtimeEvent {
+    f64 t = 0.0;
+    bool has_measurement = false;
+    ODWorldMeasurementEvent event;
+};
+
+struct ODRealtimeEKFResult {
+    ODStatus status = ODStatus::invalid_input;
+    ODEKFState filter;
+    i32 processed_events = 0;
+    i32 measurement_updates = 0;
+    i32 prediction_updates = 0;
+    f64 residual_norm = 0.0;
+    f64 raw_residual_norm = 0.0;
+};
+
+ODRealtimeEKFResult od_ekf_update_world_events(
+    const World& world,
+    const ODEKFState& initial_filter,
+    const svec<ODRealtimeEvent>& events,
+    const ODDynamicsConfig& dyn_config,
+    i32 prop_steps,
+    const mat6d& Q,
+    f64 tol_time = tol12
+);
+
+ODStatus validate_realtime_ekf_events(
+    const svec<ODRealtimeEvent>& events,
+    f64 t_prev,
+    f64 tol_time = tol12
+);
+
+struct ODRealtimeScheduleItem {
+    f64 t = 0.0;
+    bool has_measurement = false;
+    ObservationType type = ObservationType::range;
+    EntityId observer_id = kInvalidEntityId;
+    EntityId target_id = kInvalidEntityId;
+};

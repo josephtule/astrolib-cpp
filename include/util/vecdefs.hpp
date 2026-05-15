@@ -210,6 +210,9 @@ inline const mat10f mat10f0 = mat10f::Zero();
 inline const mat11f mat11f0 = mat11f::Zero();
 inline const mat12f mat12f0 = mat12f::Zero();
 
+template <int N>
+inline const matXd matXd1 = matXd::Identity(N,N);
+
 inline const vec3d origin = vec3d0;
 inline const vec3f originf = vec3f0;
 inline const vec3d axis_x = vec3d{1.0, 0.0, 0.0};

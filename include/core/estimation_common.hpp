@@ -6,7 +6,9 @@ enum struct ODStatus {
     ok,
     invalid_input,
     empty_measurements,
+    empty_events,
     size_mismatch,
+    time_mismatch,
     propagation_failed,
     singular_normal_matrix,
     prediction_only,
@@ -60,10 +62,27 @@ inline std::string od_status_string(ODStatus status) {
     case ODStatus::target_not_found: {
         str = "Target not found";
     } break;
+    case ODStatus::time_mismatch: {
+        str = "Time mismatch";
+    } break;
+    case ODStatus::empty_events: {
+        str = "Empty Events";
+    } break;
     }
     return str;
 }
 
 inline bool od_status_success(ODStatus status) {
     return status == ODStatus::ok || status == ODStatus::prediction_only;
+}
+
+template <class A, class B>
+inline B copy_od_ekf_result(const A& result_in) {
+    B result_out;
+    result_out.status = result_in.status;
+    result_out.filter = result_in.filter;
+    result_out.raw_residual_norm = result_in.raw_residual_norm;
+    result_out.residual_norm = result_in.residual_norm;
+
+    return result_out;
 }

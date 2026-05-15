@@ -23,9 +23,12 @@
 #include "core/world_stepper.hpp"
 
 #include "graphics/renderer.hpp"
+#include "util/constants.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+
+#include "examples/scenarios.hpp"
 
 #include "graphics/raygen.hpp"
 #include "graphics/rdraw.hpp"
@@ -37,13 +40,14 @@
 #include <memory>
 #include <random>
 
-const std::string pwd = std::string(PROJECT_ROOT);
-
 void print_diag_title(const std::string& title = "") {
     std::string line = "-----------------------------------------------------------";
     size_t width = line.size();
-
-    std::string withSpace = title + " ";
+    std::string spacer = " ";
+    if (title.empty()) {
+        spacer = "-";
+    }
+    std::string withSpace = title + spacer;
     std::string trimmed = withSpace.substr(0, width);
     line.replace(0, trimmed.size(), trimmed);
     std::println("{}", line);
@@ -871,31 +875,6 @@ void run_measurement_jacobian_diag() {
 
     std::println("RA/Dec H deg fd/an error norm: {}", H_err_deg.norm());
     std::println("RA/Dec H deg fd/an max error: {}", H_err_deg.cwiseAbs().maxCoeff());
-}
-
-struct EarthStationSatScenario {
-    World world;
-    EntityId earth_id = kInvalidEntityId;
-    EntityId stat_id = kInvalidEntityId;
-    EntityId sat_id = kInvalidEntityId;
-};
-static EarthStationSatScenario make_earth_station_sat_scenario(const vec3d& station_llh) {
-    EarthStationSatScenario scenario;
-    scenario.earth_id = wgs84(scenario.world);
-    scenario.stat_id = scenario.world.spawn_station();
-    scenario.sat_id = scenario.world.spawn_satellite();
-
-    Celestial* earth = scenario.world.celestial(scenario.earth_id);
-
-    // earth
-    earth->x_att.q = vec4d{0.0, 0.0, 0.0, 1.0};
-    earth->x_att.w = vec3d{0.0, 0.0, 7.292115000000000e-05};
-
-    // station
-    scenario.world
-        .set_stat_anchor_detic(scenario.stat_id, scenario.earth_id, station_llh);
-
-    return scenario;
 }
 
 void run_batch_od_diag() {
@@ -3339,51 +3318,109 @@ void run_ekf_prediction_only_diag() {
     std::println("Prediction Covariance Norm = {}", step_result.filter.P.norm());
 }
 
-void run_realtime_ekf_world_update_diag() {
-    World world;
+static ODStatus make_realtime_ekf_diag_schedule(
+    f64 t,
+    i32 i,
+    i32 i_meas,
+    EntityId stat_id,
+    EntityId sat_id,
+    svec<ODRealtimeScheduleItem>& schedule
+) {
+    schedule.clear();
 
+    if (i % i_meas != 0) {
+        ODRealtimeScheduleItem item;
+        item.t = t;
+        item.has_measurement = false;
+
+        schedule.push_back(item);
+    } else {
+        ODRealtimeScheduleItem item;
+        item.t = t;
+        item.has_measurement = true;
+        item.observer_id = stat_id;
+        item.target_id = sat_id;
+
+        // radec measurement
+        item.type = ObservationType::radec;
+        schedule.push_back(item);
+
+        // range measurement
+        item.type = ObservationType::range;
+        schedule.push_back(item);
+    }
+
+    return ODStatus::ok;
+}
+
+static ODStatus make_realtime_ekf_diag_events_from_schedule(
+    const World& world,
+    const svec<ODRealtimeScheduleItem>& schedule,
+    const matXd& R_radec,
+    const matXd& R_range,
+    svec<ODRealtimeEvent>& events
+) {
+    // materialize the schedule
+    events.clear();
+
+    for (const auto& item : schedule) {
+        ODWorldMeasurementEvent event;
+
+        if (item.has_measurement) {
+            matXd R;
+            if (item.type == ObservationType::radec) {
+                R = R_radec;
+            } else if (item.type == ObservationType::range) {
+                R = R_range;
+            }
+
+            ODStatus status = make_world_measurement_event(
+                world,
+                item.type,
+                item.observer_id,
+                item.target_id,
+                item.t,
+                R,
+                event
+            );
+            if (!od_status_success(status)) {
+                return status;
+            }
+
+            ODRealtimeEvent realtime_event;
+            realtime_event.event = event;
+            realtime_event.has_measurement = item.has_measurement;
+            realtime_event.t = item.t;
+            events.push_back(realtime_event);
+        } else {
+            ODRealtimeEvent realtime_event;
+            realtime_event.has_measurement = item.has_measurement;
+            realtime_event.t = item.t;
+            events.push_back(realtime_event);
+        }
+    }
+
+    return ODStatus::ok;
+}
+
+void run_realtime_ekf_world_update_diag() {
     // Diagnostic parameters
     GravityModel truth_model = GravityModel::zonal;
     i32 truth_deg_ord = 6;
     GravityModel est_model = GravityModel::zonal;
     i32 est_degree = 4;
 
-    // Earth
-    EntityId earth_id = wgs84(world);
-    Celestial* earth = world.celestial(earth_id);
-    earth->name = "Earth";
-    earth->gravity_model = truth_model;
-    earth->degree = truth_deg_ord;
-    earth->order = truth_deg_ord;
-    bool gfc_ok = read_gfc(
-        pwd + "/assets/EGM2008.gfc.txt",
-        earth->C,
-        earth->S,
-        earth->degree,
-        earth->order
-    );
-    if (!gfc_ok) {
-        std::println("GFC Load Failed");
+    auto scenario = make_earth_sats_stats_scenario(truth_model, truth_deg_ord);
+    if (!scenario.success) {
+        std::println("Scenario Build Failed");
         return;
     }
-    earth->propagate_tr = true;
-    earth->propagate_att = true;
-    earth->attitude_model = CelestialAttitudeModel::simple_spin;
-    earth->x_att.q = dcm_to_ep(rotX(23.44, UAngle::degree));
-    earth->set_spin_rate(earth->spin_rate());
-
-    // Stations
-    vec3d llh1 = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
-    EntityId stat_id = world.spawn_station();
-    world.set_stat_anchor_detic(stat_id, earth_id, llh1);
-
-    // Satellite
-    EntityId sat_id = world.spawn_satellite();
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    Celestial* earth = world.celestial(earth_id);
+    EntityId sat_id = scenario.sat1_id;
     Satellite* sat = world.satellite(sat_id);
-    StateTr x0_truth;
-    x0_truth.r = vec3d{7000.0, 1000.0, 1300.0};
-    x0_truth.v = vec3d{-0.5, 7.2, 1.0};
-    sat->x_tr = x0_truth;
+    EntityId stat_id = scenario.stat1_id;
 
     // Orbit Determination Config
     ODDynamicsConfig dyn_config = make_od_cfg_from_celestial(*earth);
@@ -3396,6 +3433,9 @@ void run_realtime_ekf_world_update_diag() {
     f64 sigma_rad = 1e-5;
     f64 sigma_range = 1e-3;
 
+    mat2d R_rad = mat2d1 * sigma_rad * sigma_rad;
+    matXd R_range = matXd::Identity(1, 1) * sigma_range * sigma_range;
+
     WorldStepperConfig cfg;
     cfg.step_tr = true;
     cfg.step_att = true;
@@ -3404,7 +3444,6 @@ void run_realtime_ekf_world_update_diag() {
     cfg.time_scale = 1.0 / cfg.ticks;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
-    // radec + range measurements only
 
     f64 t_span = 1000.0;
     i32 n_steps = 1000;
@@ -3413,7 +3452,7 @@ void run_realtime_ekf_world_update_diag() {
     mat6d Q = mat6d1 * 1e-5; // process noise
 
     ODEKFState filter;
-    filter.x = x0_truth + StateTr{.r = {1.0, 0.25, 0.1}, .v = {0.001, 0.0005, 0.0}};
+    filter.x = sat->x_tr + StateTr{.r = {1.0, 0.25, 0.1}, .v = {0.001, 0.0005, 0.0}};
     filter.P = mat6d1;
     filter.t = world.t_sim();
 
@@ -3421,108 +3460,76 @@ void run_realtime_ekf_world_update_diag() {
     i32 measurement_updates = 0;
     i32 prediction_updates = 0;
     i32 failed_updates = 0;
+    i32 processed_events = 0;
+    i32 schedule_items_generated = 0;
+    i32 materialized_events = 0;
+    i32 measurement_events_generated = 0;
+    i32 prediction_events_generated = 0;
 
     for (i32 i = 0; i < n_steps; ++i) {
-
         f64 t_meas = world.t_sim();
 
-        ODEKFStepResult result;
-
-        if (i % 2 == 0) {
-
-            // get radec measurement
-            ObservationType obsv_type = ObservationType::radec;
-            Measurement meas_radec;
-            meas_radec.t = t_meas;
-            meas_radec.type = obsv_type;
-            meas_radec.z = world_predict_measurement(world, obsv_type, stat_id, sat_id);
-            meas_radec.observer_id = stat_id;
-            meas_radec.target_id = sat_id;
-            meas_radec.R = mat2d1 * sigma_rad * sigma_rad;
-
-            ODWorldMeasurementEvent event_radec;
-            event_radec.measurement = meas_radec;
-            event_radec.observer_id = stat_id;
-            event_radec.target_id = sat_id;
-
-            ODRealtimeEKFInput input_radec{
-                .world = &world,
-                .filter = filter,
-                .event = &event_radec,
-                .t_target = t_meas,
-                .dyn_config = dyn_config,
-                .prop_steps = prop_steps,
-                .Q = Q
-            };
-
-            result = od_ekf_update_world(input_radec);
-            last_result = result;
-
-            // get range measurement
-            obsv_type = ObservationType::range;
-            Measurement meas_range;
-            meas_range.t = t_meas;
-            meas_range.type = obsv_type;
-            meas_range.z = world_predict_measurement(world, obsv_type, stat_id, sat_id);
-            meas_range.observer_id = stat_id;
-            meas_range.target_id = sat_id;
-            meas_range.R.resize(1, 1);
-            meas_range.R << sigma_range * sigma_range;
-
-            ODWorldMeasurementEvent event_range;
-            event_range.measurement = meas_range;
-            event_range.observer_id = stat_id;
-            event_range.target_id = sat_id;
-
-            if (od_status_success(result.status)) {
-                filter = result.filter;
-                ++measurement_updates;
-            } else {
-                ++failed_updates;
-            }
-
-            ODRealtimeEKFInput input_range{
-                .world = &world,
-                .filter = filter,
-                .event = &event_range,
-                .t_target = t_meas,
-                .dyn_config = dyn_config,
-                .prop_steps = prop_steps,
-                .Q = Q
-            };
-            result = od_ekf_update_world(input_range);
-            last_result = result;
-
-            if (od_status_success(result.status)) {
-                filter = result.filter;
-                ++measurement_updates;
-            } else {
-                ++failed_updates;
-            }
-        } else {
-
-            ODRealtimeEKFInput input_predict{
-                .world = &world,
-                .filter = filter,
-                // no measurement
-                .t_target = t_meas,
-                .dyn_config = dyn_config,
-                .prop_steps = prop_steps,
-                .Q = Q
-            };
-
-            result = od_ekf_update_world(input_predict);
-            last_result = result;
-        }
-        if (od_status_success(result.status)) {
-            filter = result.filter;
-            if (result.status == ODStatus::prediction_only) {
-                ++prediction_updates;
-            }
-        } else {
+        svec<ODRealtimeScheduleItem> schedule;
+        ODStatus schedule_status
+            = make_realtime_ekf_diag_schedule(t_meas, i, 2, stat_id, sat_id, schedule);
+        if (schedule_status != ODStatus::ok) {
+            last_result.status = schedule_status;
             ++failed_updates;
             break;
         }
+        schedule_items_generated += schedule.size();
+
+        svec<ODRealtimeEvent> events;
+        ODStatus event_status = make_realtime_ekf_diag_events_from_schedule(
+            world,
+            schedule,
+            R_rad,
+            R_range,
+            events
+        );
+        if (event_status != ODStatus::ok) {
+            last_result.status = event_status;
+            ++failed_updates;
+            break;
+        }
+        materialized_events += static_cast<i32>(events.size());
+        for (const ODRealtimeEvent& event : events) {
+            if (event.has_measurement) {
+                ++measurement_events_generated;
+            } else {
+                ++prediction_events_generated;
+            }
+        }
+
+        event_status = validate_realtime_ekf_events(events, t_meas);
+        if (event_status != ODStatus::ok) {
+            last_result.status = event_status;
+            ++failed_updates;
+            break;
+        }
+
+        ODRealtimeEKFResult realtime_result = od_ekf_update_world_events(
+            world,
+            filter,
+            events,
+            dyn_config,
+            prop_steps,
+            Q
+        );
+        if (!od_status_success(realtime_result.status)) {
+            last_result.status = realtime_result.status;
+            ++failed_updates;
+            break;
+        }
+
+        if (failed_updates > 0) break;
+
+        prediction_updates += realtime_result.prediction_updates;
+        measurement_updates += realtime_result.measurement_updates;
+        processed_events += realtime_result.processed_events;
+        filter = realtime_result.filter;
+        last_result
+            = copy_od_ekf_result<ODRealtimeEKFResult, ODEKFStepResult>(realtime_result);
 
         step_world(world, dt, cfg);
     }
@@ -3543,6 +3550,7 @@ void run_realtime_ekf_world_update_diag() {
             filter = last_result.filter;
             if (last_result.status == ODStatus::prediction_only) {
                 ++prediction_updates;
+                ++processed_events;
             }
         } else {
             ++failed_updates;
@@ -3555,12 +3563,17 @@ void run_realtime_ekf_world_update_diag() {
     print_diag_title("Realtime World EKF Update Diagnostic");
     std::println("Final Status: {}", od_status_string(last_result.status));
     std::println("Final Success = {}", od_status_success(last_result.status));
+    std::println("Schedule Items Generated = {}", schedule_items_generated);
+    std::println("Materialized Events = {}", materialized_events);
+    std::println("Measurement Events Generated = {}", measurement_events_generated);
+    std::println("Prediction Events Generated = {}", prediction_events_generated);
+    std::println("Processed Events = {}", processed_events);
     std::println("Measurement Updates = {}", measurement_updates);
     std::println("Prediction Only Updates = {}", prediction_updates);
     std::println("Failed Updates = {}", failed_updates);
     std::println("Filter Time = {}", filter.t);
     std::println("World Time = {}", world.t_sim());
-    std::println("Final Error = {}", final_state_err);
+    std::println("Final State Error = {}", final_state_err);
     std::println("Final Position Error = {}", final_err.r.norm());
     std::println("Final Velocity Error = {}", final_err.v.norm());
     std::println("Final Covariance Norm = {}", filter.P.norm());
