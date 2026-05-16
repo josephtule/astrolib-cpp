@@ -211,7 +211,9 @@ inline const mat11f mat11f0 = mat11f::Zero();
 inline const mat12f mat12f0 = mat12f::Zero();
 
 template <int N>
-inline const matXd matXd1 = matXd::Identity(N,N);
+inline const matXd matXd1 = matXd::Identity(N, N);
+template <int N, int M>
+inline const matXd matXd0 = matXd::Zero(N, M);
 
 inline const vec3d origin = vec3d0;
 inline const vec3f originf = vec3f0;

@@ -135,36 +135,6 @@ ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
     return result;
 }
 
-// ODStatus make_world_measurement_event(
-//     const World& world,
-//     ObservationType type,
-//     EntityId observer_id,
-//     EntityId target_id,
-//     f64 t,
-//     ODWorldMeasurementEvent& event,
-//     UAngle angle_out,
-//     f64 tol
-// ) {
-//     const Station* station = world.station(observer_id);
-//     if (station == nullptr) {
-//         return ODStatus::observer_not_found;
-//     }
-
-//     auto it = station->instruments.at(instrument_id);
-
-//     return make_world_measurement_event(
-//         world,
-//         type,
-//         observer_id,
-//         target_id,
-//         t,
-//         R,
-//         event,
-//         angle_out,
-//         tol
-//     );
-// }
-
 ODStatus make_world_measurement_event(
     const World& world,
     ObservationType type,
@@ -236,6 +206,74 @@ ODStatus validate_realtime_ekf_events(
     }
 
     return ODStatus::ok;
+}
+
+ODStatus make_world_measurement_event(
+    const World& world,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_out,
+    f64 tol
+) {
+    const Station* observer = world.station(observer_id);
+    if (observer == nullptr) {
+        return ODStatus::observer_not_found;
+    }
+
+    matXd R;
+    ODStatus status = stat_meas_cov(*observer, type, R);
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    return make_world_measurement_event(
+        world,
+        type,
+        observer_id,
+        target_id,
+        t,
+        R,
+        event,
+        angle_out,
+        tol
+    );
+}
+
+ODStatus make_world_measurement_event_instrument(
+    const World& world,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_out,
+    f64 tol
+) {
+    const Station* observer = world.station(observer_id);
+    if (observer == nullptr) {
+        return ODStatus::observer_not_found;
+    }
+
+    StationInstrument instrument;
+    ODStatus status = get_station_instrument(*observer, instrument, instrument_id);
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    return make_world_measurement_event(
+        world,
+        instrument.type,
+        observer_id,
+        target_id,
+        t,
+        instrument.R,
+        event,
+        angle_out,
+        tol
+    );
 }
 
 ODRealtimeEKFResult od_ekf_update_world_events(

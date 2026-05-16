@@ -93,9 +93,32 @@ ODStatus validate_realtime_ekf_events(
 );
 
 struct ODRealtimeScheduleItem {
+    InstrumentId instrument_id = kInvalidInstrumentId;
     f64 t = 0.0;
     bool has_measurement = false;
     ObservationType type = ObservationType::range;
     EntityId observer_id = kInvalidEntityId;
     EntityId target_id = kInvalidEntityId;
 };
+
+ODStatus make_world_measurement_event(
+    const World& world,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+);
+
+ODStatus make_world_measurement_event_instrument(
+    const World& world,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+);

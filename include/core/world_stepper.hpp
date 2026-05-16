@@ -6,7 +6,7 @@
 #include "core/world.hpp"
 
 struct WorldStepperConfig {
-    IntegratorType integrator_tr = IntegratorType::rk1;
+    IntegratorType integrator_tr = IntegratorType::rk2;
     IntegratorType integrator_att = IntegratorType::rk4;
     i32 substeps = 1;     // subdivisions per tick
     i32 ticks = 1;        // repeated integration ticks per call

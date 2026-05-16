@@ -99,7 +99,7 @@ struct Satellite : public Body {
 using InstrumentId = u32;
 constexpr InstrumentId kInvalidInstrumentId = 0;
 struct StationInstrument {
-    u32 id = kInvalidInstrumentId;
+    InstrumentId id = kInvalidInstrumentId;
     std::string name;
     ObservationType type = ObservationType::radec;
     matXd R;
@@ -125,12 +125,113 @@ struct Station : public Body {
     }
 };
 
-ODStatus stat_meas_cov(const Station& station, u32 instrument_id, matXd& R);
+ODStatus station_instrument_covariance(const Station& station, InstrumentId instrument_id, matXd& R);
 ODStatus stat_meas_cov(const Station& station, ObservationType type, matXd& R);
-ODStatus set_station_instrument(Station& station, const StationInstrument& instrument);
+ODStatus station_instrument_covariance(Station& station, const StationInstrument& instrument);
 ODStatus add_station_instrument(
     Station& station,
     const StationInstrument& instrument,
     InstrumentId& out_id
 );
 ODStatus add_station_instrument(Station& station, const StationInstrument& instrument);
+ODStatus get_station_instrument(
+    const Station& station,
+    const StationInstrument* instrument,
+    InstrumentId id
+);
+
+ODStatus add_radec_instrument(
+    Station& station,
+    const mat2d& R,
+    std::string name = "Ra/Dec Instrument"
+);
+ODStatus add_radec_instrument(
+    Station& station,
+    const mat2d& R,
+    InstrumentId& out_id,
+    std::string name = "Ra/Dec Instrument"
+);
+
+ODStatus add_azel_instrument(
+    Station& station,
+    const mat2d& R,
+    std::string name = "Az/El Instrument"
+);
+ODStatus add_azel_instrument(
+    Station& station,
+    const mat2d& R,
+    InstrumentId& out_id,
+    std::string name = "Az/El Instrument"
+);
+
+ODStatus add_range_instrument(
+    Station& station,
+    const matXd& R,
+    std::string name = "Range Instrument"
+);
+ODStatus add_range_instrument(
+    Station& station,
+    const matXd& R,
+    InstrumentId& out_id,
+    std::string name = "Range Instrument"
+);
+
+ODStatus add_range_rate_instrument(
+    Station& station,
+    const matXd& R,
+    std::string name = "Range-Rate Instrument"
+);
+ODStatus add_range_rate_instrument(
+    Station& station,
+    const matXd& R,
+    InstrumentId& out_id,
+    std::string name = "Range-Rate Instrument"
+);
+
+ODStatus add_pos_instrument(
+    Station& station,
+    const mat3d& R,
+    std::string name = "Simulation Position Instrument"
+);
+ODStatus add_pos_instrument(
+    Station& station,
+    const mat3d& R,
+    InstrumentId& out_id,
+    std::string name = "Inertial Position Instrument"
+);
+
+ODStatus add_posvel_instrument(
+    Station& station,
+    const mat6d& R,
+    std::string name = "Simulation State Instrument"
+);
+ODStatus add_posvel_instrument(
+    Station& station,
+    const mat6d& R,
+    InstrumentId& out_id,
+    std::string name = "Inertial State Instrument"
+);
+
+ODStatus add_rel_pos_instrument(
+    Station& station,
+    const mat3d& R,
+    std::string name = "Relative Position Instrument"
+);
+ODStatus add_rel_pos_instrument(
+    Station& station,
+    const mat3d& R,
+    InstrumentId& out_id,
+    std::string name = "Relative Position Instrument"
+);
+
+ODStatus add_rel_posvel_instrument(
+    Station& station,
+    const mat6d& R,
+    std::string name = "Relative State Instrument"
+);
+ODStatus add_rel_posvel_instrument(
+    Station& station,
+    const mat6d& R,
+    InstrumentId& out_id,
+    std::string name = "Relative State Instrument"
+);
