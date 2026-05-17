@@ -17,7 +17,12 @@ ODEKFStepResult od_ekf_step_world(
     const ODDynamicsConfig& dyn_config,
     i32 prop_steps,
     const mat6d& Q,
-    f64 tol_time = tol12
+    f64 tol_time = tol12,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 eps_pos = 1e-3,
+    f64 eps_vel = 1e-6,
+    f64 tol = tol12
 );
 
 ODStatus ekf_observer_state_from_world(

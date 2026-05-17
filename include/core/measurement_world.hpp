@@ -1,12 +1,27 @@
 #pragma once
 
 #include "core/body.hpp"
+#include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
+#include "core/observation_type.hpp"
+#include "core/od_dynamics.hpp"
 #include "core/state.hpp"
+#include "core/station_geometry.hpp"
+#include "core/transform.hpp"
 #include "core/world.hpp"
 #include "util/units.hpp"
+
+inline vec4d od_q_bcbf_from_inertial(const ODDynamicsConfig& dyn_cfg, f64 dt) {
+    vec4d q_BCBF_I = dyn_cfg.q_cb0;
+    if (dyn_cfg.update_body_attitude
+        && dyn_cfg.att_model == ODAnchorAttModel::simple_spin) {
+        StateAtt x_att_cb{.q = dyn_cfg.q_cb0, .w = dyn_cfg.w_cb};
+        q_BCBF_I = step_q_simple_spin(x_att_cb, dt);
+    }
+    return q_BCBF_I;
+}
 
 inline vecXd world_predict_measurement(
     const World& world,
@@ -102,7 +117,6 @@ inline ODStatus make_world_station_measurement_context(
     ctx.x_tr_target = x_tr_target_pred;
 
     if (type == ObservationType::azel) {
-
         if (!observer->anchored || observer->anchor_id == kInvalidEntityId) {
             return ODStatus::observer_not_found;
         }
@@ -119,6 +133,129 @@ inline ODStatus make_world_station_measurement_context(
         ctx.station_llh = observer->llh_BCBF;
     } else {
         ctx.x_tr_observer = world.stat_x_tr_inertial(observer_id);
+    }
+
+    return ODStatus::ok;
+}
+
+inline ODStatus world_predict_measurement_from_state(
+    const World& world,
+    ObservationType type,
+    EntityId observer_id,
+    const StateTr& x_tr_target_pred,
+    const ODDynamicsConfig& dyn_cfg,
+    f64 dt,
+    vecXd& z,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+) {
+    MeasurementContext ctx;
+    ODStatus status = make_world_station_measurement_context(
+        world,
+        ctx,
+        observer_id,
+        x_tr_target_pred,
+        type
+    );
+    if (!od_status_success(status)) {
+        return status;
+    }
+
+    if (type != ObservationType::azel) {
+        z = predict_measurement(type, ctx, angle_in, angle_out, tol);
+    } else {
+        const Station* stat = world.station(observer_id);
+        if (stat == nullptr) return ODStatus::observer_not_found;
+        if (!stat->anchored || stat->anchor_id == kInvalidEntityId) {
+            return ODStatus::observer_not_found;
+        }
+
+        const Body* anchor = world.body(stat->anchor_id);
+        if (anchor == nullptr) return ODStatus::observer_not_found;
+
+        vec4d q_BCBF_I = od_q_bcbf_from_inertial(dyn_cfg, dt);
+        mat3d R_BCBF_I = ep_to_dcm(q_BCBF_I);
+        mat3d R_ENU_BCBF = world.stat_rot_enu_from_body(observer_id);
+
+        StateTr x_anchor = od_anchor_tr_at_time(dyn_cfg, dt);
+        vec3d r_target_body_I = x_tr_target_pred.r - x_anchor.r;
+        vec3d r_target_body_BCBF = R_BCBF_I * r_target_body_I;
+
+        switch (ctx.azel_frame) {
+        case AzelInputFrame::enu: {
+            vec3d r_rel_BCBF = r_target_body_BCBF - stat->r_body_BCBF;
+            vec3d r_rel_ENU = R_ENU_BCBF * r_rel_BCBF;
+            ctx.x_tr_observer.r = vec3d0;
+            ctx.x_tr_target.r = r_rel_ENU;
+            ctx.station_llh = stat->llh_BCBF;
+            ctx.has_station_local = true;
+        } break;
+        case AzelInputFrame::bcbf:
+            ctx.x_tr_observer.r = stat->r_body_BCBF;
+            ctx.x_tr_target.r = r_target_body_BCBF;
+            ctx.station_llh = stat->llh_BCBF;
+            ctx.has_station_local = true;
+            break;
+        }
+
+        z = predict_measurement(type, ctx, angle_in, angle_out, tol);
+    }
+
+    if (z.size() == 0) {
+        return ODStatus::empty_measurements;
+    }
+
+    return ODStatus::ok;
+}
+
+inline ODStatus world_jacobian_measurement(
+    const World& world,
+    ObservationType type,
+    EntityId observer_id,
+    const StateTr& x_target_pred,
+    const ODDynamicsConfig& dyn_cfg,
+    f64 dt,
+    matXd& H,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 eps_pos = 1e-3,
+    f64 eps_vel = 1e-6,
+    f64 tol = tol12
+) {
+    MeasurementContext ctx;
+    ODStatus status = make_world_station_measurement_context(
+        world,
+        ctx,
+        observer_id,
+        x_target_pred,
+        type
+    );
+    if (!od_status_success(status)) {
+        return status;
+    }
+
+    i32 dim = measurement_dim(type);
+    if (type != ObservationType::azel) {
+        H = measurement_jacobian(type, ctx, angle_in, angle_out, eps_pos, eps_vel, tol);
+    } else {
+        switch (ctx.azel_frame) {
+        case AzelInputFrame::enu: {
+            vec4d q_BCBF_I = od_q_bcbf_from_inertial(dyn_cfg, dt);
+            mat3d R_ENU_BCBF = world.stat_rot_enu_from_body(observer_id);
+            mat3d R_BCBF_I = ep_to_dcm(q_BCBF_I);
+            mat3d R_ENU_I = R_ENU_BCBF * R_BCBF_I;
+            H = jacobian_azel_inertial_from_enu(ctx, R_ENU_I, angle_out, tol);
+        } break;
+        case AzelInputFrame::bcbf: {
+            vec4d q_BCBF_I = od_q_bcbf_from_inertial(dyn_cfg, dt);
+            mat3d R_BCBF_I = ep_to_dcm(q_BCBF_I);
+            H = jacobian_azel_inertial_from_bcbf(ctx, R_BCBF_I, angle_in, angle_out, tol);
+        } break;
+        }
+    }
+    if (H.cols() != 6 || H.rows() != dim) {
+        return ODStatus::empty_measurements;
     }
 
     return ODStatus::ok;

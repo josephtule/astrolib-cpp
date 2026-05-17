@@ -114,6 +114,7 @@ struct Station : public Body {
     // [lat, lon, h] - [rad, rad, sim units]
     InstrumentId next_instrument_id = 1;
     umap<u32, StationInstrument> instruments;
+    svec<InstrumentId> enabled_instrument_ids;
 
     MassProperties mass_properties;
 
@@ -125,9 +126,17 @@ struct Station : public Body {
     }
 };
 
-ODStatus station_instrument_covariance(const Station& station, InstrumentId instrument_id, matXd& R);
-ODStatus stat_meas_cov(const Station& station, ObservationType type, matXd& R);
-ODStatus station_instrument_covariance(Station& station, const StationInstrument& instrument);
+ODStatus station_measurement_covariance(
+    const Station& station,
+    InstrumentId instrument_id,
+    matXd& R
+);
+ODStatus station_measurement_covariance(
+    const Station& station,
+    ObservationType type,
+    matXd& R
+);
+ODStatus set_station_instrument(Station& station, const StationInstrument& instrument);
 ODStatus add_station_instrument(
     Station& station,
     const StationInstrument& instrument,
@@ -136,7 +145,7 @@ ODStatus add_station_instrument(
 ODStatus add_station_instrument(Station& station, const StationInstrument& instrument);
 ODStatus get_station_instrument(
     const Station& station,
-    const StationInstrument* instrument,
+    StationInstrument& instrument,
     InstrumentId id
 );
 
@@ -235,3 +244,10 @@ ODStatus add_rel_posvel_instrument(
     InstrumentId& out_id,
     std::string name = "Relative State Instrument"
 );
+
+svec<InstrumentId> enabled_station_instrument_ids(const Station& station);
+
+ODStatus enable_station_instrument(Station& station, InstrumentId instrument_id);
+ODStatus disable_station_instrument(Station& station, InstrumentId instrument_id);
+
+void print_station_instruments(const Station& station);

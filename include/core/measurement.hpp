@@ -1,15 +1,14 @@
 #pragma once
 
 #include "core/entity.hpp"
-#include "core/observations.hpp"
 #include "core/observation_type.hpp"
+#include "core/observations.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
 #include "util/constants.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
-
 
 struct Measurement {
     f64 t = 0.0;
@@ -27,7 +26,7 @@ struct MeasurementContext {
 
     // local station geometry, used only for azel
     bool has_station_local = false;
-    AzelInputFrame azel_frame = AzelInputFrame::bcbf;
+    AzelInputFrame azel_frame = AzelInputFrame::enu;
     vec3d station_llh = vec3d0; // [lat, lon, h], angle units from angle_in
 };
 
@@ -209,7 +208,7 @@ inline matXd jacobian_radec(
     f64 rhoxy = std::sqrt(rhoxy2);
     f64 denom = rhoxy * rho2;
 
-    if (rho <= tol || rhoxy <= tol || denom <= tol) return matXd{};
+    if (rho2 <= tol || rhoxy2 <= tol || denom <= tol) return matXd{};
 
     matd<2, 6> H;
     H.row(0) = vec6d{-r_rel(1) / rhoxy2, r_rel(0) / rhoxy2, 0.0, 0.0, 0.0, 0.0};
@@ -223,6 +222,81 @@ inline matXd jacobian_radec(
     };
     f64 converter = convert_angle(1.0, UAngle::radian, angle_out);
     H *= converter;
+
+    return H;
+}
+
+inline matXd jacobian_azel_enu(
+    const MeasurementContext& ctx,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+) {
+    vec3d r_rel_enu = ctx.x_tr_target.r - ctx.x_tr_observer.r;
+    f64 e = r_rel_enu(0);
+    f64 n = r_rel_enu(1);
+    f64 u = r_rel_enu(2);
+
+    f64 rho2 = r_rel_enu.squaredNorm();
+    f64 rhoen2 = r_rel_enu.segment<2>(0).squaredNorm();
+    f64 rhoen = std::sqrt(rhoen2);
+    f64 denom = rhoen * rho2;
+
+    if (rho2 <= tol || rhoen2 <= tol || denom <= tol) return matXd{};
+
+    matd<2, 6> H;
+    H.row(0) = vec6d{n / rhoen2, -e / rhoen2, 0.0, 0.0, 0.0, 0.0};
+    H.row(1) = vec6d{-u * e / denom, -u * n / denom, rhoen / rho2, 0.0, 0.0, 0.0};
+    f64 converter = convert_angle(1.0, UAngle::radian, angle_out);
+    H *= converter;
+
+    return H;
+}
+
+inline matXd jacobian_azel_inertial_from_enu(
+    const MeasurementContext& ctx,
+    const mat3d& R_ENU_I,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+) {
+    matXd H_ENU = jacobian_azel_enu(ctx, angle_out, tol);
+    matXd H = H_ENU;
+    if (H.rows() != 2 || H.cols() != 6) return H;
+    H.block<2, 3>(0, 0) = H.block<2, 3>(0, 0) * R_ENU_I;
+
+    return H;
+}
+
+inline matXd jacobian_azel_bcbf(
+    const MeasurementContext& ctx,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+) {
+    f64 lat = ctx.station_llh(0);
+    f64 lon = ctx.station_llh(1);
+    mat3d R_ENU_BCBF = rot_enu_from_bcbf(lat, lon, angle_in);
+    MeasurementContext enu_ctx = ctx;
+    enu_ctx.x_tr_observer = R_ENU_BCBF * enu_ctx.x_tr_observer;
+    enu_ctx.x_tr_target = R_ENU_BCBF * enu_ctx.x_tr_target;
+
+    matXd H = jacobian_azel_enu(enu_ctx, angle_out, tol);
+    if (H.rows() != 2 || H.cols() != 6) return H;
+    H.block<2, 3>(0, 0) = H.block<2, 3>(0, 0) * R_ENU_BCBF;
+
+    return H;
+}
+
+inline matXd jacobian_azel_inertial_from_bcbf(
+    const MeasurementContext& ctx,
+    const mat3d& R_BCBF_I,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+) {
+    matXd H_BCBF = jacobian_azel_bcbf(ctx, angle_in, angle_out, tol);
+    matXd H = H_BCBF;
+    if (H.rows() != 2 || H.cols() != 6) return H;
+    H.block<2, 3>(0, 0) = H.block<2, 3>(0, 0) * R_BCBF_I;
 
     return H;
 }
@@ -246,9 +320,8 @@ inline matXd measurement_jacobian(
     case ObservationType::radec: {
         H = jacobian_radec(ctx, angle_out, tol);
     } break;
-
     // TODO: add jacobians for the below if possible
-    case ObservationType::azel: [[fallthrough]];
+    case ObservationType::azel: [[fallthrough]]; // only works in world context
     case ObservationType::range: [[fallthrough]];
     case ObservationType::range_rate: [[fallthrough]];
     case ObservationType::pos: [[fallthrough]];

@@ -25,7 +25,7 @@ static ODStatus add_typed_station_instrument(
     return add_station_instrument(station, instrument, out_id);
 }
 
-ODStatus station_instrument_covariance(
+ODStatus station_measurement_covariance(
     const Station& station,
     InstrumentId instrument_id,
     matXd& R
@@ -40,7 +40,11 @@ ODStatus station_instrument_covariance(
     return ODStatus::ok;
 }
 
-ODStatus stat_meas_cov(const Station& station, ObservationType type, matXd& R) {
+ODStatus station_measurement_covariance(
+    const Station& station,
+    ObservationType type,
+    matXd& R
+) {
     // only works if there is only one measurement of each type tied to the station
     i32 found_count = 0;
     matXd R_match;
@@ -65,10 +69,7 @@ ODStatus stat_meas_cov(const Station& station, ObservationType type, matXd& R) {
     return ODStatus::ok;
 }
 
-ODStatus station_instrument_covariance(
-    Station& station,
-    const StationInstrument& instrument
-) {
+ODStatus set_station_instrument(Station& station, const StationInstrument& instrument) {
     if (instrument.id == kInvalidInstrumentId) {
         return ODStatus::instrument_not_found;
     }
@@ -78,6 +79,8 @@ ODStatus station_instrument_covariance(
     }
 
     it->second = instrument;
+
+    station.enabled_instrument_ids = enabled_station_instrument_ids(station);
 
     return ODStatus::ok;
 }
@@ -96,11 +99,16 @@ ODStatus add_station_instrument(
     if (it != station.instruments.end()) {
         // id already exists
         out_id = copy.id;
-        return station_instrument_covariance(station, copy);
+        return set_station_instrument(station, copy);
     }
 
     station.instruments.emplace(copy.id, copy);
     out_id = copy.id;
+
+    if (copy.enabled) {
+        station.enabled_instrument_ids = enabled_station_instrument_ids(station);
+    }
+
     return ODStatus::ok;
 }
 
@@ -111,7 +119,7 @@ ODStatus add_station_instrument(Station& station, const StationInstrument& instr
 
 ODStatus get_station_instrument(
     const Station& station,
-    const StationInstrument* instrument,
+    StationInstrument& instrument,
     InstrumentId id
 ) {
 
@@ -119,7 +127,7 @@ ODStatus get_station_instrument(
     if (it == station.instruments.end()) {
         return ODStatus::instrument_not_found;
     }
-    instrument = &it->second;
+    instrument = it->second;
 
     return ODStatus::ok;
 }
@@ -258,4 +266,49 @@ ODStatus add_rel_posvel_instrument(
         out_id,
         name
     );
+}
+
+svec<InstrumentId> enabled_station_instrument_ids(const Station& station) {
+    svec<InstrumentId> ids;
+    ids.reserve(station.instruments.size());
+
+    for (auto& [instr_id, instrument] : station.instruments) {
+        if (instrument.enabled) {
+            ids.push_back(instr_id);
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+
+    return ids;
+}
+
+ODStatus enable_station_instrument(Station& station, InstrumentId instrument_id) {
+    auto it = station.instruments.find(instrument_id);
+    if (it == station.instruments.end()) {
+        return ODStatus::instrument_not_found;
+    }
+    it->second.enabled = true;
+
+    station.enabled_instrument_ids = enabled_station_instrument_ids(station);
+
+    return ODStatus::ok;
+}
+
+ODStatus disable_station_instrument(Station& station, InstrumentId instrument_id) {
+    auto it = station.instruments.find(instrument_id);
+    if (it == station.instruments.end()) {
+        return ODStatus::instrument_not_found;
+    }
+    it->second.enabled = false;
+
+    station.enabled_instrument_ids = enabled_station_instrument_ids(station);
+
+    return ODStatus::ok;
+}
+
+void print_station_instruments(const Station& station) {
+    for (const auto& [id, instrument] : station.instruments) {
+        std::string enabled_str = instrument.enabled ? "enabled" : "disabled";
+        std::println("{} ({})", instrument.name, enabled_str);
+    }
 }

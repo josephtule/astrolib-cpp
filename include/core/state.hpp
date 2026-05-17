@@ -10,7 +10,7 @@ struct StateTr {
 inline vec4d q_identity{0.0, 0.0, 0.0, 1.0};
 struct StateAtt {
     vec4d q = q_identity; // euler-parameter/quaternion, N -> B
-    vec3d w = vec3d0;    // angular velocity, in body frame
+    vec3d w = vec3d0;     // angular velocity, in body frame
 };
 
 // Derivatives
@@ -148,4 +148,18 @@ inline DerivAtt operator*(f64 scalar, const DerivAtt& dx) { return dx * scalar; 
 inline DerivAtt operator/(const DerivAtt& dx, f64 scalar) { return dx * (1.0 / scalar); }
 inline DerivAtt operator-(const DerivAtt& dx) {
     return DerivAtt{.dq = -dx.dq, .dw = -dx.dw};
+}
+
+inline StateTr operator*(const mat3d& R, const StateTr& x) {
+    // NOTE: this is a pure rotation of coordinates, it does not return true velocity in
+    // the new frame
+
+    return StateTr{.r = R * x.r, .v = R * x.v};
+}
+
+inline DerivTr operator*(const mat3d& R, const DerivTr& dx) {
+    // NOTE: this is a pure rotation of coordinates, it does not return true velocity in
+    // the new frame
+
+    return DerivTr{.dr = R * dx.dr, .dv = R * dx.dv};
 }

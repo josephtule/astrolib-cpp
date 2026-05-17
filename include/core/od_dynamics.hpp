@@ -9,10 +9,7 @@
 #include "util/typedefs.hpp"
 #include "util/vecdefs.hpp"
 
-enum struct ODTrDynamicsModel : i32 {
-    two_body,
-    zonal, // TODO: add jacobian
-};
+enum struct ODTrDynamicsModel : i32 { two_body, zonal};
 
 inline ODTrDynamicsModel worldtrmodel_to_odtrmodel(GravityModel model) {
     switch (model) {
@@ -23,26 +20,29 @@ inline ODTrDynamicsModel worldtrmodel_to_odtrmodel(GravityModel model) {
     }
 }
 
-enum struct ODAttDynamicsModel : i32 { fixed, simple_spin };
+enum struct ODAnchorAttModel : i32 { fixed, simple_spin };
+enum struct ODAnchorTrModel : i32 { fixed, constant_velocity };
 
-inline ODAttDynamicsModel worldattmodel_to_odattmodel(CelestialAttitudeModel model) {
+inline ODAnchorAttModel worldattmodel_to_odattmodel(CelestialAttitudeModel model) {
     switch (model) {
-    case CelestialAttitudeModel::fixed: return ODAttDynamicsModel::fixed;
-    case CelestialAttitudeModel::simple_spin: return ODAttDynamicsModel::simple_spin;
+    case CelestialAttitudeModel::fixed: return ODAnchorAttModel::fixed;
+    case CelestialAttitudeModel::simple_spin: return ODAnchorAttModel::simple_spin;
     case CelestialAttitudeModel::provider:
-        return ODAttDynamicsModel::fixed; // TODO: replace this
+        return ODAnchorAttModel::fixed; // TODO: replace this
     }
 }
 
 struct ODDynamicsConfig {
     // what the station knows of the dynamics
     ODTrDynamicsModel tr_model = ODTrDynamicsModel::two_body;
-    ODAttDynamicsModel att_model = ODAttDynamicsModel::fixed;
+    ODAnchorAttModel att_model = ODAnchorAttModel::fixed;
+    ODAnchorTrModel anchor_tr_model = ODAnchorTrModel::fixed;
     f64 t0 = 0.0;
     f64 mu = 0.0;
     vec7d J = vec7d0;
     f64 R_cb_ref = 0.0; // dependent on supplied gravity model, usually semimajor-axis
     i32 zonal_degree = 0;
+    StateTr x_cb0;
     vec4d q_cb0 = q_identity;
     vec3d w_cb = vec3d0;
     bool update_body_attitude = false;
@@ -57,10 +57,19 @@ inline ODDynamicsConfig make_od_cfg_from_celestial(const Celestial& cel) {
     cfg.J = cel.J;
     cfg.R_cb_ref = cel.semimajor_axis;
     cfg.zonal_degree = cel.degree;
+    cfg.x_cb0 = cel.x_tr;
     cfg.q_cb0 = cel.x_att.q;
     cfg.w_cb = cel.x_att.w;
 
     return cfg;
+}
+
+inline StateTr od_anchor_tr_at_time(const ODDynamicsConfig& cfg, f64 dt) {
+    StateTr x_cb = cfg.x_cb0;
+    if (cfg.anchor_tr_model == ODAnchorTrModel::constant_velocity) {
+        x_cb.r += x_cb.v * dt;
+    }
+    return x_cb;
 }
 
 inline DerivTr derivtr_two_body(const StateTr& x_rel, f64 mu) {
@@ -95,7 +104,7 @@ inline DerivTr derivtr_od(f64 t, const StateTr& x, const ODDynamicsConfig& cfg) 
     case ODTrDynamicsModel::zonal: {
         vec4d q_cb = cfg.q_cb0;
         if (cfg.update_body_attitude) {
-            if (cfg.att_model == ODAttDynamicsModel::simple_spin) {
+            if (cfg.att_model == ODAnchorAttModel::simple_spin) {
                 q_cb = step_q_simple_spin(StateAtt{.q = q_cb, .w = cfg.w_cb}, t - cfg.t0);
             }
         }
@@ -509,7 +518,7 @@ inline mat6d jacobian_tr_od(f64 t, const StateTr& x, const ODDynamicsConfig& cfg
     case ODTrDynamicsModel::zonal: {
         vec4d q_cb = cfg.q_cb0;
         if (cfg.update_body_attitude) {
-            if (cfg.att_model == ODAttDynamicsModel::simple_spin) {
+            if (cfg.att_model == ODAnchorAttModel::simple_spin) {
                 q_cb = step_q_simple_spin(StateAtt{.q = q_cb, .w = cfg.w_cb}, t - cfg.t0);
             }
         }

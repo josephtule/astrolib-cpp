@@ -6,6 +6,7 @@
 #include "core/measurement_world.hpp"
 #include "core/state.hpp"
 #include "util/units.hpp"
+#include "util/vecdefs.hpp"
 
 ODStatus ekf_observer_state_from_world(
     const World& world,
@@ -39,7 +40,12 @@ ODEKFStepResult od_ekf_step_world(
     const ODDynamicsConfig& dyn_config,
     i32 prop_steps,
     const mat6d& Q,
-    f64 tol_time
+    f64 tol_time,
+    UAngle angle_in,
+    UAngle angle_out,
+    f64 eps_pos,
+    f64 eps_vel,
+    f64 tol
 ) {
     ODEKFStepResult result;
 
@@ -65,8 +71,154 @@ ODEKFStepResult od_ekf_step_world(
         .Q = Q,
         .tol_time = tol_time
     };
+    result.status = od_ekf_step_validate_input(input);
 
-    result = od_ekf_step(input);
+    // result = od_ekf_step(input);
+    if (!od_status_success(result.status)) {
+        return result;
+    } else {
+        result.filter = filter;
+        result.status = ODStatus::ok;
+        result.residual_norm = 0.0;
+        result.raw_residual_norm = 0.0;
+    }
+
+    ODEKFPredictResult prediction = od_ekf_predict(
+        filter,
+        event.measurement.t,
+        input.dyn_config,
+        input.prop_steps,
+        input.Q,
+        input.tol_time
+    );
+    if (!od_status_success(prediction.status)) {
+        result.status = prediction.status;
+        return result;
+    }
+
+    StateTr& x_pred = prediction.y.x;
+    mat6d& P_pred = prediction.P;
+
+    // predicted measurement
+    vecXd z_pred;
+    ODStatus pred_status = world_predict_measurement_from_state(
+        world,
+        event.measurement.type,
+        event.observer_id,
+        x_pred,
+        dyn_config,
+        event.measurement.t - dyn_config.t0,
+        z_pred,
+        angle_in,
+        angle_out,
+        tol
+    );
+    if (!od_status_success(pred_status)) {
+        result.status = pred_status;
+        return result;
+    }
+
+    // residuals
+    vecXd res = measurement_residual(
+        event.measurement.type,
+        event.measurement.z,
+        z_pred,
+        angle_out
+    );
+    if (!res.allFinite()) {
+        result.status = ODStatus::invalid_input;
+        return result;
+    }
+
+    // measurement jacobian
+    i32 dim = measurement_dim(event.measurement.type);
+    matXd H;
+    ODStatus status = world_jacobian_measurement(
+        world,
+        event.measurement.type,
+        event.observer_id,
+        x_pred,
+        dyn_config,
+        event.measurement.t - dyn_config.t0,
+        H,
+        angle_in,
+        angle_out,
+        eps_pos,
+        eps_vel,
+        tol
+    );
+    if (!od_status_success(status)) {
+        result.status = status;
+        return result;
+    }
+    if (H.cols() != 6 || H.rows() != dim || !H.allFinite()) {
+        result.status = ODStatus::invalid_input;
+        return result;
+    }
+
+    // measurement covariance
+    matXd R;
+    if (event.measurement.R.size() == 0) {
+        R = matXd::Identity(dim, dim);
+    } else {
+        R = event.measurement.R;
+    }
+
+    // innovation covariance
+    matXd S = H * P_pred * H.transpose() + R;
+    if (!S.allFinite()) {
+        result.status = ODStatus::invalid_input;
+        return result;
+    }
+
+    // solve for Kalman gain
+    Eigen::LDLT<matXd> S_ldlt(S);
+    if (S_ldlt.info() != Eigen::Success) {
+        result.status = ODStatus::singular_innovation;
+        return result;
+    }
+    matXd X = S_ldlt.solve(H * P_pred); // solve S * X = H * P_pred for X
+    // matXd K = P_pred * H.transpose() * S.inverse();
+    matXd K = X.transpose();
+    if (!X.allFinite() || !K.allFinite()) {
+        result.status = ODStatus::singular_innovation;
+        return result;
+    }
+
+    // a posteriori state and STM, updated estimate
+    vec6d dx_vec = K * res;
+    DerivTr dx = vec6_to_derivtr(dx_vec);
+    StateTr x_post = x_pred + dx;
+    // mat6d P_post = (mat6d1 - K * H) * P_pred;
+    mat6d P_post = (mat6d1 - K * H) * P_pred * (mat6d1 - K * H).transpose()
+                   + K * R * K.transpose();       // Joseph form, more stable
+    P_post = 0.5 * (P_post + P_post.transpose()); // force symmetry
+    if (!dx_vec.allFinite() || !statetr_to_vec6(x_post).allFinite()
+        || !P_post.allFinite()) {
+        result.status = ODStatus::correction_rejected;
+        return result;
+    }
+
+    vecXd weighted_res = S_ldlt.solve(res);
+    if (!weighted_res.allFinite()) {
+        result.status = ODStatus::singular_innovation;
+        return result;
+    }
+    f64 res_norm2 = res.dot(weighted_res);
+    if (!std::isfinite(res_norm2) || res_norm2 < 0.0) {
+        result.status = ODStatus::singular_innovation;
+        return result;
+    }
+
+    // store results
+    result.filter.x = x_post;
+    result.filter.P = P_post;
+    result.filter.t = event.measurement.t;
+    result.residual = res;
+    result.residual_norm = std::sqrt(res_norm2);
+    // result.residual_norm = std::sqrt(res.transpose() * S.inverse() * res);
+    result.raw_residual_norm = res.norm();
+    result.status = ODStatus::ok;
 
     return result;
 }
@@ -224,7 +376,7 @@ ODStatus make_world_measurement_event(
     }
 
     matXd R;
-    ODStatus status = stat_meas_cov(*observer, type, R);
+    ODStatus status = station_measurement_covariance(*observer, type, R);
     if (status != ODStatus::ok) {
         return status;
     }

@@ -3100,17 +3100,17 @@ void run_od_zonal_jacobian_diag() {
         cfg.zonal_degree = degree;
 
         cfg.update_body_attitude = false;
-        cfg.att_model = ODAttDynamicsModel::fixed;
+        cfg.att_model = ODAnchorAttModel::fixed;
         cfg.q_cb0 = q_identity;
         print_case("J" + std::to_string(degree) + " Fixed Identity", 0.0, cfg);
 
         cfg.update_body_attitude = false;
-        cfg.att_model = ODAttDynamicsModel::fixed;
+        cfg.att_model = ODAnchorAttModel::fixed;
         cfg.q_cb0 = earth->x_att.q;
         print_case("J" + std::to_string(degree) + " Fixed Tilted", 0.0, cfg);
 
         cfg.update_body_attitude = true;
-        cfg.att_model = ODAttDynamicsModel::simple_spin;
+        cfg.att_model = ODAnchorAttModel::simple_spin;
         cfg.q_cb0 = earth->x_att.q;
         print_case("J" + std::to_string(degree) + " Simple Spin", 1000.0, cfg);
     }
@@ -3324,15 +3324,11 @@ static ODStatus make_realtime_ekf_diag_schedule(
     f64 t,
     i32 i,
     i32 i_meas,
-    EntityId stat_id,
+    svec<EntityId> stat_ids,
     EntityId sat_id,
     svec<ODRealtimeScheduleItem>& schedule
 ) {
     schedule.clear();
-    const Station* stat = world.station(stat_id);
-    if (stat == nullptr) {
-        return ODStatus::observer_not_found;
-    }
 
     if (i % i_meas != 0) {
         // prediction only
@@ -3342,26 +3338,28 @@ static ODStatus make_realtime_ekf_diag_schedule(
 
         schedule.push_back(item);
     } else {
-        // estimation
-        ODRealtimeScheduleItem item;
-        item.t = t;
-        item.has_measurement = true;
-        item.observer_id = stat_id;
-        item.target_id = sat_id;
+        for (const EntityId stat_id : stat_ids) {
+            const Station* stat = world.station(stat_id);
+            if (stat == nullptr) {
+                return ODStatus::observer_not_found;
+            }
 
-        svec<InstrumentId> ids;
-        ids.reserve(stat->instruments.size());
-        for (auto& [instr_id, _] : stat->instruments) {
-            ids.push_back(instr_id);
-        }
-        std::sort(ids.begin(), ids.end());
+            // estimation
+            ODRealtimeScheduleItem item;
+            item.t = t;
+            item.has_measurement = true;
+            item.observer_id = stat_id;
+            item.target_id = sat_id;
 
-        for (InstrumentId id : ids) {
-            const StationInstrument& instrument = stat->instruments.at(id);
-            if (instrument.enabled) {
-                item.instrument_id = id;
-                item.type = instrument.type;
-                schedule.push_back(item);
+            svec<InstrumentId> ids = stat->enabled_instrument_ids;
+
+            for (InstrumentId id : ids) {
+                const StationInstrument& instrument = stat->instruments.at(id);
+                if (instrument.enabled) {
+                    item.instrument_id = id;
+                    item.type = instrument.type;
+                    schedule.push_back(item);
+                }
             }
         }
     }
@@ -3428,12 +3426,15 @@ void run_realtime_ekf_world_update_diag() {
     }
     World& world = scenario.world;
     EntityId earth_id = scenario.earth_id;
-    Celestial* earth = world.celestial(earth_id);
     EntityId sat_id = scenario.sat1_id;
+    EntityId stat1_id = scenario.stat1_id;
+    EntityId stat2_id = scenario.stat2_id;
+    svec<EntityId> stat_ids = {stat1_id, stat2_id};
+    Celestial* earth = world.celestial(earth_id);
     Satellite* sat = world.satellite(sat_id);
-    EntityId stat_id = scenario.stat1_id;
-    Station* stat = world.station(stat_id);
-    if (earth == nullptr || sat == nullptr || stat == nullptr) {
+    Station* stat1 = world.station(stat1_id);
+    Station* stat2 = world.station(stat2_id);
+    if (earth == nullptr || sat == nullptr || stat1 == nullptr || stat2 == nullptr) {
         std::println("Failed to load scenario");
         return;
     }
@@ -3448,19 +3449,39 @@ void run_realtime_ekf_world_update_diag() {
 
     f64 sigma_rad = 1e-5;
     f64 sigma_range = 1e-3;
+    f64 sigma_r = 1e-3;
+    f64 sigma_v = 1e-6;
 
-    ODStatus radec_status = add_radec_instrument(*stat, mat2d1 * sigma_rad * sigma_rad);
+    mat6d R_pv = mat6d1;
+    R_pv.block<3, 3>(0, 0) *= sigma_r * sigma_r;
+    R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
+
+    ODStatus radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(radec_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
     ODStatus range_status
-        = add_range_instrument(*stat, matXd1<1> * sigma_range * sigma_range);
+        = add_range_instrument(*stat1, matXd1<1> * sigma_range * sigma_range);
     if (!od_status_success(range_status)) {
         std::println("Failed to add instrument");
         return;
     }
+
+    ODStatus azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
+    if (!od_status_success(azel_status)) {
+        std::println("Failed to add instrument");
+        return;
+    }
+
+    InstrumentId rel_pv_id;
+    ODStatus rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
+    if (!od_status_success(rel_posvel_status)) {
+        std::println("Failed to add instrument");
+        return;
+    }
+    disable_station_instrument(*stat2, rel_pv_id);
 
     WorldStepperConfig cfg;
     cfg.step_tr = true;
@@ -3501,10 +3522,11 @@ void run_realtime_ekf_world_update_diag() {
             t_meas,
             i,
             2,
-            stat_id,
+            stat_ids,
             sat_id,
             schedule
         );
+
         if (schedule_status != ODStatus::ok) {
             last_result.status = schedule_status;
             ++failed_updates;
@@ -3588,8 +3610,18 @@ void run_realtime_ekf_world_update_diag() {
     StateTr final_err = filter.x - sat->x_tr;
     f64 final_state_err = statetr_to_vec6(final_err).norm();
 
+    std::println("Station 1 Instruments:");
+    print_station_instruments(*stat1);
+    std::println();
+
+    std::println("Station 2 Instruments:");
+    print_station_instruments(*stat2);
+    std::println();
+
     std::println("Final Status: {}", od_status_string(last_result.status));
     std::println("Final Success = {}", od_status_success(last_result.status));
+    std::println();
+
     std::println("Schedule Items Generated = {}", schedule_items_generated);
     std::println("Materialized Events = {}", materialized_events);
     std::println("Measurement Events Generated = {}", measurement_events_generated);
@@ -3598,6 +3630,8 @@ void run_realtime_ekf_world_update_diag() {
     std::println("Measurement Updates = {}", measurement_updates);
     std::println("Prediction Only Updates = {}", prediction_updates);
     std::println("Failed Updates = {}", failed_updates);
+    std::println();
+
     std::println("Filter Time = {}", filter.t);
     std::println("World Time = {}", world.t_sim());
     std::println("Final State Error = {}", final_state_err);
@@ -3645,14 +3679,16 @@ void run_station_instrument_diag() {
     ODStatus range_status = add_station_instrument(*stat1, range_instr, range_instr.id);
 
     matXd R_radec;
-    ODStatus radec_id_status = station_instrument_covariance(*stat1, radec_instr1.id, R_radec);
+    ODStatus radec_id_status
+        = station_measurement_covariance(*stat1, radec_instr1.id, R_radec);
 
     matXd R_range;
-    ODStatus range_type_status = stat_meas_cov(*stat1, ObservationType::range, R_range);
+    ODStatus range_type_status
+        = station_measurement_covariance(*stat1, ObservationType::range, R_range);
 
     matXd R_radec_type;
     ODStatus radec_type_status
-        = stat_meas_cov(*stat1, ObservationType::radec, R_radec_type);
+        = station_measurement_covariance(*stat1, ObservationType::radec, R_radec_type);
 
     f64 t = world.t_sim();
     EntityId stat_id = scenario.stat1_id;
