@@ -3198,6 +3198,8 @@ void run_world_ekf_step_diag() {
     i32 prop_steps = 100;
     mat6d Q = mat6d1 * sigma_range;
 
+    std::mt19937_64 rng(12345);
+    MeasurementNoiseOptions noise_opts{.rng = rng, .enabled = true};
     ODEKFStepResult world_step_result
         = od_ekf_step_world(world, filter, event, dyn_config, prop_steps, Q);
 
@@ -3370,7 +3372,8 @@ static ODStatus make_realtime_ekf_diag_schedule(
 static ODStatus make_realtime_ekf_diag_events_from_schedule(
     const World& world,
     const svec<ODRealtimeScheduleItem>& schedule,
-    svec<ODRealtimeEvent>& events
+    svec<ODRealtimeEvent>& events,
+    const MeasurementNoiseOptions& noise_opts
 ) {
     // materialize the schedule
     events.clear();
@@ -3382,14 +3385,29 @@ static ODStatus make_realtime_ekf_diag_events_from_schedule(
             if (item.instrument_id == kInvalidInstrumentId) {
                 return ODStatus::instrument_not_found;
             }
-            ODStatus status = make_world_measurement_event_instrument(
-                world,
-                item.instrument_id,
-                item.observer_id,
-                item.target_id,
-                item.t,
-                event
-            );
+
+            ODStatus status;
+            if (noise_opts.enabled) {
+                status = make_noisy_world_measurement_event_instrument(
+                    world,
+                    item.instrument_id,
+                    item.observer_id,
+                    item.target_id,
+                    item.t,
+                    event,
+                    noise_opts
+                );
+            } else {
+
+                status = make_world_measurement_event_instrument(
+                    world,
+                    item.instrument_id,
+                    item.observer_id,
+                    item.target_id,
+                    item.t,
+                    event
+                );
+            }
             if (!od_status_success(status)) {
                 return status;
             }
@@ -3481,7 +3499,7 @@ void run_realtime_ekf_world_update_diag() {
         std::println("Failed to add instrument");
         return;
     }
-    disable_station_instrument(*stat2, rel_pv_id);
+    // disable_station_instrument(*stat2, rel_pv_id);
 
     WorldStepperConfig cfg;
     cfg.step_tr = true;
@@ -3534,9 +3552,16 @@ void run_realtime_ekf_world_update_diag() {
         }
         schedule_items_generated += schedule.size();
 
+        std::mt19937_64 rng(12345);
+        MeasurementNoiseOptions noise_opts{.rng = rng, .enabled = true};
+
         svec<ODRealtimeEvent> events;
-        ODStatus event_status
-            = make_realtime_ekf_diag_events_from_schedule(world, schedule, events);
+        ODStatus event_status = make_realtime_ekf_diag_events_from_schedule(
+            world,
+            schedule,
+            events,
+            noise_opts
+        );
         if (event_status != ODStatus::ok) {
             last_result.status = event_status;
             ++failed_updates;

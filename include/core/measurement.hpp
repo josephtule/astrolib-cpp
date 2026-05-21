@@ -1,14 +1,18 @@
 #pragma once
 
 #include "core/entity.hpp"
+#include "core/estimation_common.hpp"
 #include "core/observation_type.hpp"
 #include "core/observations.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
 #include "util/constants.hpp"
+#include "util/math.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+
+#include <random>
 
 struct Measurement {
     f64 t = 0.0;
@@ -28,6 +32,14 @@ struct MeasurementContext {
     bool has_station_local = false;
     AzelInputFrame azel_frame = AzelInputFrame::enu;
     vec3d station_llh = vec3d0; // [lat, lon, h], angle units from angle_in
+};
+
+struct MeasurementNoiseOptions {
+    std::mt19937_64& rng;
+    bool enabled = false;
+    UAngle u_angle = UAngle::radian;
+    bool wrap_angles = true;
+    // bool use_cholesky = true; // TODO: this is for non diagonal measurement cov later
 };
 
 inline MeasurementContext make_measurement_context(
@@ -340,4 +352,34 @@ inline matXd measurement_jacobian(
         );
     }
     return H;
+}
+
+inline ODStatus apply_measurement_noise_diagonal(
+    Measurement& meas,
+    const MeasurementNoiseOptions& opts,
+    ObservationType type
+) {
+    i32 dim = measurement_dim(type);
+    vecXd R_diag = meas.R.diagonal().cwiseSqrt();
+    if (R_diag.size() != dim || !R_diag.allFinite()) {
+        return ODStatus::invalid_covariance;
+    }
+
+    std::normal_distribution<f64> noise_unit(0.0, 1.0);
+
+    for (i32 i = 0; i < dim; ++i) {
+        if (R_diag(i) < 0.0) {
+            return ODStatus::invalid_covariance;
+        }
+        meas.z(i) += noise_unit(opts.rng) * R_diag(i);
+
+        if (type == ObservationType::radec || type == ObservationType::azel) {
+            f64 wrap_min = convert_angle(0.0, UAngle::radian, opts.u_angle);
+            f64 wrap_max = convert_angle(twopi, UAngle::radian, opts.u_angle);
+            meas.z(i)
+                = wrap_angle(meas.z(i), wrap_min, wrap_max, opts.u_angle, opts.u_angle);
+        }
+    }
+
+    return ODStatus::ok;
 }

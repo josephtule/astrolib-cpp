@@ -2,6 +2,7 @@
 
 #include "core/estimation_common.hpp"
 #include "core/estimation_recursive.hpp"
+#include "core/measurement.hpp"
 #include "core/world.hpp"
 
 struct ODWorldMeasurementEvent {
@@ -124,6 +125,18 @@ ODStatus make_world_measurement_event_instrument(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+);
+
+ODStatus make_noisy_world_measurement_event_instrument(
+    const World& world,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    const MeasurementNoiseOptions& noise_opts,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 );

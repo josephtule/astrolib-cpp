@@ -1,9 +1,11 @@
 #include "core/estimation_world.hpp"
 #include "core/body.hpp"
+#include "core/entity.hpp"
 #include "core/estimation_common.hpp"
 #include "core/estimation_recursive.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
+#include "core/observation_type.hpp"
 #include "core/state.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
@@ -425,6 +427,50 @@ ODStatus make_world_measurement_event_instrument(
         event,
         angle_out,
         tol
+    );
+}
+
+ODStatus make_noisy_world_measurement_event_instrument(
+    const World& world,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    const MeasurementNoiseOptions& noise_opts,
+    UAngle angle_out,
+    f64 tol
+) {
+    const Station* observer = world.station(observer_id);
+    if (observer == nullptr) {
+        return ODStatus::observer_not_found;
+    }
+
+    StationInstrument instrument;
+    ODStatus status = get_station_instrument(*observer, instrument, instrument_id);
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    status = make_world_measurement_event(
+        world,
+        instrument.type,
+        observer_id,
+        target_id,
+        t,
+        instrument.R,
+        event,
+        angle_out,
+        tol
+    );
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    return apply_measurement_noise_diagonal(
+        event.measurement,
+        noise_opts,
+        instrument.type
     );
 }
 
