@@ -467,11 +467,19 @@ ODStatus make_noisy_world_measurement_event_instrument(
         return status;
     }
 
-    return apply_measurement_noise_diagonal(
-        event.measurement,
-        noise_opts,
-        instrument.type
-    );
+    if (noise_opts.diagonal) {
+        return apply_measurement_noise_diagonal(
+            event.measurement,
+            noise_opts,
+            instrument.type
+        );
+    } else {
+        return apply_measurement_noise_cholesky(
+            event.measurement,
+            noise_opts,
+            instrument.type
+        );
+    }
 }
 
 ODRealtimeEKFResult od_ekf_update_world_events(

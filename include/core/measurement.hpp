@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Eigen/Core"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
 #include "core/observation_type.hpp"
@@ -35,11 +36,10 @@ struct MeasurementContext {
 };
 
 struct MeasurementNoiseOptions {
+    bool diagonal = true; // false = use cholesky
     std::mt19937_64& rng;
     bool enabled = false;
     UAngle u_angle = UAngle::radian;
-    bool wrap_angles = true;
-    // bool use_cholesky = true; // TODO: this is for non diagonal measurement cov later
 };
 
 inline MeasurementContext make_measurement_context(
@@ -163,12 +163,9 @@ inline vecXd measurement_residual(
     vecXd residual = z_obs - z_pred;
 
     if (type == ObservationType::radec || type == ObservationType::azel) {
-        i32 i_max = std::min(2, static_cast<i32>(residual.size()));
         f64 wrap_min = convert_angle(-pi, UAngle::radian, angle_in);
         f64 wrap_max = convert_angle(pi, UAngle::radian, angle_in);
-        for (i32 i = 0; i < i_max; ++i) {
-            residual(i) = wrap_angle(residual(i), wrap_min, wrap_max, angle_in, angle_in);
-        }
+        residual(0) = wrap_angle(residual(0), wrap_min, wrap_max, angle_in, angle_in);
     }
 
     return residual;
@@ -360,25 +357,63 @@ inline ODStatus apply_measurement_noise_diagonal(
     ObservationType type
 ) {
     i32 dim = measurement_dim(type);
-    vecXd R_diag = meas.R.diagonal().cwiseSqrt();
-    if (R_diag.size() != dim || !R_diag.allFinite()) {
+    if (dim <= 0 || meas.z.size() != dim || !meas.z.allFinite()) {
+        return ODStatus::invalid_input;
+    }
+    if (meas.R.rows() != dim || meas.R.cols() != dim || !meas.R.allFinite()) {
         return ODStatus::invalid_covariance;
     }
 
     std::normal_distribution<f64> noise_unit(0.0, 1.0);
 
     for (i32 i = 0; i < dim; ++i) {
-        if (R_diag(i) < 0.0) {
+        f64 var_i = meas.R(i, i);
+        if (var_i < 0.0) {
             return ODStatus::invalid_covariance;
         }
-        meas.z(i) += noise_unit(opts.rng) * R_diag(i);
+        meas.z(i) += noise_unit(opts.rng) * std::sqrt(var_i);
+    }
+    if (type == ObservationType::radec || type == ObservationType::azel) {
+        f64 wrap_min = convert_angle(0.0, UAngle::radian, opts.u_angle);
+        f64 wrap_max = convert_angle(twopi, UAngle::radian, opts.u_angle);
+        meas.z(0) = wrap_angle(meas.z(0), wrap_min, wrap_max, opts.u_angle, opts.u_angle);
+    }
 
-        if (type == ObservationType::radec || type == ObservationType::azel) {
-            f64 wrap_min = convert_angle(0.0, UAngle::radian, opts.u_angle);
-            f64 wrap_max = convert_angle(twopi, UAngle::radian, opts.u_angle);
-            meas.z(i)
-                = wrap_angle(meas.z(i), wrap_min, wrap_max, opts.u_angle, opts.u_angle);
-        }
+    return ODStatus::ok;
+}
+
+inline ODStatus apply_measurement_noise_cholesky(
+    Measurement& meas,
+    const MeasurementNoiseOptions& opts,
+    ObservationType type
+) {
+    i32 dim = measurement_dim(type);
+    if (dim <= 0 || meas.z.size() != dim || !meas.z.allFinite()) {
+        return ODStatus::invalid_input;
+    }
+    if (meas.R.rows() != dim || meas.R.cols() != dim || !meas.R.allFinite()) {
+        return ODStatus::invalid_covariance;
+    }
+
+    Eigen::LLT<matXd> R_llt(meas.R);
+    if (R_llt.info() != Eigen::Success) {
+        return ODStatus::invalid_covariance;
+    }
+    vecXd dz(dim);
+    std::normal_distribution<f64> noise_unit(0.0, 1.0);
+    for (i32 i = 0; i < dim; ++i) {
+        dz(i) = noise_unit(opts.rng);
+    }
+
+    meas.z += R_llt.matrixL() * dz;
+    if (!meas.z.allFinite()) {
+        return ODStatus::invalid_input;
+    }
+
+    if (type == ObservationType::radec || type == ObservationType::azel) {
+        f64 wrap_min = convert_angle(0.0, UAngle::radian, opts.u_angle);
+        f64 wrap_max = convert_angle(twopi, UAngle::radian, opts.u_angle);
+        meas.z(0) = wrap_angle(meas.z(0), wrap_min, wrap_max, opts.u_angle, opts.u_angle);
     }
 
     return ODStatus::ok;

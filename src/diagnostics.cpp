@@ -3398,7 +3398,6 @@ static ODStatus make_realtime_ekf_diag_events_from_schedule(
                     noise_opts
                 );
             } else {
-
                 status = make_world_measurement_event_instrument(
                     world,
                     item.instrument_id,
@@ -3531,6 +3530,9 @@ void run_realtime_ekf_world_update_diag() {
     i32 measurement_events_generated = 0;
     i32 prediction_events_generated = 0;
 
+    std::mt19937_64 rng(12345);
+    MeasurementNoiseOptions noise_opts{.rng = rng, .enabled = true, .diagonal = false};
+
     for (i32 i = 0; i < n_steps; ++i) {
         f64 t_meas = world.t_sim();
 
@@ -3551,9 +3553,6 @@ void run_realtime_ekf_world_update_diag() {
             break;
         }
         schedule_items_generated += schedule.size();
-
-        std::mt19937_64 rng(12345);
-        MeasurementNoiseOptions noise_opts{.rng = rng, .enabled = true};
 
         svec<ODRealtimeEvent> events;
         ODStatus event_status = make_realtime_ekf_diag_events_from_schedule(
