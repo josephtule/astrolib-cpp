@@ -490,7 +490,7 @@ inline mat6d jacobian_fd_od_dynamics(
     f64 eps_vel = 1e-6
 ) {
     mat6d G_fd = mat6d0;
-    vec6d x_vec = statetr_to_vec6(x);
+    vec6d x_vec = statetr_to_vec6d(x);
     f64 eps_base = std::sqrt(std::numeric_limits<f64>::epsilon());
 
     for (i32 i = 0; i < 6; ++i) {
@@ -500,10 +500,10 @@ inline mat6d jacobian_fd_od_dynamics(
         x_plus_vec(i) += eps_i;
         x_minus_vec(i) -= eps_i;
 
-        StateTr x_plus = vec6_to_statetr(x_plus_vec);
-        StateTr x_minus = vec6_to_statetr(x_minus_vec);
-        vec6d f_plus = derivtr_to_vec6(derivtr_od(t, x_plus, cfg));
-        vec6d f_minus = derivtr_to_vec6(derivtr_od(t, x_minus, cfg));
+        StateTr x_plus = vec6d_to_statetr(x_plus_vec);
+        StateTr x_minus = vec6d_to_statetr(x_minus_vec);
+        vec6d f_plus = derivtr_to_vec6d(derivtr_od(t, x_plus, cfg));
+        vec6d f_minus = derivtr_to_vec6d(derivtr_od(t, x_minus, cfg));
 
         G_fd.col(i) = (f_plus - f_minus) / (2.0 * eps_i);
     }

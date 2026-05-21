@@ -7,6 +7,7 @@ enum struct ODStatus {
     ok,
     invalid_input,
     empty_measurements,
+    empty_history,
     empty_events,
     size_mismatch,
     time_mismatch,
@@ -20,6 +21,8 @@ enum struct ODStatus {
     observer_not_found,
     target_not_found,
     instrument_not_found,
+    sample_not_found,
+    interp_failed,
 };
 
 inline std::string od_status_string(ODStatus status) {
@@ -72,6 +75,15 @@ inline std::string od_status_string(ODStatus status) {
     } break;
     case ODStatus::instrument_not_found: {
         str = "Instrument not found";
+    } break;
+    case ODStatus::empty_history: {
+        str = "Empty history";
+    } break;
+    case ODStatus::sample_not_found: {
+        str = "Sample not found";
+    } break;
+    case ODStatus::interp_failed: {
+        str = "Interpolation failed";
     } break;
     }
     return str;

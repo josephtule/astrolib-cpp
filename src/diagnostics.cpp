@@ -807,8 +807,8 @@ void run_od_prop_diag(const Celestial& body) {
     std::println("State/var position error = {}", (yf.x.r - xf.r).norm());
     std::println("State/var velocity error = {}", (yf.x.v - xf.v).norm());
 
-    vec6d x0_vec = statetr_to_vec6(x0);
-    vec6d xf_vec = statetr_to_vec6(xf);
+    vec6d x0_vec = statetr_to_vec6d(x0);
+    vec6d xf_vec = statetr_to_vec6d(xf);
 
     f64 eps_pos = 1e-3; // km
     f64 eps_vel = 1e-6; // km/s
@@ -826,9 +826,9 @@ void run_od_prop_diag(const Celestial& body) {
 
         vec6d x0_pert_vec = x0_vec;
         x0_pert_vec(i) += eps_i;
-        StateTr x0_pert = vec6_to_statetr(x0_pert_vec);
+        StateTr x0_pert = vec6d_to_statetr(x0_pert_vec);
         StateTr xf_pert = propagate_tr_od(0.0, x0_pert, dt, n_steps, cfg);
-        vec6d xf_pert_vec = statetr_to_vec6(xf_pert);
+        vec6d xf_pert_vec = statetr_to_vec6d(xf_pert);
         Phi_fd.col(i) = (xf_pert_vec - xf_vec) / eps_i;
     }
 
@@ -1046,8 +1046,8 @@ void run_batch_od_diag() {
 
         // solve
         ODBatchResult result = od_batch_lumve(input);
-        f64 initial_err = (statetr_to_vec6(input.x0_guess - x0_truth)).norm();
-        f64 final_err = (statetr_to_vec6(result.x0_est - x0_truth)).norm();
+        f64 initial_err = (statetr_to_vec6d(input.x0_guess - x0_truth)).norm();
+        f64 final_err = (statetr_to_vec6d(result.x0_est - x0_truth)).norm();
         f64 final_r_err = (result.x0_est.r - x0_truth.r).norm();
         f64 final_v_err = (result.x0_est.v - x0_truth.v).norm();
         i32 meas_per_epoch = static_cast<i32>(diag_case.use_radec)
@@ -1522,8 +1522,8 @@ void run_ekf_world_diag() {
         // run ekf
         ODEKFResult result = od_ekf_offline(input);
 
-        f64 initial_err = (statetr_to_vec6(input.initial_filter.x - x0_truth)).norm();
-        f64 final_err = (statetr_to_vec6(result.filter.x - sat->x_tr)).norm();
+        f64 initial_err = (statetr_to_vec6d(input.initial_filter.x - x0_truth)).norm();
+        f64 final_err = (statetr_to_vec6d(result.filter.x - sat->x_tr)).norm();
         f64 final_r_err = (result.filter.x.r - sat->x_tr.r).norm();
         f64 final_v_err = (result.filter.x.v - sat->x_tr.v).norm();
         i32 meas_per_epoch = static_cast<i32>(diag_case.use_radec)
@@ -2811,7 +2811,7 @@ void run_iod_lumve_ekf_init_diag() {
 
     // LUMVE
     ODBatchInput lumve_input;
-    bool iod_guess_ok = iod_res.success && statetr_to_vec6(iod_res.x).allFinite();
+    bool iod_guess_ok = iod_res.success && statetr_to_vec6d(iod_res.x).allFinite();
     if (use_iod_initial_guess && iod_guess_ok) {
         lumve_input.x0_guess = iod_res.x;
     } else {
@@ -2902,7 +2902,7 @@ void run_iod_lumve_ekf_init_diag() {
     // offline EKF
     ODEKFOfflineInput ekf_input;
     bool lumve_state_ok = od_status_success(lumve_result.status)
-                          && statetr_to_vec6(lumve_result.x0_est).allFinite();
+                          && statetr_to_vec6d(lumve_result.x0_est).allFinite();
     ekf_input.initial_filter.x
         = lumve_state_ok ? lumve_result.x0_est : lumve_input.x0_guess;
     ekf_input.initial_filter.t = lumve_input.t0;
@@ -2990,11 +2990,11 @@ void run_iod_lumve_ekf_init_diag() {
         ekf_input.dyn_config
     );
 
-    f64 iod_err = iod_guess_ok ? statetr_to_vec6(iod_res.x - x0_truth).norm() : 0.0;
-    f64 lumve_initial_err = statetr_to_vec6(lumve_input.x0_guess - x0_truth).norm();
-    f64 lumve_final_err = statetr_to_vec6(lumve_result.x0_est - x0_truth).norm();
-    f64 ekf_initial_err = statetr_to_vec6(ekf_input.initial_filter.x - x0_truth).norm();
-    f64 ekf_final_err = statetr_to_vec6(ekf_result.filter.x - x_truth_final).norm();
+    f64 iod_err = iod_guess_ok ? statetr_to_vec6d(iod_res.x - x0_truth).norm() : 0.0;
+    f64 lumve_initial_err = statetr_to_vec6d(lumve_input.x0_guess - x0_truth).norm();
+    f64 lumve_final_err = statetr_to_vec6d(lumve_result.x0_est - x0_truth).norm();
+    f64 ekf_initial_err = statetr_to_vec6d(ekf_input.initial_filter.x - x0_truth).norm();
+    f64 ekf_final_err = statetr_to_vec6d(ekf_result.filter.x - x_truth_final).norm();
     f64 ekf_final_r_err = (ekf_result.filter.x.r - x_truth_final.r).norm();
     f64 ekf_final_v_err = (ekf_result.filter.x.v - x_truth_final.v).norm();
 
@@ -3220,14 +3220,14 @@ void run_world_ekf_step_diag() {
     std::println("Measurement Type = {}", observation_type_str(obsv_type));
     std::println();
 
-    f64 initial_err = statetr_to_vec6(filter.x - x0_truth).norm();
+    f64 initial_err = statetr_to_vec6d(filter.x - x0_truth).norm();
     std::println("Initial Error = {}", initial_err);
 
     std::println("World EKF Success = {}", od_status_success(world_step_result.status));
     std::println("World EKF Status: {}", od_status_string(world_step_result.status));
     if (od_status_success(step_result.status)) {
         StateTr world_err = world_step_result.filter.x - x0_truth;
-        f64 world_state_err = statetr_to_vec6(world_err).norm();
+        f64 world_state_err = statetr_to_vec6d(world_err).norm();
         std::println("World EKF Final Error = {}", world_state_err);
         std::println("World EKF Position Error = {}", world_err.r.norm());
         std::println("World EKF Velocity Error = {}", world_err.v.norm());
@@ -3243,7 +3243,7 @@ void run_world_ekf_step_diag() {
     std::println("Direct EKF Status: {}", od_status_string(step_result.status));
     if (od_status_success(step_result.status)) {
         StateTr direct_err = step_result.filter.x - x0_truth;
-        f64 direct_state_err = statetr_to_vec6(direct_err).norm();
+        f64 direct_state_err = statetr_to_vec6d(direct_err).norm();
         std::println("Direct EKF Final Error = {}", direct_state_err);
         std::println("Direct EKF Position Error = {}", direct_err.r.norm());
         std::println("Direct EKF Velocity Error = {}", direct_err.v.norm());
@@ -3255,7 +3255,7 @@ void run_world_ekf_step_diag() {
     if (od_status_success(step_result.status)
         && od_status_success(world_step_result.status)) {
         StateTr world_direct_err = world_step_result.filter.x - step_result.filter.x;
-        f64 world_direct_state_err = statetr_to_vec6(world_direct_err).norm();
+        f64 world_direct_state_err = statetr_to_vec6d(world_direct_err).norm();
         f64 covariance_err = (world_step_result.filter.P - step_result.filter.P).norm();
         f64 residual_err = (world_step_result.residual - step_result.residual).norm();
         std::println("World/Direct State Error = {}", world_direct_state_err);
@@ -3300,9 +3300,9 @@ void run_ekf_prediction_only_diag() {
         = od_ekf_predict(filter, t_target, dyn_config, prop_steps, Q);
 
     StateTr step_direct_err = step_result.filter.x - predict_result.y.x;
-    f64 state_err = statetr_to_vec6(step_direct_err).norm();
+    f64 state_err = statetr_to_vec6d(step_direct_err).norm();
     f64 covariance_err = (step_result.filter.P - predict_result.P).norm();
-    bool step_state_finite = statetr_to_vec6(step_result.filter.x).allFinite();
+    bool step_state_finite = statetr_to_vec6d(step_result.filter.x).allFinite();
     bool step_cov_finite = step_result.filter.P.allFinite();
 
     print_diag_title("EKF Prediction Only Diagnostic");
@@ -3632,7 +3632,7 @@ void run_realtime_ekf_world_update_diag() {
     }
 
     StateTr final_err = filter.x - sat->x_tr;
-    f64 final_state_err = statetr_to_vec6(final_err).norm();
+    f64 final_state_err = statetr_to_vec6d(final_err).norm();
 
     std::println("Station 1 Instruments:");
     print_station_instruments(*stat1);

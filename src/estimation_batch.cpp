@@ -56,7 +56,7 @@ ODBatchResidualEval od_batch_eval_residual_norm(
         f64 dt = meas.t - input.t0;
         StateTr x_pred_i
             = propagate_tr_od(input.t0, x0_ref, dt, input.prop_steps, input.dyn_config);
-        if (!statetr_to_vec6(x_pred_i).allFinite()) {
+        if (!statetr_to_vec6d(x_pred_i).allFinite()) {
             eval.status = ODStatus::propagation_failed;
             return eval;
         }
@@ -187,7 +187,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 input.dyn_config
             );
 
-            vec6d xf_vec = statetr_to_vec6(yf.x);
+            vec6d xf_vec = statetr_to_vec6d(yf.x);
             if (!xf_vec.allFinite() || !yf.Phi.allFinite()) {
                 result.status = ODStatus::propagation_failed;
                 return result;
@@ -278,7 +278,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             result.status = ODStatus::singular_normal_matrix;
             return result;
         }
-        StateTr dx = vec6_to_statetr(dx_vec);
+        StateTr dx = vec6d_to_statetr(dx_vec);
         if (dx.r.norm() > input.max_dx_r_norm || dx.v.norm() > input.max_dx_v_norm) {
             result.status = ODStatus::correction_rejected;
             return result;
@@ -297,7 +297,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 // TODO: add attempts as option
                 f64 alpha = 1.0 / std::pow(2.0, attempt);
                 vec6d dx_cand_vec = alpha * dx_vec;
-                StateTr x0_cand = x0_ref + vec6_to_statetr(dx_cand_vec);
+                StateTr x0_cand = x0_ref + vec6d_to_statetr(dx_cand_vec);
                 ODBatchResidualEval cand_eval
                     = od_batch_eval_residual_norm(input, x0_cand);
                 if (!od_status_success(cand_eval.status)) {
@@ -317,7 +317,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 result.x0_est = x0_ref;
                 result.normal_inv = Lambda.inverse();
                 result.covariance = result.normal_inv;
-                if (iter > 0 && statetr_to_vec6(result.x0_est).allFinite()
+                if (iter > 0 && statetr_to_vec6d(result.x0_est).allFinite()
                     && result.covariance.allFinite()) {
                     // residual probably already in noise floor so accept
                     // TODO: NOTE: this isn't totally valid, fix later, add stalled or

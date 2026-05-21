@@ -110,7 +110,7 @@ ODEKFPredictResult od_ekf_predict(
     result.y.x = yf.x;
     result.y.Phi = yf.Phi;
     result.P = result.y.Phi * filter.P * result.y.Phi.transpose() + Q_eff;
-    if (!statetr_to_vec6(result.y.x).allFinite() || !result.y.Phi.allFinite()
+    if (!statetr_to_vec6d(result.y.x).allFinite() || !result.y.Phi.allFinite()
         || !result.P.allFinite()) {
         result.status = ODStatus::propagation_failed;
         return result;
@@ -218,13 +218,13 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
 
     // a posteriori state and STM, updated estimate
     vec6d dx_vec = K * res;
-    DerivTr dx = vec6_to_derivtr(dx_vec);
+    DerivTr dx = vec6d_to_derivtr(dx_vec);
     StateTr x_post = x_pred + dx;
     // mat6d P_post = (mat6d1 - K * H) * P_pred;
     mat6d P_post = (mat6d1 - K * H) * P_pred * (mat6d1 - K * H).transpose()
                    + K * R * K.transpose();       // Joseph form, more stable
     P_post = 0.5 * (P_post + P_post.transpose()); // force symmetry
-    if (!dx_vec.allFinite() || !statetr_to_vec6(x_post).allFinite()
+    if (!dx_vec.allFinite() || !statetr_to_vec6d(x_post).allFinite()
         || !P_post.allFinite()) {
         result.status = ODStatus::correction_rejected;
         return result;

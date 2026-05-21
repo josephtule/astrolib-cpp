@@ -126,13 +126,13 @@ inline vecXd predict_measurement(
         measurement = x_target.r;
     } break;
     case ObservationType::pos_vel: {
-        measurement = statetr_to_vec6(x_target);
+        measurement = statetr_to_vec6d(x_target);
     } break;
     case ObservationType::rel_pos: {
         measurement = x_target.r - x_observer.r;
     } break;
     case ObservationType::rel_pos_vel:
-        measurement = statetr_to_vec6(x_target - x_observer);
+        measurement = statetr_to_vec6d(x_target - x_observer);
     }
 
     return measurement;
@@ -192,9 +192,9 @@ inline matXd jacobian_fd_measurement(
         // forward differencing
         f64 eps_i = i < 3 ? eps_pos : eps_vel;
 
-        vec6d x_target_pert_vec = statetr_to_vec6(ctx.x_tr_target);
+        vec6d x_target_pert_vec = statetr_to_vec6d(ctx.x_tr_target);
         x_target_pert_vec(i) += eps_i;
-        StateTr x_target_pert = vec6_to_statetr(x_target_pert_vec);
+        StateTr x_target_pert = vec6d_to_statetr(x_target_pert_vec);
         ctx_pert.x_tr_target = x_target_pert;
         vecXd z_pert = predict_measurement(type, ctx_pert, angle_in, angle_out, tol);
         if (z_pert.size() != rows) return matXd{};
