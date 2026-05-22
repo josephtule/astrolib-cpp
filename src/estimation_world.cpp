@@ -599,7 +599,6 @@ ODStatus make_noisy_world_measurement_event_history_instrument(
     UAngle angle_out,
     f64 tol
 ) {
-
     ODStatus status = make_world_measurement_event_history_instrument(
         world,
         history,

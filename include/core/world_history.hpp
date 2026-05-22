@@ -10,6 +10,7 @@
 #include "core/world.hpp"
 #include "util/typedefs.hpp"
 #include <cmath>
+#include <cstdlib>
 
 // TODO: change _linear to general, create interpolation type
 
@@ -174,6 +175,14 @@ inline ODStatus sample_tr_interp_linear(
     vec6d x_tr_1_vec = statetr_to_vec6d(x_tr_1);
     vec6d x_tr_2_vec = statetr_to_vec6d(x_tr_2);
 
+    if (std::abs(sample1.t - sample2.t) <= tol) {
+        if (std::abs(sample1.t - t) > tol) {
+            return ODStatus::time_mismatch;
+        }
+        out = x_tr_1;
+        return ODStatus::ok;
+    }
+
     vecXd x_tr_t = interp_linear(t, x_tr_1_vec, sample1.t, x_tr_2_vec, sample2.t, tol);
     if (x_tr_t.size() != 6) {
         return ODStatus::interp_failed;
@@ -203,6 +212,14 @@ inline ODStatus sample_att_interp_linear(
         return ODStatus::sample_not_found;
     }
     StateAtt x_att_2 = it->second;
+
+    if (std::abs(sample1.t - sample2.t) <= tol) {
+        if (std::abs(sample1.t - t) > tol) {
+            return ODStatus::time_mismatch;
+        }
+        out = x_att_1;
+        return ODStatus::ok;
+    }
 
     vec4d q_t = interp_quat_linear(t, x_att_1.q, sample1.t, x_att_2.q, sample2.t, tol);
     if (q_t.norm() <= tol || !q_t.allFinite()) {
@@ -235,6 +252,9 @@ inline ODStatus sample_bracket(
     if (samples.size() < 2) {
         sample1 = samples[0];
         sample2 = samples[0];
+        if (std::abs(sample1.t - t) <= tol) {
+            return ODStatus::ok;
+        }
         return ODStatus::time_mismatch;
     }
 

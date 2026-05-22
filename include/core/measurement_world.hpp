@@ -222,7 +222,6 @@ inline ODStatus world_predict_measurement_history(
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 ) {
-
     StateTr x_tr_observer;
     ODStatus status = sample_station_tr_interp_linear(
         world,

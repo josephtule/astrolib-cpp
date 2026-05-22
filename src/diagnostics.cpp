@@ -6,6 +6,7 @@
 #include "core/estimation_common.hpp"
 #include "core/estimation_recursive.hpp"
 #include "core/estimation_world.hpp"
+#include "core/history_io.hpp"
 #include "core/ingest.hpp"
 #include "core/integrator.hpp"
 #include "core/measurement.hpp"
@@ -3842,8 +3843,8 @@ void run_world_history_diag() {
     cfg.integrator_att = IntegratorType::rk4;
 
     f64 t0 = 0.0;
-    f64 t1 = 5.0;
-    f64 t2 = 10.0;
+    f64 t1 = 30.0;
+    f64 t2 = 2.0 * t1;
 
     i32 n_steps1 = 250;
     i32 n_steps2 = 250;
@@ -3924,8 +3925,13 @@ void run_world_history_diag() {
         = sample_att_interp_linear(history, sat_id, t1, x_att_sat_t1_interp);
 
     StateTr x_tr_stat_t1_interp;
-    ODStatus stat_tr_status
-        = sample_station_tr_interp_linear(world, history, stat1_id, t1, x_tr_stat_t1_interp);
+    ODStatus stat_tr_status = sample_station_tr_interp_linear(
+        world,
+        history,
+        stat1_id,
+        t1,
+        x_tr_stat_t1_interp
+    );
     StateAtt x_att_stat_t1_interp;
     ODStatus stat_att_status = sample_station_att_interp_linear(
         world,
@@ -4021,4 +4027,323 @@ void run_world_history_diag() {
     WorldHistory history_empty;
     status = sample_tr_interp_linear(history_empty, sat_id, t1, x_tr_bad);
     std::println("Query empty history, status: {}", od_status_string(status));
+}
+
+static ODStatus make_realtime_ekf_diag_history_events_from_schedule(
+    const World& world,
+    const WorldHistory& history,
+    const svec<ODRealtimeScheduleItem>& schedule,
+    svec<ODRealtimeEvent>& events,
+    const MeasurementNoiseOptions& noise_opts
+) {
+    // materialize the schedule
+    events.clear();
+
+    for (const auto& item : schedule) {
+        ODWorldMeasurementEvent event;
+
+        if (item.has_measurement) {
+            if (item.instrument_id == kInvalidInstrumentId) {
+                return ODStatus::instrument_not_found;
+            }
+
+            ODStatus status;
+            if (noise_opts.enabled) {
+                status = make_noisy_world_measurement_event_history_instrument(
+                    world,
+                    history,
+                    item.instrument_id,
+                    item.observer_id,
+                    item.target_id,
+                    item.t,
+                    event,
+                    noise_opts
+                );
+            } else {
+                status = make_world_measurement_event_history_instrument(
+                    world,
+                    history,
+                    item.instrument_id,
+                    item.observer_id,
+                    item.target_id,
+                    item.t,
+                    event
+                );
+            }
+            if (!od_status_success(status)) {
+                return status;
+            }
+
+            ODRealtimeEvent realtime_event;
+            realtime_event.event = event;
+            realtime_event.has_measurement = item.has_measurement;
+            realtime_event.t = item.t;
+            events.push_back(realtime_event);
+        } else {
+            ODRealtimeEvent realtime_event;
+            realtime_event.has_measurement = item.has_measurement;
+            realtime_event.t = item.t;
+            events.push_back(realtime_event);
+        }
+    }
+
+    return ODStatus::ok;
+}
+
+void run_world_history_ekf_diag() {
+    print_diag_title("Realtime World EKF Update Diagnostic (History-Backed)");
+
+    // Diagnostic parameters
+    GravityModel truth_model = GravityModel::zonal;
+    i32 truth_deg_ord = 6;
+    GravityModel est_model = GravityModel::zonal;
+    i32 est_degree = 4;
+
+    auto scenario = make_earth_sats_stats_scenario(truth_model, truth_deg_ord);
+    if (!scenario.success) {
+        std::println("Scenario Build Failed");
+        return;
+    }
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId sat_id = scenario.sat1_id;
+    EntityId stat1_id = scenario.stat1_id;
+    EntityId stat2_id = scenario.stat2_id;
+    svec<EntityId> stat_ids = {stat1_id, stat2_id};
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat1 = world.station(stat1_id);
+    Station* stat2 = world.station(stat2_id);
+    if (earth == nullptr || sat == nullptr || stat1 == nullptr || stat2 == nullptr) {
+        std::println("Failed to load scenario");
+        return;
+    }
+
+    // Orbit Determination Config
+    ODDynamicsConfig dyn_config = make_od_cfg_from_celestial(*earth);
+    dyn_config.tr_model = worldtrmodel_to_odtrmodel(
+        est_model
+    ); // have od model and "truth" model discrepancy
+    dyn_config.zonal_degree = est_degree;
+    dyn_config.update_body_attitude = true;
+
+    f64 sigma_rad = 1e-5;
+    f64 sigma_range = 1e-3;
+    f64 sigma_r = 1e-3;
+    f64 sigma_v = 1e-6;
+
+    mat6d R_pv = mat6d1;
+    R_pv.block<3, 3>(0, 0) *= sigma_r * sigma_r;
+    R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
+
+    ODStatus radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
+    if (!od_status_success(radec_status)) {
+        std::println("Failed to add instrument");
+        return;
+    }
+
+    ODStatus range_status
+        = add_range_instrument(*stat1, matXd1<1> * sigma_range * sigma_range);
+    if (!od_status_success(range_status)) {
+        std::println("Failed to add instrument");
+        return;
+    }
+
+    ODStatus azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
+    if (!od_status_success(azel_status)) {
+        std::println("Failed to add instrument");
+        return;
+    }
+
+    InstrumentId rel_pv_id;
+    ODStatus rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
+    if (!od_status_success(rel_posvel_status)) {
+        std::println("Failed to add instrument");
+        return;
+    }
+    // disable_station_instrument(*stat2, rel_pv_id);
+
+    WorldStepperConfig cfg;
+    cfg.step_tr = true;
+    cfg.step_att = true;
+    cfg.substeps = 1;
+    cfg.ticks = 10;
+    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+
+    f64 t_span = 1000.0;
+    i32 n_steps = 1000;
+    f64 dt = t_span / n_steps;
+    i32 prop_steps = 100;
+    mat6d Q = mat6d1 * 1e-5; // process noise
+
+    ODEKFState filter;
+    filter.x = sat->x_tr + StateTr{.r = {1.0, 0.25, 0.1}, .v = {0.001, 0.0005, 0.0}};
+    filter.P = mat6d1;
+    filter.t = world.t_sim();
+
+    ODEKFStepResult last_result;
+    i32 measurement_updates = 0;
+    i32 prediction_updates = 0;
+    i32 failed_updates = 0;
+    i32 processed_events = 0;
+    i32 schedule_items_generated = 0;
+    i32 materialized_events = 0;
+    i32 measurement_events_generated = 0;
+    i32 prediction_events_generated = 0;
+
+    std::mt19937_64 rng(12345);
+    MeasurementNoiseOptions noise_opts{.rng = rng, .enabled = true, .diagonal = false};
+
+    WorldHistory history;
+    history.max_samples = 10;
+
+    WorldHistorySample sample = capture_world_history_sample(world);
+    push_world_history_sample(history, sample);
+
+    for (i32 i = 0; i < n_steps; ++i) {
+        f64 t_meas = world.t_sim();
+
+        svec<ODRealtimeScheduleItem> schedule;
+        ODStatus schedule_status = make_realtime_ekf_diag_schedule(
+            world,
+            t_meas,
+            i,
+            2,
+            stat_ids,
+            sat_id,
+            schedule
+        );
+
+        if (schedule_status != ODStatus::ok) {
+            last_result.status = schedule_status;
+            ++failed_updates;
+            break;
+        }
+        schedule_items_generated += schedule.size();
+
+        svec<ODRealtimeEvent> events;
+        ODStatus event_status = make_realtime_ekf_diag_history_events_from_schedule(
+            world,
+            history,
+            schedule,
+            events,
+            noise_opts
+        );
+        if (event_status != ODStatus::ok) {
+            last_result.status = event_status;
+            ++failed_updates;
+            break;
+        }
+        materialized_events += static_cast<i32>(events.size());
+        for (const ODRealtimeEvent& event : events) {
+            if (event.has_measurement) {
+                ++measurement_events_generated;
+            } else {
+                ++prediction_events_generated;
+            }
+        }
+
+        event_status = validate_realtime_ekf_events(events, t_meas);
+        if (event_status != ODStatus::ok) {
+            last_result.status = event_status;
+            ++failed_updates;
+            break;
+        }
+
+        ODRealtimeEKFResult realtime_result = od_ekf_update_world_events(
+            world,
+            filter,
+            events,
+            dyn_config,
+            prop_steps,
+            Q
+        );
+        if (!od_status_success(realtime_result.status)) {
+            last_result.status = realtime_result.status;
+            ++failed_updates;
+            break;
+        }
+
+        if (failed_updates > 0) break;
+
+        prediction_updates += realtime_result.prediction_updates;
+        measurement_updates += realtime_result.measurement_updates;
+        processed_events += realtime_result.processed_events;
+        filter = realtime_result.filter;
+        last_result
+            = copy_od_ekf_result<ODRealtimeEKFResult, ODEKFStepResult>(realtime_result);
+
+        step_world(world, dt, cfg);
+
+        sample = capture_world_history_sample(world);
+        push_world_history_sample(history, sample);
+    }
+
+    // last ekf update after final world step
+    if (failed_updates == 0 && std::abs(world.t_sim() - filter.t) > tol12) {
+        ODRealtimeEKFInput input_predict_final{
+            .world = &world,
+            .filter = filter,
+            .t_target = world.t_sim(),
+            .dyn_config = dyn_config,
+            .prop_steps = prop_steps,
+            .Q = Q
+        };
+
+        last_result = od_ekf_update_world(input_predict_final);
+        if (od_status_success(last_result.status)) {
+            filter = last_result.filter;
+            if (last_result.status == ODStatus::prediction_only) {
+                ++prediction_updates;
+                ++processed_events;
+            }
+        } else {
+            ++failed_updates;
+        }
+    }
+
+    StateTr final_err = filter.x - sat->x_tr;
+    f64 final_state_err = statetr_to_vec6d(final_err).norm();
+
+    std::println("Station 1 Instruments:");
+    print_station_instruments(*stat1);
+    std::println();
+
+    std::println("Station 2 Instruments:");
+    print_station_instruments(*stat2);
+    std::println();
+
+    std::println("Final Status: {}", od_status_string(last_result.status));
+    std::println("Final Success = {}", od_status_success(last_result.status));
+    std::println();
+
+    std::println("Schedule Items Generated = {}", schedule_items_generated);
+    std::println("Materialized Events = {}", materialized_events);
+    std::println("Measurement Events Generated = {}", measurement_events_generated);
+    std::println("Prediction Events Generated = {}", prediction_events_generated);
+    std::println("Processed Events = {}", processed_events);
+    std::println("Measurement Updates = {}", measurement_updates);
+    std::println("Prediction Only Updates = {}", prediction_updates);
+    std::println("Failed Updates = {}", failed_updates);
+    std::println();
+
+    std::println("Filter Time = {}", filter.t);
+    std::println("World Time = {}", world.t_sim());
+    std::println("Final State Error = {}", final_state_err);
+    std::println("Final Position Error = {}", final_err.r.norm());
+    std::println("Final Velocity Error = {}", final_err.v.norm());
+    std::println("Final Covariance Norm = {}", filter.P.norm());
+    print_diag_title();
+
+    HistoryCSVExportOptions csv_opts;
+    csv_opts.include_attitude = true;
+    StatusCode status = write_body_history_csv(
+        history,
+        sat_id,
+        pwd + "/assets/output/sat_csv_out_test.csv",
+        csv_opts
+    );
+    std::println("Write Status: {}", od_status_string(status));
 }
