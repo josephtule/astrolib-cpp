@@ -21,6 +21,7 @@
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
+#include "core/world_history.hpp"
 #include "core/world_stepper.hpp"
 
 #include "graphics/renderer.hpp"
@@ -3799,4 +3800,225 @@ void run_station_instrument_diag() {
         od_status_string(invalid_id_event_status)
     );
     print_diag_title();
+}
+
+void run_world_history_diag() {
+    print_diag_title("World History Diagnostic");
+
+    // Diagnostic parameters
+    GravityModel truth_model = GravityModel::zonal;
+    i32 truth_deg_ord = 6;
+    GravityModel est_model = GravityModel::zonal;
+    i32 est_degree = 4;
+
+    auto scenario = make_earth_sats_stats_scenario(truth_model, truth_deg_ord);
+    if (!scenario.success) {
+        std::println("Scenario Build Failed");
+        return;
+    }
+    World& world = scenario.world;
+    EntityId earth_id = scenario.earth_id;
+    EntityId sat_id = scenario.sat1_id;
+    EntityId stat1_id = scenario.stat1_id;
+    EntityId stat2_id = scenario.stat2_id;
+    svec<EntityId> stat_ids = {stat1_id, stat2_id};
+    Celestial* earth = world.celestial(earth_id);
+    Satellite* sat = world.satellite(sat_id);
+    Station* stat1 = world.station(stat1_id);
+    Station* stat2 = world.station(stat2_id);
+    if (earth == nullptr || sat == nullptr || stat1 == nullptr || stat2 == nullptr) {
+        std::println("Failed to load scenario");
+        return;
+    }
+    sat->propagate_att = true;
+
+    WorldStepperConfig cfg;
+    cfg.step_tr = true;
+    cfg.step_att = true;
+    cfg.substeps = 1;
+    cfg.ticks = 10;
+    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.integrator_tr = IntegratorType::rk4;
+    cfg.integrator_att = IntegratorType::rk4;
+
+    f64 t0 = 0.0;
+    f64 t1 = 5.0;
+    f64 t2 = 10.0;
+
+    i32 n_steps1 = 250;
+    i32 n_steps2 = 250;
+    f64 dt1 = (t1 - t0) / n_steps1;
+    f64 dt2 = (t2 - t1) / n_steps2;
+
+    f64 dt;
+    WorldHistorySample sample0 = capture_world_history_sample(world);
+    WorldHistorySample sample1;
+    WorldHistorySample sample2;
+
+    StateTr x_tr_stat_t1;
+    StateAtt x_att_stat_t1;
+    vecXd z_radec_t1;
+    vecXd z_azel_t1;
+
+    for (i32 i = 0; i < n_steps1 + n_steps2; ++i) {
+        dt = i < n_steps1 ? dt1 : dt2;
+
+        step_world(world, dt, cfg);
+
+        if (i == (n_steps1 - 1)) {
+            sample1 = capture_world_history_sample(world);
+            x_tr_stat_t1 = world.stat_x_tr_inertial(stat1_id);
+            x_att_stat_t1 = world.stat_x_att_inertial(stat1_id);
+            z_radec_t1 = world_predict_measurement(
+                world,
+                ObservationType::radec,
+                stat1_id,
+                sat_id
+            );
+            z_azel_t1 = world_predict_measurement(
+                world,
+                ObservationType::azel,
+                stat1_id,
+                sat_id
+            );
+        } else if (i == n_steps1 + n_steps2 - 1) {
+            sample2 = capture_world_history_sample(world);
+        }
+    }
+
+    WorldHistory history;
+    history.max_samples = 3;
+    push_world_history_sample(history, sample0);
+    // push_world_history_sample(history, sample1);
+    push_world_history_sample(history, sample2);
+
+    vecXd z_radec_t1_interp;
+    ODStatus z_radec_status = world_predict_measurement_history(
+        world,
+        history,
+        ObservationType::radec,
+        stat1_id,
+        sat_id,
+        t1,
+        z_radec_t1_interp
+    );
+    vecXd z_azel_t1_interp;
+    ODStatus z_azel_status = world_predict_measurement_history(
+        world,
+        history,
+        ObservationType::azel,
+        stat1_id,
+        sat_id,
+        t1,
+        z_azel_t1_interp
+    );
+
+    StateTr x_tr_sat_t1 = sample1.x_tr.at(sat_id);
+    StateAtt x_att_sat_t1 = sample1.x_att.at(sat_id);
+
+    StateTr x_tr_sat_t1_interp;
+    ODStatus sat_tr_status
+        = sample_tr_interp_linear(history, sat_id, t1, x_tr_sat_t1_interp);
+    StateAtt x_att_sat_t1_interp;
+    ODStatus sat_att_status
+        = sample_att_interp_linear(history, sat_id, t1, x_att_sat_t1_interp);
+
+    StateTr x_tr_stat_t1_interp;
+    ODStatus stat_tr_status
+        = sample_station_tr_interp_linear(world, history, stat1_id, t1, x_tr_stat_t1_interp);
+    StateAtt x_att_stat_t1_interp;
+    ODStatus stat_att_status = sample_station_att_interp_linear(
+        world,
+        history,
+        stat1_id,
+        t1,
+        x_att_stat_t1_interp
+    );
+
+    StateTr x_tr_sat_t1_err = x_tr_sat_t1 - x_tr_sat_t1_interp;
+    StateAtt x_att_sat_t1_err = x_att_sat_t1 - x_att_sat_t1_interp;
+
+    StateTr x_tr_stat_t1_err = x_tr_stat_t1 - x_tr_stat_t1_interp;
+    StateAtt x_att_stat_t1_err = x_att_stat_t1 - x_att_stat_t1_interp;
+
+    std::println("Sampled at t1 = {}s", t1);
+    std::println("Satellite Queries ------");
+    if (!od_status_success(sat_tr_status)) {
+        std::println("Translation Status: {}", od_status_string(sat_tr_status));
+    }
+    if (!od_status_success(sat_att_status)) {
+        std::println("Attitude Status: {}", od_status_string(sat_att_status));
+    }
+    std::println("Sampled Position = {}", x_tr_sat_t1.r);
+    std::println("Interpolated Position = {}", x_tr_sat_t1_interp.r);
+    std::println(
+        "Translational State Error = {}",
+        statetr_to_vec6d(x_tr_sat_t1_err).norm()
+    );
+    std::println("Position Error = {}", x_tr_sat_t1_err.r.norm());
+    std::println("Velocity Error = {}", x_tr_sat_t1_err.v.norm());
+    std::println("Sampled Attitude = {}", x_att_sat_t1.q);
+    std::println("Interpolated Attitude = {}", x_att_sat_t1_interp.q);
+    std::println("Attitude Error = {}", x_att_sat_t1_err.q.norm());
+    std::println("Angular Velocity Error = {}", x_att_sat_t1_err.w.norm());
+    std::println();
+    std::println("Station Queries ------");
+    if (!od_status_success(stat_tr_status)) {
+        std::println("Translation Status: {}", od_status_string(stat_tr_status));
+    }
+    if (!od_status_success(stat_att_status)) {
+        std::println("Attitude Status: {}", od_status_string(stat_att_status));
+    }
+    std::println("Sampled Position = {}", x_tr_stat_t1.r);
+    std::println("Interpolated Position = {}", x_tr_stat_t1_interp.r);
+    std::println(
+        "Translational State Error = {}",
+        statetr_to_vec6d(x_tr_stat_t1_err).norm()
+    );
+    std::println("Position Error = {}", x_tr_stat_t1_err.r.norm());
+    std::println("Velocity Error = {}", x_tr_stat_t1_err.v.norm());
+    std::println("Sampled Attitude = {}", x_att_stat_t1.q);
+    std::println("Interpolated Attitude = {}", x_att_stat_t1_interp.q);
+    std::println("Attitude Error = {}", x_att_stat_t1_err.q.norm());
+    std::println("Angular Velocity Error = {}", x_att_stat_t1_err.w.norm());
+    std::println();
+
+    std::println("Radec Measurements ------");
+    if (!od_status_success(z_radec_status)) {
+        std::println("Measurement Status: {}", od_status_string(z_radec_status));
+    }
+    std::println("Sampled Measurement = {}", z_radec_t1);
+    std::println("Interpolated Measurment = {}", z_radec_t1_interp);
+    if (z_radec_t1.size() == 2 && z_radec_t1_interp.size() == 2) {
+        std::println("Measurement Error = {}", (z_radec_t1 - z_radec_t1_interp).norm());
+    } else {
+        std::println("Error: measurement sizes don't match");
+    }
+    std::println();
+
+    std::println("Az/El Measurements ------");
+    if (!od_status_success(z_azel_status)) {
+        std::println("Measurement Status: {}", od_status_string(z_azel_status));
+    }
+    std::println("Sampled Measurement = {}", z_azel_t1);
+    std::println("Interpolated Measurment = {}", z_azel_t1_interp);
+    if (z_azel_t1.size() == 2 && z_azel_t1_interp.size() == 2) {
+        std::println("Measurement Error = {}", (z_azel_t1 - z_azel_t1_interp).norm());
+    } else {
+        std::println("Error: measurement sizes don't match");
+    }
+    std::println();
+
+    // bad queries
+    StateTr x_tr_bad;
+    ODStatus status;
+    status = sample_tr_interp_linear(history, sat_id, t0 - 1.0, x_tr_bad);
+    std::println("Query t < t0, status: {}", od_status_string(status));
+    status = sample_tr_interp_linear(history, sat_id, t2 + 1.0, x_tr_bad);
+    std::println("Query t > t2, status: {}", od_status_string(status));
+    status = sample_tr_interp_linear(history, sat_id + 100, t1, x_tr_bad);
+    std::println("Query missing body, status: {}", od_status_string(status));
+    WorldHistory history_empty;
+    status = sample_tr_interp_linear(history_empty, sat_id, t1, x_tr_bad);
+    std::println("Query empty history, status: {}", od_status_string(status));
 }

@@ -2,6 +2,7 @@
 
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
+#include "core/state.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
 
@@ -113,6 +114,8 @@ inline EarthSatsStatsScenario make_earth_sats_stats_scenario(
     }
 
     // Satellites
+    mat3d I_sat = vec3d{100.0, 200.0, 300.0}.asDiagonal();
+
     scenario.sat1_id = world.spawn_satellite();
     Satellite* sat1 = world.satellite(scenario.sat1_id);
     if (sat1 == nullptr) {
@@ -120,6 +123,9 @@ inline EarthSatsStatsScenario make_earth_sats_stats_scenario(
     }
     sat1->x_tr.r = vec3d{7000.0, 1000.0, 1300.0};
     sat1->x_tr.v = vec3d{-0.5, 7.2, 1.0};
+    sat1->x_att.q = q_identity;
+    sat1->x_att.w = vec3d{0.000001, 0.0025, 0.000001};
+    sat1->set_I(I_sat);
 
     scenario.sat2_id = world.spawn_satellite();
     Satellite* sat2 = world.satellite(scenario.sat2_id);
@@ -136,6 +142,9 @@ inline EarthSatsStatsScenario make_earth_sats_stats_scenario(
         earth->mu,
         UAngle::degree
     );
+    sat2->x_att.q = q_identity;
+    sat2->x_att.w = vec3d{-0.0005, -0.025, -0.00025};
+    sat2->set_I(I_sat);
 
     scenario.success = true;
     return scenario;

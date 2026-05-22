@@ -79,3 +79,4 @@ void run_world_ekf_step_diag();
 void run_ekf_prediction_only_diag();
 void run_realtime_ekf_world_update_diag();
 void run_station_instrument_diag();
+void run_world_history_diag();
