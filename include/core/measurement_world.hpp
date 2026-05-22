@@ -11,6 +11,7 @@
 #include "core/station_geometry.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
+#include "core/world_history.hpp"
 #include "util/units.hpp"
 
 inline vec4d od_q_bcbf_from_inertial(const ODDynamicsConfig& dyn_cfg, f64 dt) {
@@ -205,6 +206,80 @@ inline ODStatus world_predict_measurement_from_state(
     if (z.size() == 0) {
         return ODStatus::empty_measurements;
     }
+
+    return ODStatus::ok;
+}
+
+inline ODStatus world_predict_measurement_history(
+    const World& world,
+    const WorldHistory& history,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    vecXd& z_pred,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+) {
+
+    StateTr x_tr_observer;
+    ODStatus status = sample_station_tr_interp_linear(
+        world,
+        history,
+        observer_id,
+        t,
+        x_tr_observer,
+        tol
+    );
+    if (!od_status_success(status)) return status;
+
+    StateTr x_tr_target;
+    status = sample_tr_interp_linear(history, target_id, t, x_tr_target, tol);
+    if (!od_status_success(status)) return status;
+
+    MeasurementContext ctx;
+
+    ctx.x_tr_target = x_tr_target;
+
+    if (type == ObservationType::azel) {
+        const Station* observer = world.station(observer_id);
+        if (observer == nullptr) {
+            return ODStatus::observer_not_found;
+        }
+        const Celestial* anchor = world.celestial(observer->anchor_id);
+        if (anchor == nullptr) return ODStatus::observer_not_found;
+
+        StateTr x_tr_anchor;
+        status = sample_tr_interp_linear(history, anchor->id, t, x_tr_anchor, tol);
+        if (!od_status_success(status)) return status;
+
+        StateAtt x_att_anchor;
+        status = sample_att_interp_linear(history, anchor->id, t, x_att_anchor, tol);
+        if (!od_status_success(status)) return status;
+        if (!observer->anchored || observer->anchor_id == kInvalidEntityId) {
+            return ODStatus::observer_not_found;
+        }
+
+        vec3d r_target_body_I = x_tr_target.r - x_tr_anchor.r;
+        vec3d r_target_body_BCBF
+            = ep_rotate_fast_passive(x_att_anchor.q, r_target_body_I);
+
+        vec3d r_rel_BCBF = r_target_body_BCBF - observer->r_body_BCBF;
+        mat3d R_ENU_BCBF = stat_rot_enu_from_detic(observer->llh_BCBF, angle_in);
+
+        ctx.has_station_local = true;
+        ctx.azel_frame = AzelInputFrame::enu;
+        ctx.x_tr_observer.r = vec3d0;
+        ctx.x_tr_target.r = R_ENU_BCBF * r_rel_BCBF;
+        ctx.station_llh = observer->llh_BCBF;
+    } else {
+        ctx.x_tr_observer = x_tr_observer;
+    }
+
+    z_pred = predict_measurement(type, ctx, angle_in, angle_out, tol);
+    i32 dim = measurement_dim(type);
+    if (z_pred.size() != dim) return ODStatus::invalid_input;
 
     return ODStatus::ok;
 }

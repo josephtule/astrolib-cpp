@@ -4,6 +4,8 @@
 #include "core/estimation_recursive.hpp"
 #include "core/measurement.hpp"
 #include "core/world.hpp"
+#include "core/world_history.hpp"
+#include "util/units.hpp"
 
 struct ODWorldMeasurementEvent {
     Measurement measurement;
@@ -62,6 +64,7 @@ ODStatus make_world_measurement_event(
     f64 t,
     const matXd& R,
     ODWorldMeasurementEvent& event,
+    UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 );
@@ -114,6 +117,7 @@ ODStatus make_world_measurement_event(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
+    UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 );
@@ -125,6 +129,7 @@ ODStatus make_world_measurement_event_instrument(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
+    UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 );
@@ -137,7 +142,49 @@ ODStatus make_noisy_world_measurement_event_instrument(
     f64 t,
     ODWorldMeasurementEvent& event,
     const MeasurementNoiseOptions& noise_opts,
+    UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 );
 
+
+ODStatus make_world_measurement_event_history(
+    const World& world,
+    const WorldHistory& history,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    const matXd& R,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+);
+
+ODStatus make_world_measurement_event_history_instrument(
+    const World& world,
+    const WorldHistory& history,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+);
+
+ODStatus make_noisy_world_measurement_event_history_instrument(
+    const World& world,
+    const WorldHistory& history,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    const MeasurementNoiseOptions& noise_opts,
+    UAngle angle_in = UAngle::radian,
+    UAngle angle_out = UAngle::radian,
+    f64 tol = tol12
+);

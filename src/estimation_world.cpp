@@ -297,6 +297,7 @@ ODStatus make_world_measurement_event(
     f64 t,
     const matXd& R,
     ODWorldMeasurementEvent& event,
+    UAngle angle_in,
     UAngle angle_out,
     f64 tol
 ) {
@@ -307,7 +308,7 @@ ODStatus make_world_measurement_event(
         observer_id,
         target_id,
         z,
-        UAngle::radian,
+        angle_in,
         angle_out,
         tol
     );
@@ -369,6 +370,7 @@ ODStatus make_world_measurement_event(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
+    UAngle angle_in,
     UAngle angle_out,
     f64 tol
 ) {
@@ -391,6 +393,7 @@ ODStatus make_world_measurement_event(
         t,
         R,
         event,
+        angle_in,
         angle_out,
         tol
     );
@@ -403,6 +406,7 @@ ODStatus make_world_measurement_event_instrument(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
+    UAngle angle_in,
     UAngle angle_out,
     f64 tol
 ) {
@@ -425,6 +429,7 @@ ODStatus make_world_measurement_event_instrument(
         t,
         instrument.R,
         event,
+        angle_in,
         angle_out,
         tol
     );
@@ -438,6 +443,7 @@ ODStatus make_noisy_world_measurement_event_instrument(
     f64 t,
     ODWorldMeasurementEvent& event,
     const MeasurementNoiseOptions& noise_opts,
+    UAngle angle_in,
     UAngle angle_out,
     f64 tol
 ) {
@@ -460,6 +466,7 @@ ODStatus make_noisy_world_measurement_event_instrument(
         t,
         instrument.R,
         event,
+        angle_in,
         angle_out,
         tol
     );
@@ -467,19 +474,176 @@ ODStatus make_noisy_world_measurement_event_instrument(
         return status;
     }
 
-    if (noise_opts.diagonal) {
-        return apply_measurement_noise_diagonal(
-            event.measurement,
-            noise_opts,
-            instrument.type
-        );
-    } else {
-        return apply_measurement_noise_cholesky(
-            event.measurement,
-            noise_opts,
-            instrument.type
-        );
+    if (noise_opts.enabled) {
+        if (noise_opts.diagonal) {
+            return apply_measurement_noise_diagonal(
+                event.measurement,
+                noise_opts,
+                instrument.type
+            );
+        } else {
+            return apply_measurement_noise_cholesky(
+                event.measurement,
+                noise_opts,
+                instrument.type
+            );
+        }
     }
+
+    return ODStatus::ok;
+}
+
+ODStatus make_world_measurement_event_history(
+    const World& world,
+    const WorldHistory& history,
+    ObservationType type,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    const matXd& R,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_in,
+    UAngle angle_out,
+    f64 tol
+) {
+    vecXd z_pred;
+    ODStatus status = world_predict_measurement_history(
+        world,
+        history,
+        type,
+        observer_id,
+        target_id,
+        t,
+        z_pred,
+        angle_in,
+        angle_out,
+        tol
+    );
+    if (!od_status_success(status)) return status;
+    i32 dim = measurement_dim(type);
+    if (z_pred.size() != dim) return ODStatus::invalid_input;
+
+    const Station* observer = world.station(observer_id);
+    if (observer == nullptr) {
+        return ODStatus::observer_not_found;
+    }
+
+    Measurement meas;
+    meas.t = t;
+    meas.z = z_pred;
+    meas.R = R;
+    meas.observer_id = observer_id;
+    meas.target_id = target_id;
+    meas.type = type;
+
+    event.measurement = meas;
+    event.observer_id = observer_id;
+    event.target_id = target_id;
+
+    return ODStatus::ok;
+}
+
+ODStatus make_world_measurement_event_history_instrument(
+    const World& world,
+    const WorldHistory& history,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    UAngle angle_in,
+    UAngle angle_out,
+    f64 tol
+) {
+    const Station* observer = world.station(observer_id);
+    if (observer == nullptr) {
+        return ODStatus::observer_not_found;
+    }
+
+    StationInstrument instrument;
+    ODStatus status = get_station_instrument(*observer, instrument, instrument_id);
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    status = make_world_measurement_event_history(
+        world,
+        history,
+        instrument.type,
+        observer_id,
+        target_id,
+        t,
+        instrument.R,
+        event,
+        angle_in,
+        angle_out,
+        tol
+    );
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    return ODStatus::ok;
+}
+
+ODStatus make_noisy_world_measurement_event_history_instrument(
+    const World& world,
+    const WorldHistory& history,
+    InstrumentId instrument_id,
+    EntityId observer_id,
+    EntityId target_id,
+    f64 t,
+    ODWorldMeasurementEvent& event,
+    const MeasurementNoiseOptions& noise_opts,
+    UAngle angle_in,
+    UAngle angle_out,
+    f64 tol
+) {
+
+    ODStatus status = make_world_measurement_event_history_instrument(
+        world,
+        history,
+        instrument_id,
+        observer_id,
+        target_id,
+        t,
+        event,
+        angle_in,
+        angle_out,
+        tol
+    );
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    const Station* observer = world.station(observer_id);
+    if (observer == nullptr) {
+        return ODStatus::observer_not_found;
+    }
+
+    StationInstrument instrument;
+    status = get_station_instrument(*observer, instrument, instrument_id);
+    if (status != ODStatus::ok) {
+        return status;
+    }
+
+    if (noise_opts.enabled) {
+        if (noise_opts.diagonal) {
+            return apply_measurement_noise_diagonal(
+                event.measurement,
+                noise_opts,
+                instrument.type
+            );
+        } else {
+            return apply_measurement_noise_cholesky(
+                event.measurement,
+                noise_opts,
+                instrument.type
+            );
+        }
+    }
+
+    return ODStatus::ok;
 }
 
 ODRealtimeEKFResult od_ekf_update_world_events(
