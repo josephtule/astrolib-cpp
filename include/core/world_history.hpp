@@ -129,6 +129,48 @@ inline ODStatus sample_tr_nearest(
     return ODStatus::ok;
 }
 
+inline ODStatus sample_station_tr_nearest(
+    const World& world,
+    const WorldHistory& history,
+    EntityId station_id,
+    f64 t,
+    StateTr& out,
+    f64 tol = tol12
+) {
+    WorldHistorySample sample;
+    StatusCode status = sample_nearest(history, t, sample, tol);
+    if (!od_status_success(status)) {
+        return status;
+    }
+
+    const Station* stat = world.station(station_id);
+    if (!stat->anchored) {
+        return sample_tr_nearest(history, station_id, t, out, tol);
+    }
+
+    EntityId anchor_id = stat->anchor_id;
+
+    const auto it_tr = sample.x_tr.find(anchor_id);
+    if (it_tr == sample.x_tr.end()) {
+        return ODStatus::sample_not_found;
+    }
+    const auto it_att = sample.x_att.find(anchor_id);
+    if (it_att == sample.x_att.end()) {
+        return ODStatus::sample_not_found;
+    }
+
+    StateTr x_tr_anchor = it_tr->second;
+    StateAtt x_att_anchor = it_att->second;
+
+    vec4d q_NB = ep_conj(x_att_anchor.q);
+    vec3d r_offset_inertial = ep_rotate_fast_passive(q_NB, stat->r_body_BCBF);
+    out.r = x_tr_anchor.r + r_offset_inertial;
+    vec3d w_inertial = ep_rotate_fast_passive(q_NB, x_att_anchor.w);
+    out.v = x_tr_anchor.v + w_inertial.cross(r_offset_inertial);
+
+    return ODStatus::ok;
+}
+
 inline ODStatus sample_att_nearest(
     const WorldHistory& history,
     EntityId id,
@@ -147,6 +189,44 @@ inline ODStatus sample_att_nearest(
         return ODStatus::sample_not_found;
     }
     out = it->second;
+
+    return ODStatus::ok;
+}
+
+inline ODStatus sample_station_att_nearest(
+    const World& world,
+    const WorldHistory& history,
+    EntityId station_id,
+    f64 t,
+    StateAtt& out,
+    f64 tol = tol12
+) {
+    WorldHistorySample sample;
+    StatusCode status = sample_nearest(history, t, sample, tol);
+    if (!od_status_success(status)) {
+        return status;
+    }
+
+    const Station* stat = world.station(station_id);
+    if (!stat->anchored) {
+        return sample_att_nearest(history, station_id, t, out, tol);
+    }
+    EntityId anchor_id = stat->anchor_id;
+
+    const auto it_tr = sample.x_tr.find(anchor_id);
+    if (it_tr == sample.x_tr.end()) {
+        return ODStatus::sample_not_found;
+    }
+    const auto it_att = sample.x_att.find(anchor_id);
+    if (it_att == sample.x_att.end()) {
+        return ODStatus::sample_not_found;
+    }
+
+    StateAtt x_att_anchor;
+    status = sample_att_nearest(history, anchor_id, t, x_att_anchor, tol);
+    if (!od_status_success(status)) return status;
+
+    out.q = stat_att_enu_from_detic(x_att_anchor, stat->llh_BCBF);
 
     return ODStatus::ok;
 }
@@ -232,18 +312,6 @@ inline ODStatus sample_att_interp_linear(
         return ODStatus::interp_failed;
     }
     out.w = vec3d(w_t);
-
-    return ODStatus::ok;
-}
-
-inline ODStatus sample_tr_history(
-    const WorldHistory& history,
-    EntityId,
-    f64 t,
-    StateTr& out,
-    const HistorySampleOptions& opts
-) {
-    // switch () {}
 
     return ODStatus::ok;
 }
@@ -391,6 +459,73 @@ inline ODStatus sample_station_att_interp_linear(
     if (!od_status_success(status)) return status;
 
     out.q = stat_att_enu_from_detic(x_att_anchor, stat->llh_BCBF);
+
+    return ODStatus::ok;
+}
+
+inline ODStatus sample_tr_history(
+    const World& world,
+    const WorldHistory& history,
+    EntityId id,
+    f64 t,
+    StateTr& out,
+    const HistorySampleOptions& opts
+) {
+    ODStatus status = ODStatus::ok;
+    const Body* body = world.body(id);
+    if (body == nullptr) {
+        return ODStatus::body_not_found;
+    }
+    switch (opts.tr_interp) {
+    case HistoryInterpolation::nearest: {
+        if (body->body_type == BodyType::station) {
+            return sample_station_tr_nearest(world, history, id, t, out, opts.tol);
+        }
+        return sample_tr_nearest(history, id, t, out, opts.tol);
+    } break;
+    case HistoryInterpolation::linear: {
+        if (body->body_type == BodyType::station) {
+            return sample_station_tr_interp_linear(world, history, id, t, out, opts.tol);
+        }
+        return sample_tr_interp_linear(history, id, t, out, opts.tol);
+    } break;
+    default: return ODStatus::unsupported_method;
+    }
+
+    return status;
+}
+
+inline ODStatus sample_att_history(
+    const World& world,
+    const WorldHistory& history,
+    EntityId id,
+    f64 t,
+    StateAtt& out,
+    const HistorySampleOptions& opts
+) {
+    ODStatus status = ODStatus::ok;
+
+    const Body* body = world.body(id);
+    if (body == nullptr) {
+        return ODStatus::body_not_found;
+    }
+    switch (opts.att_interp) {
+
+    case HistoryInterpolation::nearest: {
+        if (body->body_type == BodyType::station) {
+            return sample_station_att_nearest(world, history, id, t, out, opts.tol);
+        }
+        return sample_att_nearest(history, id, t, out, opts.tol);
+    } break;
+    case HistoryInterpolation::linear:
+        [[fallthrough]]; // NOTE: maybe do normalized linear instead of slerp?
+    case HistoryInterpolation::slerp: {
+        if (body->body_type == BodyType::station) {
+            return sample_station_att_interp_linear(world, history, id, t, out, opts.tol);
+        }
+        return sample_station_att_interp_linear(world, history, id, t, out, opts.tol);
+    } break;
+    }
 
     return ODStatus::ok;
 }

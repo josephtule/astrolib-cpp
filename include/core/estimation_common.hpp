@@ -26,7 +26,8 @@ enum struct ODStatus {
     file_not_found,
     file_write_failed,
     file_close_failed,
-    // body_not_found,
+    unsupported_method,
+    body_not_found,
 };
 
 inline std::string od_status_string(ODStatus status) {
@@ -91,18 +92,23 @@ inline std::string od_status_string(ODStatus status) {
     } break;
     case ODStatus::file_not_found: {
         str = "File not found";
-    }break;
+    } break;
     case ODStatus::file_write_failed: {
         str = "File write failed";
     } break;
     case ODStatus::file_close_failed: {
         str = "File close failed";
-    }break;
+    } break;
+    case ODStatus::unsupported_method: {
+        str = "Unsupported Method";
+    } break;
+    case ODStatus::body_not_found: {
+        str = "Body not found";
+    } break;
     }
     return str;
 }
 using StatusCode = ODStatus; // TODO: do full rename
-
 
 inline bool od_status_success(ODStatus status) {
     return status == ODStatus::ok || status == ODStatus::prediction_only;
