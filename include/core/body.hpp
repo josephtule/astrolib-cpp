@@ -9,6 +9,16 @@
 
 enum struct BodyType { unknown, celestial, satellite, station };
 
+inline std::string body_type_str(BodyType type) {
+    switch (type) {
+    case BodyType::unknown: return "Unknown";
+    case BodyType::celestial: return "Celestial";
+    case BodyType::satellite: return "Satellite";
+    case BodyType::station: return "Station";
+    }
+    return "Unknown";
+}
+
 struct Body {
     EntityId id = kInvalidEntityId;
     std::string name;

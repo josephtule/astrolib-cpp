@@ -236,6 +236,18 @@ inline ODStatus sample_att_interp_linear(
     return ODStatus::ok;
 }
 
+inline ODStatus sample_tr_history(
+    const WorldHistory& history,
+    EntityId,
+    f64 t,
+    StateTr& out,
+    const HistorySampleOptions& opts
+) {
+    // switch () {}
+
+    return ODStatus::ok;
+}
+
 inline ODStatus sample_bracket(
     const WorldHistory& history,
     f64 t,

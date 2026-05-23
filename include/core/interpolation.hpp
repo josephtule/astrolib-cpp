@@ -4,6 +4,30 @@
 #include "util/math.hpp"
 #include "util/vecdefs.hpp"
 
+enum struct HistoryInterpolation {
+    nearest,
+    linear,
+    slerp,
+    // hermite,
+    // lagrange,
+    // chebyshev,
+};
+
+enum struct HistoryExtrapolation {
+    reject,
+    hold,
+    constant_velocity, // both linear and angular
+    // TODO: add more
+};
+
+struct HistorySampleOptions {
+    HistoryInterpolation tr_interp = HistoryInterpolation::linear;
+    HistoryInterpolation att_interp = HistoryInterpolation::slerp;
+    HistoryExtrapolation tr_extrap = HistoryExtrapolation::reject;
+    HistoryExtrapolation att_extrap = HistoryExtrapolation::reject;
+    f64 tol = tol12;
+};
+
 inline vecXd interp_linear(f64 t, vecXd v1, f64 t1, vecXd v2, f64 t2, f64 tol = tol12) {
     // lerp
     if (v1.size() != v2.size()) {
@@ -70,3 +94,4 @@ inline vec4d interp_quat_linear(
 
     return qt.normalized();
 }
+

@@ -4339,9 +4339,9 @@ void run_world_history_ekf_diag() {
 
     HistoryCSVExportOptions csv_opts;
     csv_opts.include_attitude = true;
-    StatusCode status = write_body_history_csv(
+    StatusCode status = write_world_history_csv(
+        world,
         history,
-        sat_id,
         pwd + "/assets/output/sat_csv_out_test.csv",
         csv_opts
     );
