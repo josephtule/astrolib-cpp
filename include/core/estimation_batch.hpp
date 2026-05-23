@@ -25,7 +25,7 @@ struct ODBatchInput {
 };
 
 struct ODBatchResult {
-    ODStatus status = ODStatus::invalid_input;
+    StatusCode status = StatusCode::invalid_input;
     StateTr x0_est;
     mat6d covariance = mat6d0;
     mat6d normal_inv = mat6d0;
@@ -36,12 +36,12 @@ struct ODBatchResult {
 };
 
 struct ODBatchResidualEval {
-    ODStatus status = ODStatus::invalid_input;
+    StatusCode status = StatusCode::invalid_input;
     f64 weighted_norm = 0.0;
     f64 raw_norm = 0.0;
 };
 
-ODStatus od_batch_validate_input(const ODBatchInput& input);
+StatusCode od_batch_validate_input(const ODBatchInput& input);
 ODBatchResidualEval od_batch_eval_residual_norm(
     const ODBatchInput& input,
     const StateTr& x0_ref

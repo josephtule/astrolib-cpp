@@ -28,7 +28,7 @@ ODEKFStepResult od_ekf_step_world(
     f64 tol = tol12
 );
 
-ODStatus ekf_observer_state_from_world(
+StatusCode ekf_observer_state_from_world(
     const World& world,
     EntityId observer_id,
     StateTr& x_tr_observer
@@ -56,7 +56,7 @@ ODEKFStepResult od_ekf_predict_step(
 
 ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input);
 
-ODStatus make_world_measurement_event(
+StatusCode make_world_measurement_event(
     const World& world,
     ObservationType type,
     EntityId observer_id,
@@ -76,7 +76,7 @@ struct ODRealtimeEvent {
 };
 
 struct ODRealtimeEKFResult {
-    ODStatus status = ODStatus::invalid_input;
+    StatusCode status = StatusCode::invalid_input;
     ODEKFState filter;
     i32 processed_events = 0;
     i32 measurement_updates = 0;
@@ -95,7 +95,7 @@ ODRealtimeEKFResult od_ekf_update_world_events(
     f64 tol_time = tol12
 );
 
-ODStatus validate_realtime_ekf_events(
+StatusCode validate_realtime_ekf_events(
     const svec<ODRealtimeEvent>& events,
     f64 t_prev,
     f64 tol_time = tol12
@@ -110,7 +110,7 @@ struct ODRealtimeScheduleItem {
     EntityId target_id = kInvalidEntityId;
 };
 
-ODStatus make_world_measurement_event(
+StatusCode make_world_measurement_event(
     const World& world,
     ObservationType type,
     EntityId observer_id,
@@ -122,7 +122,7 @@ ODStatus make_world_measurement_event(
     f64 tol = tol12
 );
 
-ODStatus make_world_measurement_event_instrument(
+StatusCode make_world_measurement_event_instrument(
     const World& world,
     InstrumentId instrument_id,
     EntityId observer_id,
@@ -134,7 +134,7 @@ ODStatus make_world_measurement_event_instrument(
     f64 tol = tol12
 );
 
-ODStatus make_noisy_world_measurement_event_instrument(
+StatusCode make_noisy_world_measurement_event_instrument(
     const World& world,
     InstrumentId instrument_id,
     EntityId observer_id,
@@ -148,7 +148,7 @@ ODStatus make_noisy_world_measurement_event_instrument(
 );
 
 
-ODStatus make_world_measurement_event_history(
+StatusCode make_world_measurement_event_history(
     const World& world,
     const WorldHistory& history,
     ObservationType type,
@@ -162,7 +162,7 @@ ODStatus make_world_measurement_event_history(
     f64 tol = tol12
 );
 
-ODStatus make_world_measurement_event_history_instrument(
+StatusCode make_world_measurement_event_history_instrument(
     const World& world,
     const WorldHistory& history,
     InstrumentId instrument_id,
@@ -175,7 +175,7 @@ ODStatus make_world_measurement_event_history_instrument(
     f64 tol = tol12
 );
 
-ODStatus make_noisy_world_measurement_event_history_instrument(
+StatusCode make_noisy_world_measurement_event_history_instrument(
     const World& world,
     const WorldHistory& history,
     InstrumentId instrument_id,

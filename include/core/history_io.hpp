@@ -45,10 +45,10 @@ inline void write_history_csv_header(
 inline StatusCode close_history_csv(std::ofstream& file) {
     file.close();
     if (file.fail()) {
-        return ODStatus::file_close_failed;
+        return StatusCode::file_close_failed;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 inline StatusCode write_history_csv_row(
@@ -61,7 +61,7 @@ inline StatusCode write_history_csv_row(
     const BodyType type = BodyType::unknown
 ) {
     if (opts.include_attitude && x_att == nullptr) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
 
     const vec6d x_tr_vec = statetr_to_vec6d(x_tr);
@@ -81,18 +81,18 @@ inline StatusCode write_history_csv_row(
     file << "\n";
 
     if (file.fail()) {
-        return ODStatus::file_write_failed;
+        return StatusCode::file_write_failed;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 inline StatusCode validate_history_for_export(const WorldHistory& history) {
     if (history.samples.size() == 0) {
-        return ODStatus::empty_history;
+        return StatusCode::empty_history;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 inline StatusCode write_body_history_csv(
@@ -102,13 +102,13 @@ inline StatusCode write_body_history_csv(
     const HistoryCSVExportOptions& opts = HistoryCSVExportOptions{}
 ) {
     StatusCode status = validate_history_for_export(history);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
     std::ofstream file;
     status = open_history_csv(file, filepath);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
     file << std::setprecision(opts.precision);
@@ -123,7 +123,7 @@ inline StatusCode write_body_history_csv(
         if (it_tr == sample.x_tr.end()) {
             if (opts.require_all_samples) {
                 file.close();
-                return ODStatus::sample_not_found;
+                return StatusCode::sample_not_found;
             }
             continue;
         }
@@ -134,7 +134,7 @@ inline StatusCode write_body_history_csv(
             if (it_att == sample.x_att.end()) {
                 if (opts.require_all_samples) {
                     file.close();
-                    return ODStatus::sample_not_found;
+                    return StatusCode::sample_not_found;
                 }
                 continue;
             }
@@ -143,7 +143,7 @@ inline StatusCode write_body_history_csv(
 
         status
             = write_history_csv_row(file, sample.t, body_id, it_tr->second, x_att, opts);
-        if (status != ODStatus::ok) {
+        if (status != StatusCode::ok) {
             file.close();
             return status;
         }
@@ -179,29 +179,29 @@ inline StatusCode validate_world_history_csv_samples(
     const HistoryCSVExportOptions& opts
 ) {
     StatusCode status = validate_history_for_export(history);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
     if (!opts.require_all_samples) {
-        return ODStatus::ok;
+        return StatusCode::ok;
     }
 
     const std::set<EntityId> ids = sample_tr_ids(history.samples.front());
     for (const WorldHistorySample& sample : history.samples) {
         if (!sample_has_all_tr_ids(sample, ids)) {
-            return ODStatus::sample_not_found;
+            return StatusCode::sample_not_found;
         }
         if (opts.include_attitude) {
             for (EntityId id : ids) {
                 if (sample.x_att.find(id) == sample.x_att.end()) {
-                    return ODStatus::sample_not_found;
+                    return StatusCode::sample_not_found;
                 }
             }
         }
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 inline StatusCode write_world_history_csv(
@@ -211,13 +211,13 @@ inline StatusCode write_world_history_csv(
 ) {
     // does not write anchored station states
     StatusCode status = validate_world_history_csv_samples(history, opts);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
     std::ofstream file;
     status = open_history_csv(file, filepath);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
     file << std::setprecision(opts.precision);
@@ -234,7 +234,7 @@ inline StatusCode write_world_history_csv(
                 if (it_att == sample.x_att.end()) {
                     if (opts.require_all_samples) {
                         file.close();
-                        return ODStatus::sample_not_found;
+                        return StatusCode::sample_not_found;
                     }
                     continue;
                 }
@@ -242,7 +242,7 @@ inline StatusCode write_world_history_csv(
             }
 
             status = write_history_csv_row(file, sample.t, id, x_tr, x_att, opts);
-            if (status != ODStatus::ok) {
+            if (status != StatusCode::ok) {
                 file.close();
                 return status;
             }
@@ -260,17 +260,17 @@ inline StatusCode write_station_history_csv(
     const HistoryCSVExportOptions& opts = HistoryCSVExportOptions{}
 ) {
     StatusCode status = validate_history_for_export(history);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
     if (world.station(station_id) == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     std::ofstream file;
     status = open_history_csv(file, filepath);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
     file << std::setprecision(opts.precision);
@@ -283,7 +283,7 @@ inline StatusCode write_station_history_csv(
         StateTr x_tr;
         status
             = sample_station_tr_interp_linear(world, history, station_id, sample.t, x_tr);
-        if (status != ODStatus::ok) {
+        if (status != StatusCode::ok) {
             if (opts.require_all_samples) {
                 file.close();
                 return status;
@@ -301,7 +301,7 @@ inline StatusCode write_station_history_csv(
                 sample.t,
                 x_att
             );
-            if (status != ODStatus::ok) {
+            if (status != StatusCode::ok) {
                 if (opts.require_all_samples) {
                     file.close();
                     return status;
@@ -319,7 +319,7 @@ inline StatusCode write_station_history_csv(
             opts,
             BodyType::station
         );
-        if (status != ODStatus::ok) {
+        if (status != StatusCode::ok) {
             file.close();
             return status;
         }
@@ -337,13 +337,13 @@ inline StatusCode write_world_history_csv(
     // writes all bodies (linear interp for stations)
 
     StatusCode status = validate_world_history_csv_samples(history, opts);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
     std::ofstream file;
     status = open_history_csv(file, filepath);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
     file << std::setprecision(opts.precision);
@@ -358,7 +358,7 @@ inline StatusCode write_world_history_csv(
             if (body == nullptr) {
                 if (opts.require_all_samples) {
                     file.close();
-                    return ODStatus::sample_not_found;
+                    return StatusCode::sample_not_found;
                 }
                 continue;
             }
@@ -371,7 +371,7 @@ inline StatusCode write_world_history_csv(
                     if (it_att == sample.x_att.end()) {
                         if (opts.require_all_samples) {
                             file.close();
-                            return ODStatus::sample_not_found;
+                            return StatusCode::sample_not_found;
                         }
                         continue;
                     }
@@ -387,7 +387,7 @@ inline StatusCode write_world_history_csv(
                     opts,
                     body->body_type
                 );
-                if (status != ODStatus::ok) {
+                if (status != StatusCode::ok) {
                     file.close();
                     return status;
                 }
@@ -396,7 +396,7 @@ inline StatusCode write_world_history_csv(
                 StateTr x_tr;
                 status
                     = sample_station_tr_interp_linear(world, history, id, sample.t, x_tr);
-                if (status != ODStatus::ok) {
+                if (status != StatusCode::ok) {
                     if (opts.require_all_samples) {
                         file.close();
                         return status;
@@ -414,7 +414,7 @@ inline StatusCode write_world_history_csv(
                         sample.t,
                         x_att
                     );
-                    if (status != ODStatus::ok) {
+                    if (status != StatusCode::ok) {
                         if (opts.require_all_samples) {
                             file.close();
                             return status;
@@ -431,7 +431,7 @@ inline StatusCode write_world_history_csv(
                         opts,
                         body->body_type
                     );
-                    if (status != ODStatus::ok) {
+                    if (status != StatusCode::ok) {
                         file.close();
                         return status;
                     }

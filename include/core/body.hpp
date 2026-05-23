@@ -136,119 +136,119 @@ struct Station : public Body {
     }
 };
 
-ODStatus station_measurement_covariance(
+StatusCode station_measurement_covariance(
     const Station& station,
     InstrumentId instrument_id,
     matXd& R
 );
-ODStatus station_measurement_covariance(
+StatusCode station_measurement_covariance(
     const Station& station,
     ObservationType type,
     matXd& R
 );
-ODStatus set_station_instrument(Station& station, const StationInstrument& instrument);
-ODStatus add_station_instrument(
+StatusCode set_station_instrument(Station& station, const StationInstrument& instrument);
+StatusCode add_station_instrument(
     Station& station,
     const StationInstrument& instrument,
     InstrumentId& out_id
 );
-ODStatus add_station_instrument(Station& station, const StationInstrument& instrument);
-ODStatus get_station_instrument(
+StatusCode add_station_instrument(Station& station, const StationInstrument& instrument);
+StatusCode get_station_instrument(
     const Station& station,
     StationInstrument& instrument,
     InstrumentId id
 );
 
-ODStatus add_radec_instrument(
+StatusCode add_radec_instrument(
     Station& station,
     const mat2d& R,
     std::string name = "Ra/Dec Instrument"
 );
-ODStatus add_radec_instrument(
+StatusCode add_radec_instrument(
     Station& station,
     const mat2d& R,
     InstrumentId& out_id,
     std::string name = "Ra/Dec Instrument"
 );
 
-ODStatus add_azel_instrument(
+StatusCode add_azel_instrument(
     Station& station,
     const mat2d& R,
     std::string name = "Az/El Instrument"
 );
-ODStatus add_azel_instrument(
+StatusCode add_azel_instrument(
     Station& station,
     const mat2d& R,
     InstrumentId& out_id,
     std::string name = "Az/El Instrument"
 );
 
-ODStatus add_range_instrument(
+StatusCode add_range_instrument(
     Station& station,
     const matXd& R,
     std::string name = "Range Instrument"
 );
-ODStatus add_range_instrument(
+StatusCode add_range_instrument(
     Station& station,
     const matXd& R,
     InstrumentId& out_id,
     std::string name = "Range Instrument"
 );
 
-ODStatus add_range_rate_instrument(
+StatusCode add_range_rate_instrument(
     Station& station,
     const matXd& R,
     std::string name = "Range-Rate Instrument"
 );
-ODStatus add_range_rate_instrument(
+StatusCode add_range_rate_instrument(
     Station& station,
     const matXd& R,
     InstrumentId& out_id,
     std::string name = "Range-Rate Instrument"
 );
 
-ODStatus add_pos_instrument(
+StatusCode add_pos_instrument(
     Station& station,
     const mat3d& R,
     std::string name = "Simulation Position Instrument"
 );
-ODStatus add_pos_instrument(
+StatusCode add_pos_instrument(
     Station& station,
     const mat3d& R,
     InstrumentId& out_id,
     std::string name = "Inertial Position Instrument"
 );
 
-ODStatus add_posvel_instrument(
+StatusCode add_posvel_instrument(
     Station& station,
     const mat6d& R,
     std::string name = "Simulation State Instrument"
 );
-ODStatus add_posvel_instrument(
+StatusCode add_posvel_instrument(
     Station& station,
     const mat6d& R,
     InstrumentId& out_id,
     std::string name = "Inertial State Instrument"
 );
 
-ODStatus add_rel_pos_instrument(
+StatusCode add_rel_pos_instrument(
     Station& station,
     const mat3d& R,
     std::string name = "Relative Position Instrument"
 );
-ODStatus add_rel_pos_instrument(
+StatusCode add_rel_pos_instrument(
     Station& station,
     const mat3d& R,
     InstrumentId& out_id,
     std::string name = "Relative Position Instrument"
 );
 
-ODStatus add_rel_posvel_instrument(
+StatusCode add_rel_posvel_instrument(
     Station& station,
     const mat6d& R,
     std::string name = "Relative State Instrument"
 );
-ODStatus add_rel_posvel_instrument(
+StatusCode add_rel_posvel_instrument(
     Station& station,
     const mat6d& R,
     InstrumentId& out_id,
@@ -257,7 +257,7 @@ ODStatus add_rel_posvel_instrument(
 
 svec<InstrumentId> enabled_station_instrument_ids(const Station& station);
 
-ODStatus enable_station_instrument(Station& station, InstrumentId instrument_id);
-ODStatus disable_station_instrument(Station& station, InstrumentId instrument_id);
+StatusCode enable_station_instrument(Station& station, InstrumentId instrument_id);
+StatusCode disable_station_instrument(Station& station, InstrumentId instrument_id);
 
 void print_station_instruments(const Station& station);

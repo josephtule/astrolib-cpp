@@ -351,17 +351,17 @@ inline matXd measurement_jacobian(
     return H;
 }
 
-inline ODStatus apply_measurement_noise_diagonal(
+inline StatusCode apply_measurement_noise_diagonal(
     Measurement& meas,
     const MeasurementNoiseOptions& opts,
     ObservationType type
 ) {
     i32 dim = measurement_dim(type);
     if (dim <= 0 || meas.z.size() != dim || !meas.z.allFinite()) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     if (meas.R.rows() != dim || meas.R.cols() != dim || !meas.R.allFinite()) {
-        return ODStatus::invalid_covariance;
+        return StatusCode::invalid_covariance;
     }
 
     std::normal_distribution<f64> noise_unit(0.0, 1.0);
@@ -369,7 +369,7 @@ inline ODStatus apply_measurement_noise_diagonal(
     for (i32 i = 0; i < dim; ++i) {
         f64 var_i = meas.R(i, i);
         if (var_i < 0.0) {
-            return ODStatus::invalid_covariance;
+            return StatusCode::invalid_covariance;
         }
         meas.z(i) += noise_unit(opts.rng) * std::sqrt(var_i);
     }
@@ -379,25 +379,25 @@ inline ODStatus apply_measurement_noise_diagonal(
         meas.z(0) = wrap_angle(meas.z(0), wrap_min, wrap_max, opts.u_angle, opts.u_angle);
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus apply_measurement_noise_cholesky(
+inline StatusCode apply_measurement_noise_cholesky(
     Measurement& meas,
     const MeasurementNoiseOptions& opts,
     ObservationType type
 ) {
     i32 dim = measurement_dim(type);
     if (dim <= 0 || meas.z.size() != dim || !meas.z.allFinite()) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     if (meas.R.rows() != dim || meas.R.cols() != dim || !meas.R.allFinite()) {
-        return ODStatus::invalid_covariance;
+        return StatusCode::invalid_covariance;
     }
 
     Eigen::LLT<matXd> R_llt(meas.R);
     if (R_llt.info() != Eigen::Success) {
-        return ODStatus::invalid_covariance;
+        return StatusCode::invalid_covariance;
     }
     vecXd dz(dim);
     std::normal_distribution<f64> noise_unit(0.0, 1.0);
@@ -407,7 +407,7 @@ inline ODStatus apply_measurement_noise_cholesky(
 
     meas.z += R_llt.matrixL() * dz;
     if (!meas.z.allFinite()) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
 
     if (type == ObservationType::radec || type == ObservationType::azel) {
@@ -416,5 +416,5 @@ inline ODStatus apply_measurement_noise_cholesky(
         meas.z(0) = wrap_angle(meas.z(0), wrap_min, wrap_max, opts.u_angle, opts.u_angle);
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }

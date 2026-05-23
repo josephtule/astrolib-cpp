@@ -10,7 +10,7 @@
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
-ODStatus ekf_observer_state_from_world(
+StatusCode ekf_observer_state_from_world(
     const World& world,
     EntityId observer_id,
     StateTr& x_tr_observer
@@ -18,21 +18,21 @@ ODStatus ekf_observer_state_from_world(
 
     const Body* body = world.body(observer_id);
     if (body == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     if (body->body_type != BodyType::station) {
         x_tr_observer = body->x_tr;
-        return ODStatus::ok;
+        return StatusCode::ok;
     }
 
     const Station* stat = world.station(observer_id);
     if (stat == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
     x_tr_observer = world.stat_x_tr_inertial(observer_id);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 ODEKFStepResult od_ekf_step_world(
@@ -53,14 +53,14 @@ ODEKFStepResult od_ekf_step_world(
 
     const Body* target = world.body(event.target_id);
     if (target == nullptr) {
-        result.status = ODStatus::target_not_found;
+        result.status = StatusCode::target_not_found;
         return result;
     }
 
     StateTr x_tr_observer;
     result.status
         = ekf_observer_state_from_world(world, event.observer_id, x_tr_observer);
-    if (result.status != ODStatus::ok) {
+    if (result.status != StatusCode::ok) {
         return result;
     }
 
@@ -80,7 +80,7 @@ ODEKFStepResult od_ekf_step_world(
         return result;
     } else {
         result.filter = filter;
-        result.status = ODStatus::ok;
+        result.status = StatusCode::ok;
         result.residual_norm = 0.0;
         result.raw_residual_norm = 0.0;
     }
@@ -103,7 +103,7 @@ ODEKFStepResult od_ekf_step_world(
 
     // predicted measurement
     vecXd z_pred;
-    ODStatus pred_status = world_predict_measurement_from_state(
+    StatusCode pred_status = world_predict_measurement_from_state(
         world,
         event.measurement.type,
         event.observer_id,
@@ -128,14 +128,14 @@ ODEKFStepResult od_ekf_step_world(
         angle_out
     );
     if (!res.allFinite()) {
-        result.status = ODStatus::invalid_input;
+        result.status = StatusCode::invalid_input;
         return result;
     }
 
     // measurement jacobian
     i32 dim = measurement_dim(event.measurement.type);
     matXd H;
-    ODStatus status = world_jacobian_measurement(
+    StatusCode status = world_jacobian_measurement(
         world,
         event.measurement.type,
         event.observer_id,
@@ -154,7 +154,7 @@ ODEKFStepResult od_ekf_step_world(
         return result;
     }
     if (H.cols() != 6 || H.rows() != dim || !H.allFinite()) {
-        result.status = ODStatus::invalid_input;
+        result.status = StatusCode::invalid_input;
         return result;
     }
 
@@ -169,21 +169,21 @@ ODEKFStepResult od_ekf_step_world(
     // innovation covariance
     matXd S = H * P_pred * H.transpose() + R;
     if (!S.allFinite()) {
-        result.status = ODStatus::invalid_input;
+        result.status = StatusCode::invalid_input;
         return result;
     }
 
     // solve for Kalman gain
     Eigen::LDLT<matXd> S_ldlt(S);
     if (S_ldlt.info() != Eigen::Success) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
     matXd X = S_ldlt.solve(H * P_pred); // solve S * X = H * P_pred for X
     // matXd K = P_pred * H.transpose() * S.inverse();
     matXd K = X.transpose();
     if (!X.allFinite() || !K.allFinite()) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
 
@@ -197,18 +197,18 @@ ODEKFStepResult od_ekf_step_world(
     P_post = 0.5 * (P_post + P_post.transpose()); // force symmetry
     if (!dx_vec.allFinite() || !statetr_to_vec6d(x_post).allFinite()
         || !P_post.allFinite()) {
-        result.status = ODStatus::correction_rejected;
+        result.status = StatusCode::correction_rejected;
         return result;
     }
 
     vecXd weighted_res = S_ldlt.solve(res);
     if (!weighted_res.allFinite()) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
     f64 res_norm2 = res.dot(weighted_res);
     if (!std::isfinite(res_norm2) || res_norm2 < 0.0) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
 
@@ -220,7 +220,7 @@ ODEKFStepResult od_ekf_step_world(
     result.residual_norm = std::sqrt(res_norm2);
     // result.residual_norm = std::sqrt(res.transpose() * S.inverse() * res);
     result.raw_residual_norm = res.norm();
-    result.status = ODStatus::ok;
+    result.status = StatusCode::ok;
 
     return result;
 }
@@ -239,7 +239,7 @@ ODEKFStepResult od_ekf_predict_step(
 
     ODEKFPredictResult prediction
         = od_ekf_predict(filter, t_target, dyn_config, prop_steps, Q, tol_time);
-    if (prediction.status != ODStatus::ok) {
+    if (prediction.status != StatusCode::ok) {
         step_result.status = prediction.status;
         return step_result;
     }
@@ -247,7 +247,7 @@ ODEKFStepResult od_ekf_predict_step(
     step_result.filter.x = prediction.y.x;
     step_result.filter.P = prediction.P;
     step_result.filter.t = prediction.t;
-    step_result.status = ODStatus::prediction_only;
+    step_result.status = StatusCode::prediction_only;
 
     return step_result;
 }
@@ -268,11 +268,11 @@ ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
     } else {
         // estimate
         if (input.world == nullptr) {
-            result.status = ODStatus::invalid_input;
+            result.status = StatusCode::invalid_input;
             return result;
         }
         if (std::abs(input.t_target - input.event->measurement.t) > input.tol_time) {
-            result.status = ODStatus::time_mismatch;
+            result.status = StatusCode::time_mismatch;
             return result;
         }
         result = od_ekf_step_world(
@@ -289,7 +289,7 @@ ODEKFStepResult od_ekf_update_world(const ODRealtimeEKFInput& input) {
     return result;
 }
 
-ODStatus make_world_measurement_event(
+StatusCode make_world_measurement_event(
     const World& world,
     ObservationType type,
     EntityId observer_id,
@@ -302,7 +302,7 @@ ODStatus make_world_measurement_event(
     f64 tol
 ) {
     vecXd z;
-    ODStatus meas_status = world_predict_measurement(
+    StatusCode meas_status = world_predict_measurement(
         world,
         type,
         observer_id,
@@ -328,42 +328,42 @@ ODStatus make_world_measurement_event(
     event.observer_id = observer_id;
     event.target_id = target_id;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus validate_realtime_ekf_events(
+StatusCode validate_realtime_ekf_events(
     const svec<ODRealtimeEvent>& events,
     f64 t_prev,
     f64 tol_time
 ) {
     if (events.empty()) {
-        return ODStatus::empty_events;
+        return StatusCode::empty_events;
     }
     for (const auto event : events) {
         if (event.t < t_prev - tol_time) {
-            return ODStatus::time_mismatch;
+            return StatusCode::time_mismatch;
         }
         if (event.has_measurement) {
             if (event.event.observer_id == kInvalidEntityId) {
-                return ODStatus::observer_not_found;
+                return StatusCode::observer_not_found;
             }
             if (event.event.target_id == kInvalidEntityId) {
-                return ODStatus::target_not_found;
+                return StatusCode::target_not_found;
             }
             if (event.event.measurement.z.size()
                 != measurement_dim(event.event.measurement.type)) {
-                return ODStatus::invalid_input;
+                return StatusCode::invalid_input;
             }
             if (std::abs(event.event.measurement.t - event.t) > tol_time) {
-                return ODStatus::time_mismatch;
+                return StatusCode::time_mismatch;
             }
         }
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus make_world_measurement_event(
+StatusCode make_world_measurement_event(
     const World& world,
     ObservationType type,
     EntityId observer_id,
@@ -376,12 +376,12 @@ ODStatus make_world_measurement_event(
 ) {
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     matXd R;
-    ODStatus status = station_measurement_covariance(*observer, type, R);
-    if (status != ODStatus::ok) {
+    StatusCode status = station_measurement_covariance(*observer, type, R);
+    if (status != StatusCode::ok) {
         return status;
     }
 
@@ -399,7 +399,7 @@ ODStatus make_world_measurement_event(
     );
 }
 
-ODStatus make_world_measurement_event_instrument(
+StatusCode make_world_measurement_event_instrument(
     const World& world,
     InstrumentId instrument_id,
     EntityId observer_id,
@@ -412,12 +412,12 @@ ODStatus make_world_measurement_event_instrument(
 ) {
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     StationInstrument instrument;
-    ODStatus status = get_station_instrument(*observer, instrument, instrument_id);
-    if (status != ODStatus::ok) {
+    StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
+    if (status != StatusCode::ok) {
         return status;
     }
 
@@ -435,7 +435,7 @@ ODStatus make_world_measurement_event_instrument(
     );
 }
 
-ODStatus make_noisy_world_measurement_event_instrument(
+StatusCode make_noisy_world_measurement_event_instrument(
     const World& world,
     InstrumentId instrument_id,
     EntityId observer_id,
@@ -449,12 +449,12 @@ ODStatus make_noisy_world_measurement_event_instrument(
 ) {
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     StationInstrument instrument;
-    ODStatus status = get_station_instrument(*observer, instrument, instrument_id);
-    if (status != ODStatus::ok) {
+    StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
+    if (status != StatusCode::ok) {
         return status;
     }
 
@@ -470,7 +470,7 @@ ODStatus make_noisy_world_measurement_event_instrument(
         angle_out,
         tol
     );
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
@@ -490,10 +490,10 @@ ODStatus make_noisy_world_measurement_event_instrument(
         }
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus make_world_measurement_event_history(
+StatusCode make_world_measurement_event_history(
     const World& world,
     const WorldHistory& history,
     ObservationType type,
@@ -507,7 +507,7 @@ ODStatus make_world_measurement_event_history(
     f64 tol
 ) {
     vecXd z_pred;
-    ODStatus status = world_predict_measurement_history(
+    StatusCode status = world_predict_measurement_history(
         world,
         history,
         type,
@@ -521,11 +521,11 @@ ODStatus make_world_measurement_event_history(
     );
     if (!od_status_success(status)) return status;
     i32 dim = measurement_dim(type);
-    if (z_pred.size() != dim) return ODStatus::invalid_input;
+    if (z_pred.size() != dim) return StatusCode::invalid_input;
 
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     Measurement meas;
@@ -540,10 +540,10 @@ ODStatus make_world_measurement_event_history(
     event.observer_id = observer_id;
     event.target_id = target_id;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus make_world_measurement_event_history_instrument(
+StatusCode make_world_measurement_event_history_instrument(
     const World& world,
     const WorldHistory& history,
     InstrumentId instrument_id,
@@ -557,12 +557,12 @@ ODStatus make_world_measurement_event_history_instrument(
 ) {
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     StationInstrument instrument;
-    ODStatus status = get_station_instrument(*observer, instrument, instrument_id);
-    if (status != ODStatus::ok) {
+    StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
+    if (status != StatusCode::ok) {
         return status;
     }
 
@@ -579,14 +579,14 @@ ODStatus make_world_measurement_event_history_instrument(
         angle_out,
         tol
     );
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus make_noisy_world_measurement_event_history_instrument(
+StatusCode make_noisy_world_measurement_event_history_instrument(
     const World& world,
     const WorldHistory& history,
     InstrumentId instrument_id,
@@ -599,7 +599,7 @@ ODStatus make_noisy_world_measurement_event_history_instrument(
     UAngle angle_out,
     f64 tol
 ) {
-    ODStatus status = make_world_measurement_event_history_instrument(
+    StatusCode status = make_world_measurement_event_history_instrument(
         world,
         history,
         instrument_id,
@@ -611,18 +611,18 @@ ODStatus make_noisy_world_measurement_event_history_instrument(
         angle_out,
         tol
     );
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     StationInstrument instrument;
     status = get_station_instrument(*observer, instrument, instrument_id);
-    if (status != ODStatus::ok) {
+    if (status != StatusCode::ok) {
         return status;
     }
 
@@ -642,7 +642,7 @@ ODStatus make_noisy_world_measurement_event_history_instrument(
         }
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 ODRealtimeEKFResult od_ekf_update_world_events(
@@ -658,7 +658,7 @@ ODRealtimeEKFResult od_ekf_update_world_events(
     result.filter = initial_filter;
 
     if (events.empty()) {
-        result.status = ODStatus::empty_events;
+        result.status = StatusCode::empty_events;
         return result;
     }
 
@@ -683,9 +683,9 @@ ODRealtimeEKFResult od_ekf_update_world_events(
             return result;
         }
 
-        if (step_result.status == ODStatus::ok) {
+        if (step_result.status == StatusCode::ok) {
             ++result.measurement_updates;
-        } else if (step_result.status == ODStatus::prediction_only) {
+        } else if (step_result.status == StatusCode::prediction_only) {
             ++result.prediction_updates;
         }
 

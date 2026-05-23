@@ -1,9 +1,8 @@
 #pragma once
 
-#include "core/observation_type.hpp"
 #include <string>
 
-enum struct ODStatus {
+enum struct StatusCode {
     ok,
     invalid_input,
     empty_measurements,
@@ -30,88 +29,88 @@ enum struct ODStatus {
     body_not_found,
 };
 
-inline std::string od_status_string(ODStatus status) {
+inline std::string status_string(StatusCode status) {
     std::string str;
     switch (status) {
-    case ODStatus::ok: {
+    case StatusCode::ok: {
         str = "Ok";
     } break;
-    case ODStatus::invalid_input: {
+    case StatusCode::invalid_input: {
         str = "Invalid Input";
     } break;
-    case ODStatus::empty_measurements: {
+    case StatusCode::empty_measurements: {
         str = "Empty Measurements";
     } break;
-    case ODStatus::size_mismatch: {
+    case StatusCode::size_mismatch: {
         str = "Size Mismatch";
     } break;
-    case ODStatus::propagation_failed: {
+    case StatusCode::propagation_failed: {
         str = "Propagation Failed";
     } break;
-    case ODStatus::singular_normal_matrix: {
+    case StatusCode::singular_normal_matrix: {
         str = "Singular Normal Matrix";
     } break;
-    case ODStatus::prediction_only: {
+    case StatusCode::prediction_only: {
         str = "Prediction Only";
     } break;
-    case ODStatus::max_iters_reached: {
+    case StatusCode::max_iters_reached: {
         str = "Max Iterations reached";
     } break;
-    case ODStatus::correction_rejected: {
+    case StatusCode::correction_rejected: {
         str = "Correction Rejected";
     } break;
-    case ODStatus::invalid_covariance: {
+    case StatusCode::invalid_covariance: {
         str = "Invalid Covariance";
     } break;
-    case ODStatus::singular_innovation: {
+    case StatusCode::singular_innovation: {
         str = "Singular Innovation";
     } break;
-    case ODStatus::observer_not_found: {
+    case StatusCode::observer_not_found: {
         str = "Observer not found";
     } break;
-    case ODStatus::target_not_found: {
+    case StatusCode::target_not_found: {
         str = "Target not found";
     } break;
-    case ODStatus::time_mismatch: {
+    case StatusCode::time_mismatch: {
         str = "Time mismatch";
     } break;
-    case ODStatus::empty_events: {
+    case StatusCode::empty_events: {
         str = "Empty Events";
     } break;
-    case ODStatus::instrument_not_found: {
+    case StatusCode::instrument_not_found: {
         str = "Instrument not found";
     } break;
-    case ODStatus::empty_history: {
+    case StatusCode::empty_history: {
         str = "Empty history";
     } break;
-    case ODStatus::sample_not_found: {
+    case StatusCode::sample_not_found: {
         str = "Sample not found";
     } break;
-    case ODStatus::interp_failed: {
+    case StatusCode::interp_failed: {
         str = "Interpolation failed";
     } break;
-    case ODStatus::file_not_found: {
+    case StatusCode::file_not_found: {
         str = "File not found";
     } break;
-    case ODStatus::file_write_failed: {
+    case StatusCode::file_write_failed: {
         str = "File write failed";
     } break;
-    case ODStatus::file_close_failed: {
+    case StatusCode::file_close_failed: {
         str = "File close failed";
     } break;
-    case ODStatus::unsupported_method: {
+    case StatusCode::unsupported_method: {
         str = "Unsupported Method";
     } break;
-    case ODStatus::body_not_found: {
+    case StatusCode::body_not_found: {
         str = "Body not found";
     } break;
     }
     return str;
 }
-using StatusCode = ODStatus; // TODO: do full rename
+using StatusCode = StatusCode; // TODO: do full rename
 
-inline bool od_status_success(ODStatus status) {
-    return status == ODStatus::ok || status == ODStatus::prediction_only;
+inline bool od_status_success(StatusCode status) {
+    return status == StatusCode::ok || status == StatusCode::prediction_only;
 }
 
 template <class A, class B>

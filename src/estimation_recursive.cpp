@@ -8,65 +8,65 @@
 
 #include <cmath>
 
-ODStatus od_ekf_step_validate_input(const ODEKFStepInput& input) {
+StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input) {
     if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     if (!std::isfinite(input.tol_time) || input.tol_time < 0.0) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     i32 dim = measurement_dim(input.measurement.type);
     if (dim <= 0) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     if (input.measurement.R.size() != 0
         && (input.measurement.R.cols() != dim || input.measurement.R.rows() != dim
             || !input.measurement.R.allFinite())) {
-        return ODStatus::invalid_covariance;
+        return StatusCode::invalid_covariance;
     }
     if (!input.Q.allFinite() || !input.filter.P.allFinite()) {
-        return ODStatus::invalid_covariance;
+        return StatusCode::invalid_covariance;
     }
     if (input.measurement.z.size() != dim || !input.measurement.z.allFinite()) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
 
     if (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus od_ekf_validate_input(const ODEKFOfflineInput& input) {
-    if (input.measurements.size() == 0) return ODStatus::empty_measurements;
+StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
+    if (input.measurements.size() == 0) return StatusCode::empty_measurements;
     if (input.measurements.size() != input.observer_states.size()) {
-        return ODStatus::size_mismatch;
+        return StatusCode::size_mismatch;
     }
     if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     if (!std::isfinite(input.tol_time) || input.tol_time < 0.0) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     if (!input.Q.allFinite() || !input.initial_filter.P.allFinite()) {
-        return ODStatus::invalid_covariance;
+        return StatusCode::invalid_covariance;
     }
     for (i32 i = 0; i < input.measurements.size(); ++i) {
         const Measurement& meas = input.measurements[i];
         i32 dim = measurement_dim(meas.type);
         if (dim <= 0) {
-            return ODStatus::invalid_input;
+            return StatusCode::invalid_input;
         }
         if (meas.z.size() != dim || !meas.z.allFinite()) {
-            return ODStatus::invalid_input;
+            return StatusCode::invalid_input;
         }
         if (meas.R.size() != 0
             && (meas.R.cols() != dim || meas.R.rows() != dim || !meas.R.allFinite())) {
-            return ODStatus::invalid_covariance;
+            return StatusCode::invalid_covariance;
         }
     }
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 ODEKFPredictResult od_ekf_predict(
@@ -80,7 +80,7 @@ ODEKFPredictResult od_ekf_predict(
     ODEKFPredictResult result;
     f64 dt = t_target - filter.t;
     if (dt < -tol) {
-        result.status = ODStatus::propagation_failed;
+        result.status = StatusCode::propagation_failed;
         return result;
     } else if (std::abs(dt) <= tol) {
         // same epoch
@@ -112,13 +112,13 @@ ODEKFPredictResult od_ekf_predict(
     result.P = result.y.Phi * filter.P * result.y.Phi.transpose() + Q_eff;
     if (!statetr_to_vec6d(result.y.x).allFinite() || !result.y.Phi.allFinite()
         || !result.P.allFinite()) {
-        result.status = ODStatus::propagation_failed;
+        result.status = StatusCode::propagation_failed;
         return result;
     }
 
     result.t = filter.t + dt;
 
-    result.status = ODStatus::ok;
+    result.status = StatusCode::ok;
     return result;
 }
 
@@ -132,11 +132,11 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     i32 dim = measurement_dim(meas.type);
 
     result.status = od_ekf_step_validate_input(input);
-    if (result.status != ODStatus::ok) {
+    if (result.status != StatusCode::ok) {
         return result;
     } else {
         result.filter = filter;
-        result.status = ODStatus::ok;
+        result.status = StatusCode::ok;
         result.residual_norm = 0.0;
         result.raw_residual_norm = 0.0;
     }
@@ -150,7 +150,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
         input.tol_time
     );
 
-    if (prediction.status != ODStatus::ok) {
+    if (prediction.status != StatusCode::ok) {
         result.status = prediction.status;
         return result;
     }
@@ -168,14 +168,14 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     MeasurementContext ctx = make_measurement_context(x_pred, x_tr_obsv);
     vecXd z_pred = predict_measurement(meas.type, ctx);
     if (z_pred.size() != dim) {
-        result.status = ODStatus::invalid_input;
+        result.status = StatusCode::invalid_input;
         return result;
     }
 
     // residuals
     vecXd res = measurement_residual(meas.type, meas.z, z_pred);
     if (!res.allFinite()) {
-        result.status = ODStatus::invalid_input;
+        result.status = StatusCode::invalid_input;
         return result;
     }
     result.raw_residual_norm = res.norm();
@@ -183,7 +183,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // measurement jacobian
     matXd H = measurement_jacobian(meas.type, ctx);
     if (H.cols() != 6 || H.rows() != dim || !H.allFinite()) {
-        result.status = ODStatus::invalid_input;
+        result.status = StatusCode::invalid_input;
         return result;
     }
 
@@ -198,21 +198,21 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // innovation covariance
     matXd S = H * P_pred * H.transpose() + R;
     if (!S.allFinite()) {
-        result.status = ODStatus::invalid_input;
+        result.status = StatusCode::invalid_input;
         return result;
     }
 
     // solve for Kalman gain
     Eigen::LDLT<matXd> S_ldlt(S);
     if (S_ldlt.info() != Eigen::Success) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
     matXd X = S_ldlt.solve(H * P_pred); // solve S * X = H * P_pred for X
     // matXd K = P_pred * H.transpose() * S.inverse();
     matXd K = X.transpose();
     if (!X.allFinite() || !K.allFinite()) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
 
@@ -226,18 +226,18 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     P_post = 0.5 * (P_post + P_post.transpose()); // force symmetry
     if (!dx_vec.allFinite() || !statetr_to_vec6d(x_post).allFinite()
         || !P_post.allFinite()) {
-        result.status = ODStatus::correction_rejected;
+        result.status = StatusCode::correction_rejected;
         return result;
     }
 
     vecXd weighted_res = S_ldlt.solve(res);
     if (!weighted_res.allFinite()) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
     f64 res_norm2 = res.dot(weighted_res);
     if (!std::isfinite(res_norm2) || res_norm2 < 0.0) {
-        result.status = ODStatus::singular_innovation;
+        result.status = StatusCode::singular_innovation;
         return result;
     }
 
@@ -249,7 +249,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     result.residual_norm = std::sqrt(res_norm2);
     // result.residual_norm = std::sqrt(res.transpose() * S.inverse() * res);
     result.raw_residual_norm = res.norm();
-    result.status = ODStatus::ok;
+    result.status = StatusCode::ok;
     return result;
 }
 
@@ -258,7 +258,7 @@ ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input) {
     ODEKFState filter = input.initial_filter;
 
     result.status = od_ekf_validate_input(input);
-    if (result.status != ODStatus::ok) {
+    if (result.status != StatusCode::ok) {
         return result;
     }
 
@@ -289,7 +289,7 @@ ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input) {
     }
 
     result.filter = filter;
-    result.status = ODStatus::ok;
+    result.status = StatusCode::ok;
     result.filter = filter;
 
     return result;

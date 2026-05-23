@@ -65,7 +65,7 @@ inline vecXd world_predict_measurement(
     return z;
 }
 
-inline ODStatus world_predict_measurement(
+inline StatusCode world_predict_measurement(
     const World& world,
     ObservationType type,
     EntityId observer_id,
@@ -78,10 +78,10 @@ inline ODStatus world_predict_measurement(
     const Station* observer = world.station(observer_id);
     const Body* target = world.body(target_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
     if (target == nullptr) {
-        return ODStatus::target_not_found;
+        return StatusCode::target_not_found;
     }
 
     z = world_predict_measurement(
@@ -95,13 +95,13 @@ inline ODStatus world_predict_measurement(
     );
 
     if (z.size() == 0) {
-        return ODStatus::empty_measurements;
+        return StatusCode::empty_measurements;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus make_world_station_measurement_context(
+inline StatusCode make_world_station_measurement_context(
     const World& world,
     MeasurementContext& ctx,
     EntityId observer_id,
@@ -112,19 +112,19 @@ inline ODStatus make_world_station_measurement_context(
 
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     ctx.x_tr_target = x_tr_target_pred;
 
     if (type == ObservationType::azel) {
         if (!observer->anchored || observer->anchor_id == kInvalidEntityId) {
-            return ODStatus::observer_not_found;
+            return StatusCode::observer_not_found;
         }
 
         const Body* anchor = world.body(observer->anchor_id);
         if (anchor == nullptr) {
-            return ODStatus::observer_not_found;
+            return StatusCode::observer_not_found;
         }
 
         ctx.has_station_local = true;
@@ -136,10 +136,10 @@ inline ODStatus make_world_station_measurement_context(
         ctx.x_tr_observer = world.stat_x_tr_inertial(observer_id);
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus world_predict_measurement_from_state(
+inline StatusCode world_predict_measurement_from_state(
     const World& world,
     ObservationType type,
     EntityId observer_id,
@@ -152,7 +152,7 @@ inline ODStatus world_predict_measurement_from_state(
     f64 tol = tol12
 ) {
     MeasurementContext ctx;
-    ODStatus status = make_world_station_measurement_context(
+    StatusCode status = make_world_station_measurement_context(
         world,
         ctx,
         observer_id,
@@ -167,13 +167,13 @@ inline ODStatus world_predict_measurement_from_state(
         z = predict_measurement(type, ctx, angle_in, angle_out, tol);
     } else {
         const Station* stat = world.station(observer_id);
-        if (stat == nullptr) return ODStatus::observer_not_found;
+        if (stat == nullptr) return StatusCode::observer_not_found;
         if (!stat->anchored || stat->anchor_id == kInvalidEntityId) {
-            return ODStatus::observer_not_found;
+            return StatusCode::observer_not_found;
         }
 
         const Body* anchor = world.body(stat->anchor_id);
-        if (anchor == nullptr) return ODStatus::observer_not_found;
+        if (anchor == nullptr) return StatusCode::observer_not_found;
 
         vec4d q_BCBF_I = od_q_bcbf_from_inertial(dyn_cfg, dt);
         mat3d R_BCBF_I = ep_to_dcm(q_BCBF_I);
@@ -204,13 +204,13 @@ inline ODStatus world_predict_measurement_from_state(
     }
 
     if (z.size() == 0) {
-        return ODStatus::empty_measurements;
+        return StatusCode::empty_measurements;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus world_predict_measurement_history(
+inline StatusCode world_predict_measurement_history(
     const World& world,
     const WorldHistory& history,
     ObservationType type,
@@ -223,7 +223,7 @@ inline ODStatus world_predict_measurement_history(
     f64 tol = tol12
 ) {
     StateTr x_tr_observer;
-    ODStatus status = sample_station_tr_interp_linear(
+    StatusCode status = sample_station_tr_interp_linear(
         world,
         history,
         observer_id,
@@ -244,10 +244,10 @@ inline ODStatus world_predict_measurement_history(
     if (type == ObservationType::azel) {
         const Station* observer = world.station(observer_id);
         if (observer == nullptr) {
-            return ODStatus::observer_not_found;
+            return StatusCode::observer_not_found;
         }
         const Celestial* anchor = world.celestial(observer->anchor_id);
-        if (anchor == nullptr) return ODStatus::observer_not_found;
+        if (anchor == nullptr) return StatusCode::observer_not_found;
 
         StateTr x_tr_anchor;
         status = sample_tr_interp_linear(history, anchor->id, t, x_tr_anchor, tol);
@@ -257,7 +257,7 @@ inline ODStatus world_predict_measurement_history(
         status = sample_att_interp_linear(history, anchor->id, t, x_att_anchor, tol);
         if (!od_status_success(status)) return status;
         if (!observer->anchored || observer->anchor_id == kInvalidEntityId) {
-            return ODStatus::observer_not_found;
+            return StatusCode::observer_not_found;
         }
 
         vec3d r_target_body_I = x_tr_target.r - x_tr_anchor.r;
@@ -278,12 +278,12 @@ inline ODStatus world_predict_measurement_history(
 
     z_pred = predict_measurement(type, ctx, angle_in, angle_out, tol);
     i32 dim = measurement_dim(type);
-    if (z_pred.size() != dim) return ODStatus::invalid_input;
+    if (z_pred.size() != dim) return StatusCode::invalid_input;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus world_jacobian_measurement(
+inline StatusCode world_jacobian_measurement(
     const World& world,
     ObservationType type,
     EntityId observer_id,
@@ -298,7 +298,7 @@ inline ODStatus world_jacobian_measurement(
     f64 tol = tol12
 ) {
     MeasurementContext ctx;
-    ODStatus status = make_world_station_measurement_context(
+    StatusCode status = make_world_station_measurement_context(
         world,
         ctx,
         observer_id,
@@ -329,8 +329,8 @@ inline ODStatus world_jacobian_measurement(
         }
     }
     if (H.cols() != 6 || H.rows() != dim) {
-        return ODStatus::empty_measurements;
+        return StatusCode::empty_measurements;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }

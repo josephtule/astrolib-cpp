@@ -4,7 +4,7 @@
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
 
-static ODStatus add_typed_station_instrument(
+static StatusCode add_typed_station_instrument(
     Station& station,
     ObservationType type,
     const matXd& R,
@@ -13,7 +13,7 @@ static ODStatus add_typed_station_instrument(
 ) {
     i32 dim = measurement_dim(type);
     if (R.rows() != dim || R.cols() != dim) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
 
     StationInstrument instrument;
@@ -25,22 +25,22 @@ static ODStatus add_typed_station_instrument(
     return add_station_instrument(station, instrument, out_id);
 }
 
-ODStatus station_measurement_covariance(
+StatusCode station_measurement_covariance(
     const Station& station,
     InstrumentId instrument_id,
     matXd& R
 ) {
     auto it = station.instruments.find(instrument_id);
     if (it == station.instruments.end()) {
-        return ODStatus::instrument_not_found;
+        return StatusCode::instrument_not_found;
     }
 
     R = it->second.R;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus station_measurement_covariance(
+StatusCode station_measurement_covariance(
     const Station& station,
     ObservationType type,
     matXd& R
@@ -57,35 +57,35 @@ ODStatus station_measurement_covariance(
         R_match = instrument.R;
 
         if (found_count > 1) {
-            return ODStatus::invalid_input;
+            return StatusCode::invalid_input;
         }
     }
 
     if (found_count == 0) {
-        return ODStatus::instrument_not_found;
+        return StatusCode::instrument_not_found;
     }
 
     R = R_match;
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus set_station_instrument(Station& station, const StationInstrument& instrument) {
+StatusCode set_station_instrument(Station& station, const StationInstrument& instrument) {
     if (instrument.id == kInvalidInstrumentId) {
-        return ODStatus::instrument_not_found;
+        return StatusCode::instrument_not_found;
     }
     auto it = station.instruments.find(instrument.id);
     if (it == station.instruments.end()) {
-        return ODStatus::instrument_not_found;
+        return StatusCode::instrument_not_found;
     }
 
     it->second = instrument;
 
     station.enabled_instrument_ids = enabled_station_instrument_ids(station);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus add_station_instrument(
+StatusCode add_station_instrument(
     Station& station,
     const StationInstrument& instrument,
     InstrumentId& out_id
@@ -109,15 +109,15 @@ ODStatus add_station_instrument(
         station.enabled_instrument_ids = enabled_station_instrument_ids(station);
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus add_station_instrument(Station& station, const StationInstrument& instrument) {
+StatusCode add_station_instrument(Station& station, const StationInstrument& instrument) {
     InstrumentId _;
     return add_station_instrument(station, instrument, _);
 }
 
-ODStatus get_station_instrument(
+StatusCode get_station_instrument(
     const Station& station,
     StationInstrument& instrument,
     InstrumentId id
@@ -125,19 +125,19 @@ ODStatus get_station_instrument(
 
     auto it = station.instruments.find(id);
     if (it == station.instruments.end()) {
-        return ODStatus::instrument_not_found;
+        return StatusCode::instrument_not_found;
     }
     instrument = it->second;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus add_radec_instrument(Station& station, const mat2d& R, std::string name) {
+StatusCode add_radec_instrument(Station& station, const mat2d& R, std::string name) {
     InstrumentId _;
     return add_radec_instrument(station, R, _, name);
 }
 
-ODStatus add_radec_instrument(
+StatusCode add_radec_instrument(
     Station& station,
     const mat2d& R,
     InstrumentId& out_id,
@@ -146,12 +146,12 @@ ODStatus add_radec_instrument(
     return add_typed_station_instrument(station, ObservationType::radec, R, out_id, name);
 }
 
-ODStatus add_azel_instrument(Station& station, const mat2d& R, std::string name) {
+StatusCode add_azel_instrument(Station& station, const mat2d& R, std::string name) {
     InstrumentId _;
     return add_azel_instrument(station, R, _, name);
 }
 
-ODStatus add_azel_instrument(
+StatusCode add_azel_instrument(
     Station& station,
     const mat2d& R,
     InstrumentId& out_id,
@@ -160,12 +160,12 @@ ODStatus add_azel_instrument(
     return add_typed_station_instrument(station, ObservationType::azel, R, out_id, name);
 }
 
-ODStatus add_range_instrument(Station& station, const matXd& R, std::string name) {
+StatusCode add_range_instrument(Station& station, const matXd& R, std::string name) {
     InstrumentId _;
     return add_range_instrument(station, R, _, name);
 }
 
-ODStatus add_range_instrument(
+StatusCode add_range_instrument(
     Station& station,
     const matXd& R,
     InstrumentId& out_id,
@@ -174,12 +174,12 @@ ODStatus add_range_instrument(
     return add_typed_station_instrument(station, ObservationType::range, R, out_id, name);
 }
 
-ODStatus add_range_rate_instrument(Station& station, const matXd& R, std::string name) {
+StatusCode add_range_rate_instrument(Station& station, const matXd& R, std::string name) {
     InstrumentId _;
     return add_range_rate_instrument(station, R, _, name);
 }
 
-ODStatus add_range_rate_instrument(
+StatusCode add_range_rate_instrument(
     Station& station,
     const matXd& R,
     InstrumentId& out_id,
@@ -194,12 +194,12 @@ ODStatus add_range_rate_instrument(
     );
 }
 
-ODStatus add_pos_instrument(Station& station, const mat3d& R, std::string name) {
+StatusCode add_pos_instrument(Station& station, const mat3d& R, std::string name) {
     InstrumentId _;
     return add_pos_instrument(station, R, _, name);
 }
 
-ODStatus add_pos_instrument(
+StatusCode add_pos_instrument(
     Station& station,
     const mat3d& R,
     InstrumentId& out_id,
@@ -208,12 +208,12 @@ ODStatus add_pos_instrument(
     return add_typed_station_instrument(station, ObservationType::pos, R, out_id, name);
 }
 
-ODStatus add_posvel_instrument(Station& station, const mat6d& R, std::string name) {
+StatusCode add_posvel_instrument(Station& station, const mat6d& R, std::string name) {
     InstrumentId _;
     return add_posvel_instrument(station, R, _, name);
 }
 
-ODStatus add_posvel_instrument(
+StatusCode add_posvel_instrument(
     Station& station,
     const mat6d& R,
     InstrumentId& out_id,
@@ -228,12 +228,12 @@ ODStatus add_posvel_instrument(
     );
 }
 
-ODStatus add_rel_pos_instrument(Station& station, const mat3d& R, std::string name) {
+StatusCode add_rel_pos_instrument(Station& station, const mat3d& R, std::string name) {
     InstrumentId _;
     return add_rel_pos_instrument(station, R, _, name);
 }
 
-ODStatus add_rel_pos_instrument(
+StatusCode add_rel_pos_instrument(
     Station& station,
     const mat3d& R,
     InstrumentId& out_id,
@@ -248,12 +248,12 @@ ODStatus add_rel_pos_instrument(
     );
 }
 
-ODStatus add_rel_posvel_instrument(Station& station, const mat6d& R, std::string name) {
+StatusCode add_rel_posvel_instrument(Station& station, const mat6d& R, std::string name) {
     InstrumentId _;
     return add_rel_posvel_instrument(station, R, _, name);
 }
 
-ODStatus add_rel_posvel_instrument(
+StatusCode add_rel_posvel_instrument(
     Station& station,
     const mat6d& R,
     InstrumentId& out_id,
@@ -282,28 +282,28 @@ svec<InstrumentId> enabled_station_instrument_ids(const Station& station) {
     return ids;
 }
 
-ODStatus enable_station_instrument(Station& station, InstrumentId instrument_id) {
+StatusCode enable_station_instrument(Station& station, InstrumentId instrument_id) {
     auto it = station.instruments.find(instrument_id);
     if (it == station.instruments.end()) {
-        return ODStatus::instrument_not_found;
+        return StatusCode::instrument_not_found;
     }
     it->second.enabled = true;
 
     station.enabled_instrument_ids = enabled_station_instrument_ids(station);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-ODStatus disable_station_instrument(Station& station, InstrumentId instrument_id) {
+StatusCode disable_station_instrument(Station& station, InstrumentId instrument_id) {
     auto it = station.instruments.find(instrument_id);
     if (it == station.instruments.end()) {
-        return ODStatus::instrument_not_found;
+        return StatusCode::instrument_not_found;
     }
     it->second.enabled = false;
 
     station.enabled_instrument_ids = enabled_station_instrument_ids(station);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 void print_station_instruments(const Station& station) {

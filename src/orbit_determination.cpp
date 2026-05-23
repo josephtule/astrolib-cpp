@@ -74,7 +74,7 @@ IODResult iod_gauss(
     if (mu <= 0.0 || !iod_time_valid(t1, t2, t3, tol) || !iod_vec_valid(L1, tol)
         || !iod_vec_valid(L2, tol) || !iod_vec_valid(L3, tol) || !R1.allFinite()
         || !R2.allFinite() || !R3.allFinite()) {
-        return IODResult{.success = false, .status = IODStatus::invalid_input};
+        return IODResult{.success = false, .status = IStatusCode::invalid_input};
     }
 
     // Time intervals
@@ -88,7 +88,7 @@ IODResult iod_gauss(
     // Compute D values
     f64 D0 = L1.dot(L2.cross(L3));
     if (std::abs(D0) < tol) {
-        return IODResult{.success = false, .status = IODStatus::degenerate_geometry};
+        return IODResult{.success = false, .status = IStatusCode::degenerate_geometry};
     }
     mat3d tempmat1;
     tempmat1.row(0) = R1;
@@ -117,7 +117,7 @@ IODResult iod_gauss(
     // arbitrary, larger than ranges
     f64 x0 = std::max(R1.norm(), std::max(R2.norm(), R3.norm())) * 5.0;
     if (!std::isfinite(x0) || x0 <= tol) {
-        return IODResult{.success = false, .status = IODStatus::invalid_input};
+        return IODResult{.success = false, .status = IStatusCode::invalid_input};
     }
 
     auto fun = [a, b, c](f64 x) -> f64 {
@@ -186,7 +186,7 @@ IODResult iod_gauss(
     if (!root_converged) {
         return IODResult{
             .success = false,
-            .status = IODStatus::root_solve_failed,
+            .status = IStatusCode::root_solve_failed,
             .iterations = iter
         };
     }
@@ -196,7 +196,7 @@ IODResult iod_gauss(
     if (!std::isfinite(r2_mag3) || r2_mag <= tol) {
         return IODResult{
             .success = false,
-            .status = IODStatus::root_solve_failed,
+            .status = IStatusCode::root_solve_failed,
             .iterations = iter
         };
     }
@@ -216,7 +216,7 @@ IODResult iod_gauss(
     if (!std::isfinite(rho1) || !std::isfinite(rho2) || !std::isfinite(rho3)) {
         return IODResult{
             .success = false,
-            .status = IODStatus::degenerate_geometry,
+            .status = IStatusCode::degenerate_geometry,
             .iterations = iter
         };
     }
@@ -231,7 +231,7 @@ IODResult iod_gauss(
     if (!std::isfinite(r2_mag3) || r2_mag <= tol) {
         return IODResult{
             .success = false,
-            .status = IODStatus::degenerate_geometry,
+            .status = IStatusCode::degenerate_geometry,
             .iterations = iter
         };
     }
@@ -244,7 +244,7 @@ IODResult iod_gauss(
     if (!r2.allFinite() || !v2.allFinite()) {
         return IODResult{
             .success = false,
-            .status = IODStatus::degenerate_geometry,
+            .status = IStatusCode::degenerate_geometry,
             .iterations = iter
         };
     }
@@ -253,7 +253,7 @@ IODResult iod_gauss(
 
     return IODResult{
         .success = true,
-        .status = IODStatus::ok,
+        .status = IStatusCode::ok,
         .x = x2,
         .iterations = iter
     };
@@ -277,7 +277,7 @@ IODResult iod_gauss(
     f64 tol
 ) {
     if (t.size() < 3 || L.size() < 3 || R.size() < 3) {
-        return IODResult{.success = false, .status = IODStatus::invalid_input};
+        return IODResult{.success = false, .status = IStatusCode::invalid_input};
     }
     return iod_gauss(t[0], t[1], t[2], L[0], L[1], L[2], R[0], R[1], R[2], mu, tol);
 }
@@ -310,14 +310,14 @@ IODResult iod_gibbs(ecref<vec3d> r1, ecref<vec3d> r2, ecref<vec3d> r3, f64 mu, f
     f64 r2x3_mag = r2x3.norm();
 
     if (mu <= 0.0 || r1_mag <= tol || r2_mag <= tol || r3_mag <= tol || r2x3_mag <= tol) {
-        return IODResult{.status = IODStatus::invalid_input};
+        return IODResult{.status = IStatusCode::invalid_input};
     }
 
     // Plane condition
     vec3d r1_hat = r1 / r1_mag;
     vec3d r2x3_hat = r2x3 / r2x3_mag;
     if (std::abs(r1_hat.dot(r2x3_hat)) > tol) {
-        return IODResult{.status = IODStatus::non_coplanar};
+        return IODResult{.status = IStatusCode::non_coplanar};
     }
 
     vec3d n = r1_mag * r2x3 + r2_mag * r3x1 + r3_mag * r1x2;
@@ -326,14 +326,14 @@ IODResult iod_gibbs(ecref<vec3d> r1, ecref<vec3d> r2, ecref<vec3d> r3, f64 mu, f
     f64 n_mag = n.norm();
     f64 d_mag = d.norm();
     if (n_mag <= tol || d_mag <= tol) {
-        return IODResult{.status = IODStatus::degenerate_geometry};
+        return IODResult{.status = IStatusCode::degenerate_geometry};
     }
 
     vec3d v2 = std::sqrt(mu / (n_mag * d_mag)) * (d.cross(r2) / r2_mag + s);
 
     return IODResult{
         .success = true,
-        .status = IODStatus::ok,
+        .status = IStatusCode::ok,
         .x = StateTr{.r = r2, .v = v2}
     };
 }
@@ -358,7 +358,7 @@ IODResult iod_herrickgibbs(
     f64 r2x3_mag = r2x3.norm();
 
     if (mu <= 0.0 || r1_mag <= tol || r2_mag <= tol || r3_mag <= tol || r2x3_mag <= tol) {
-        return IODResult{.status = IODStatus::invalid_input};
+        return IODResult{.status = IStatusCode::invalid_input};
     }
 
     f64 r1_mag3 = std::pow(r1_mag, 3);
@@ -369,7 +369,7 @@ IODResult iod_herrickgibbs(
     vec3d r1_hat = r1 / r1_mag;
     vec3d r2x3_hat = r2x3 / r2x3_mag;
     if (std::abs(r1_hat.dot(r2x3_hat)) > tol) {
-        return IODResult{.status = IODStatus::non_coplanar};
+        return IODResult{.status = IStatusCode::non_coplanar};
     }
 
     // Delta times
@@ -377,7 +377,7 @@ IODResult iod_herrickgibbs(
     f64 dt21 = t2 - t1;
     f64 dt32 = t3 - t2;
     if (std::abs(dt31) <= tol || std::abs(dt21) <= tol || std::abs(dt32) <= tol) {
-        return IODResult{.status = IODStatus::invalid_input};
+        return IODResult{.status = IStatusCode::invalid_input};
     }
 
     vec3d v2 = -dt32 * (1.0 / (dt21 * dt31) + mu / (12.0 * r1_mag3)) * r1
@@ -386,7 +386,7 @@ IODResult iod_herrickgibbs(
 
     return IODResult{
         .success = true,
-        .status = IODStatus::ok,
+        .status = IStatusCode::ok,
         .x = StateTr{.r = r2, .v = v2}
     };
 }
@@ -408,7 +408,7 @@ IODResult iod_laplace(
     if (mu <= 0.0 || !iod_time_valid(t1, t2, t3, tol) || !iod_vec_valid(L1, tol)
         || !iod_vec_valid(L2, tol) || !iod_vec_valid(L3, tol) || !R1.allFinite()
         || !R2.allFinite() || !R3.allFinite() || !w.allFinite()) {
-        return IODResult{.success = false, .status = IODStatus::invalid_input};
+        return IODResult{.success = false, .status = IStatusCode::invalid_input};
     }
 
     // Middle observer position derivatives
@@ -442,7 +442,7 @@ IODResult iod_laplace(
     mat0.col(2) = L2_ddot;
     f64 det0 = 2.0 * mat0.determinant();
     if (std::abs(det0) <= tol) {
-        return IODResult{.success = false, .status = IODStatus::degenerate_geometry};
+        return IODResult{.success = false, .status = IStatusCode::degenerate_geometry};
     }
 
     mat3d mat1;
@@ -486,7 +486,7 @@ IODResult iod_laplace(
     // arbitrary, larger than ranges
     f64 x0 = std::max(R1.norm(), std::max(R2.norm(), R3.norm())) * 5.0;
     if (!std::isfinite(x0) || x0 <= tol) {
-        return IODResult{.success = false, .status = IODStatus::invalid_input};
+        return IODResult{.success = false, .status = IStatusCode::invalid_input};
     }
 
     auto fun = [a, b, c](f64 x) -> f64 {
@@ -553,7 +553,7 @@ IODResult iod_laplace(
     if (!root_converged) {
         return IODResult{
             .success = false,
-            .status = IODStatus::root_solve_failed,
+            .status = IStatusCode::root_solve_failed,
             .iterations = iter
         };
     }
@@ -563,7 +563,7 @@ IODResult iod_laplace(
     if (!std::isfinite(r2_mag3) || r2_mag <= tol) {
         return IODResult{
             .success = false,
-            .status = IODStatus::root_solve_failed,
+            .status = IStatusCode::root_solve_failed,
             .iterations = iter
         };
     }
@@ -574,7 +574,7 @@ IODResult iod_laplace(
     if (!std::isfinite(rho) || !std::isfinite(rho_dot)) {
         return IODResult{
             .success = false,
-            .status = IODStatus::degenerate_geometry,
+            .status = IStatusCode::degenerate_geometry,
             .iterations = iter
         };
     }
@@ -584,14 +584,14 @@ IODResult iod_laplace(
     if (!r2.allFinite() || !v2.allFinite()) {
         return IODResult{
             .success = false,
-            .status = IODStatus::degenerate_geometry,
+            .status = IStatusCode::degenerate_geometry,
             .iterations = iter
         };
     }
 
     return IODResult{
         .success = true,
-        .status = IODStatus::ok,
+        .status = IStatusCode::ok,
         .x = StateTr{.r = r2, .v = v2},
         .iterations = iter
     };

@@ -11,7 +11,7 @@
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
-enum struct IODStatus : i32 {
+enum struct IStatusCode : i32 {
     ok,
     invalid_input,
     non_coplanar,
@@ -20,21 +20,21 @@ enum struct IODStatus : i32 {
     unsupported_method,
 };
 
-inline std::string iod_status_string(IODStatus status) {
+inline std::string istatus_string(IStatusCode status) {
     switch (status) {
-    case IODStatus::ok: return "Ok";
-    case IODStatus::invalid_input: return "invalid_input";
-    case IODStatus::non_coplanar: return "non_coplanar";
-    case IODStatus::degenerate_geometry: return "degenerate_geometry";
-    case IODStatus::root_solve_failed: return "root_solve_failed";
-    case IODStatus::unsupported_method: return "unsupported_method";
+    case IStatusCode::ok: return "Ok";
+    case IStatusCode::invalid_input: return "invalid_input";
+    case IStatusCode::non_coplanar: return "non_coplanar";
+    case IStatusCode::degenerate_geometry: return "degenerate_geometry";
+    case IStatusCode::root_solve_failed: return "root_solve_failed";
+    case IStatusCode::unsupported_method: return "unsupported_method";
     default: return "unknown";
     }
 }
 
 struct IODResult {
     bool success = false;
-    IODStatus status = IODStatus::invalid_input;
+    IStatusCode status = IStatusCode::invalid_input;
     StateTr x;
     f64 residual_norm = 0.0;
     i32 iterations = 0;

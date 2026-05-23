@@ -54,14 +54,14 @@ inline void push_world_history_sample(
 
 inline void clear_world_history(WorldHistory& history) { history.samples.clear(); }
 
-inline ODStatus sample_nearest_idx(
+inline StatusCode sample_nearest_idx(
     const WorldHistory& history,
     f64 t,
     i32& out,
     f64 tol = tol12
 ) {
     if (history.samples.empty()) {
-        return ODStatus::empty_history;
+        return StatusCode::empty_history;
     }
 
     f64 closest_dt = INFINITY;
@@ -86,10 +86,10 @@ inline ODStatus sample_nearest_idx(
 
     out = closest_i;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_nearest(
+inline StatusCode sample_nearest(
     const WorldHistory& history,
     f64 t,
     WorldHistorySample& out,
@@ -104,10 +104,10 @@ inline ODStatus sample_nearest(
 
     out = history.samples[idx];
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_tr_nearest(
+inline StatusCode sample_tr_nearest(
     const WorldHistory& history,
     EntityId id,
     f64 t,
@@ -115,21 +115,21 @@ inline ODStatus sample_tr_nearest(
     f64 tol = tol12
 ) {
     WorldHistorySample sample;
-    ODStatus status = sample_nearest(history, t, sample, tol);
+    StatusCode status = sample_nearest(history, t, sample, tol);
     if (!od_status_success(status)) {
         return status;
     }
 
     auto it = sample.x_tr.find(id);
     if (it == sample.x_tr.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     out = it->second;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_station_tr_nearest(
+inline StatusCode sample_station_tr_nearest(
     const World& world,
     const WorldHistory& history,
     EntityId station_id,
@@ -152,11 +152,11 @@ inline ODStatus sample_station_tr_nearest(
 
     const auto it_tr = sample.x_tr.find(anchor_id);
     if (it_tr == sample.x_tr.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     const auto it_att = sample.x_att.find(anchor_id);
     if (it_att == sample.x_att.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
 
     StateTr x_tr_anchor = it_tr->second;
@@ -168,10 +168,10 @@ inline ODStatus sample_station_tr_nearest(
     vec3d w_inertial = ep_rotate_fast_passive(q_NB, x_att_anchor.w);
     out.v = x_tr_anchor.v + w_inertial.cross(r_offset_inertial);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_att_nearest(
+inline StatusCode sample_att_nearest(
     const WorldHistory& history,
     EntityId id,
     f64 t,
@@ -179,21 +179,21 @@ inline ODStatus sample_att_nearest(
     f64 tol = tol12
 ) {
     WorldHistorySample sample;
-    ODStatus status = sample_nearest(history, t, sample, tol);
+    StatusCode status = sample_nearest(history, t, sample, tol);
     if (!od_status_success(status)) {
         return status;
     }
 
     auto it = sample.x_att.find(id);
     if (it == sample.x_att.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     out = it->second;
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_station_att_nearest(
+inline StatusCode sample_station_att_nearest(
     const World& world,
     const WorldHistory& history,
     EntityId station_id,
@@ -215,11 +215,11 @@ inline ODStatus sample_station_att_nearest(
 
     const auto it_tr = sample.x_tr.find(anchor_id);
     if (it_tr == sample.x_tr.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     const auto it_att = sample.x_att.find(anchor_id);
     if (it_att == sample.x_att.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
 
     StateAtt x_att_anchor;
@@ -228,10 +228,10 @@ inline ODStatus sample_station_att_nearest(
 
     out.q = stat_att_enu_from_detic(x_att_anchor, stat->llh_BCBF);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_tr_interp_linear(
+inline StatusCode sample_tr_interp_linear(
     const WorldHistorySample& sample1,
     const WorldHistorySample& sample2,
     EntityId id,
@@ -242,13 +242,13 @@ inline ODStatus sample_tr_interp_linear(
     // check valid id
     auto it = sample1.x_tr.find(id);
     if (it == sample1.x_tr.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     StateTr x_tr_1 = it->second;
 
     it = sample2.x_tr.find(id);
     if (it == sample2.x_tr.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     StateTr x_tr_2 = it->second;
 
@@ -257,22 +257,22 @@ inline ODStatus sample_tr_interp_linear(
 
     if (std::abs(sample1.t - sample2.t) <= tol) {
         if (std::abs(sample1.t - t) > tol) {
-            return ODStatus::time_mismatch;
+            return StatusCode::time_mismatch;
         }
         out = x_tr_1;
-        return ODStatus::ok;
+        return StatusCode::ok;
     }
 
     vecXd x_tr_t = interp_linear(t, x_tr_1_vec, sample1.t, x_tr_2_vec, sample2.t, tol);
     if (x_tr_t.size() != 6) {
-        return ODStatus::interp_failed;
+        return StatusCode::interp_failed;
     }
     out = vec6d_to_statetr(vec6d(x_tr_t));
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_att_interp_linear(
+inline StatusCode sample_att_interp_linear(
     const WorldHistorySample& sample1,
     const WorldHistorySample& sample2,
     EntityId id,
@@ -283,40 +283,40 @@ inline ODStatus sample_att_interp_linear(
     // check valid id
     auto it = sample1.x_att.find(id);
     if (it == sample1.x_att.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     StateAtt x_att_1 = it->second;
 
     it = sample2.x_att.find(id);
     if (it == sample2.x_att.end()) {
-        return ODStatus::sample_not_found;
+        return StatusCode::sample_not_found;
     }
     StateAtt x_att_2 = it->second;
 
     if (std::abs(sample1.t - sample2.t) <= tol) {
         if (std::abs(sample1.t - t) > tol) {
-            return ODStatus::time_mismatch;
+            return StatusCode::time_mismatch;
         }
         out = x_att_1;
-        return ODStatus::ok;
+        return StatusCode::ok;
     }
 
     vec4d q_t = interp_quat_linear(t, x_att_1.q, sample1.t, x_att_2.q, sample2.t, tol);
     if (q_t.norm() <= tol || !q_t.allFinite()) {
-        return ODStatus::interp_failed;
+        return StatusCode::interp_failed;
     }
     out.q = q_t;
 
     vecXd w_t = interp_linear(t, x_att_1.w, sample1.t, x_att_2.w, sample2.t);
     if (w_t.size() != 3) {
-        return ODStatus::interp_failed;
+        return StatusCode::interp_failed;
     }
     out.w = vec3d(w_t);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_bracket(
+inline StatusCode sample_bracket(
     const WorldHistory& history,
     f64 t,
     WorldHistorySample& sample1,
@@ -326,16 +326,16 @@ inline ODStatus sample_bracket(
     const dque<WorldHistorySample>& samples = history.samples;
 
     if (samples.empty()) {
-        return ODStatus::empty_history;
+        return StatusCode::empty_history;
     }
 
     if (samples.size() < 2) {
         sample1 = samples[0];
         sample2 = samples[0];
         if (std::abs(sample1.t - t) <= tol) {
-            return ODStatus::ok;
+            return StatusCode::ok;
         }
-        return ODStatus::time_mismatch;
+        return StatusCode::time_mismatch;
     }
 
     bool found = false;
@@ -353,12 +353,12 @@ inline ODStatus sample_bracket(
     }
 
     if (found) {
-        return ODStatus::ok;
+        return StatusCode::ok;
     }
-    return ODStatus::time_mismatch;
+    return StatusCode::time_mismatch;
 }
 
-inline ODStatus sample_tr_interp_linear(
+inline StatusCode sample_tr_interp_linear(
     const WorldHistory& history,
     EntityId id,
     f64 t,
@@ -377,10 +377,10 @@ inline ODStatus sample_tr_interp_linear(
         return status;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_att_interp_linear(
+inline StatusCode sample_att_interp_linear(
     const WorldHistory& history,
     EntityId id,
     f64 t,
@@ -399,10 +399,10 @@ inline ODStatus sample_att_interp_linear(
         return status;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_station_tr_interp_linear(
+inline StatusCode sample_station_tr_interp_linear(
     const World& world,
     const WorldHistory& history,
     EntityId station_id,
@@ -412,7 +412,7 @@ inline ODStatus sample_station_tr_interp_linear(
 ) {
     const Station* stat = world.station(station_id);
     if (stat == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     if (!stat->anchored) {
@@ -421,7 +421,7 @@ inline ODStatus sample_station_tr_interp_linear(
 
     EntityId anchor_id = stat->anchor_id;
     StateTr x_tr_anchor;
-    ODStatus status = sample_tr_interp_linear(history, anchor_id, t, x_tr_anchor, tol);
+    StatusCode status = sample_tr_interp_linear(history, anchor_id, t, x_tr_anchor, tol);
     if (!od_status_success(status)) return status;
     StateAtt x_att_anchor;
     status = sample_att_interp_linear(history, anchor_id, t, x_att_anchor, tol);
@@ -433,10 +433,10 @@ inline ODStatus sample_station_tr_interp_linear(
     vec3d w_inertial = ep_rotate_fast_passive(q_NB, x_att_anchor.w);
     out.v = x_tr_anchor.v + w_inertial.cross(r_offset_inertial);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_station_att_interp_linear(
+inline StatusCode sample_station_att_interp_linear(
     const World& world,
     const WorldHistory& history,
     EntityId station_id,
@@ -446,7 +446,7 @@ inline ODStatus sample_station_att_interp_linear(
 ) {
     const Station* stat = world.station(station_id);
     if (stat == nullptr) {
-        return ODStatus::observer_not_found;
+        return StatusCode::observer_not_found;
     }
 
     if (!stat->anchored) {
@@ -455,15 +455,15 @@ inline ODStatus sample_station_att_interp_linear(
 
     EntityId anchor_id = stat->anchor_id;
     StateAtt x_att_anchor;
-    ODStatus status = sample_att_interp_linear(history, anchor_id, t, x_att_anchor, tol);
+    StatusCode status = sample_att_interp_linear(history, anchor_id, t, x_att_anchor, tol);
     if (!od_status_success(status)) return status;
 
     out.q = stat_att_enu_from_detic(x_att_anchor, stat->llh_BCBF);
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus sample_tr_history(
+inline StatusCode sample_tr_history(
     const World& world,
     const WorldHistory& history,
     EntityId id,
@@ -471,10 +471,10 @@ inline ODStatus sample_tr_history(
     StateTr& out,
     const HistorySampleOptions& opts
 ) {
-    ODStatus status = ODStatus::ok;
+    StatusCode status = StatusCode::ok;
     const Body* body = world.body(id);
     if (body == nullptr) {
-        return ODStatus::body_not_found;
+        return StatusCode::body_not_found;
     }
     switch (opts.tr_interp) {
     case HistoryInterpolation::nearest: {
@@ -489,13 +489,13 @@ inline ODStatus sample_tr_history(
         }
         return sample_tr_interp_linear(history, id, t, out, opts.tol);
     } break;
-    default: return ODStatus::unsupported_method;
+    default: return StatusCode::unsupported_method;
     }
 
     return status;
 }
 
-inline ODStatus sample_att_history(
+inline StatusCode sample_att_history(
     const World& world,
     const WorldHistory& history,
     EntityId id,
@@ -503,11 +503,11 @@ inline ODStatus sample_att_history(
     StateAtt& out,
     const HistorySampleOptions& opts
 ) {
-    ODStatus status = ODStatus::ok;
+    StatusCode status = StatusCode::ok;
 
     const Body* body = world.body(id);
     if (body == nullptr) {
-        return ODStatus::body_not_found;
+        return StatusCode::body_not_found;
     }
     switch (opts.att_interp) {
 
@@ -527,7 +527,7 @@ inline ODStatus sample_att_history(
     } break;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 struct WorldHistoryProvider {
@@ -535,25 +535,25 @@ struct WorldHistoryProvider {
     const WorldHistory* history = nullptr;
 };
 
-inline ODStatus validate_world_history_provider(const WorldHistoryProvider& provider) {
+inline StatusCode validate_world_history_provider(const WorldHistoryProvider& provider) {
     if (provider.world == nullptr) {
-        return ODStatus::invalid_input;
+        return StatusCode::invalid_input;
     }
     if (provider.history == nullptr || provider.history->samples.empty()) {
-        return ODStatus::empty_history;
+        return StatusCode::empty_history;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus provider_body_tr(
+inline StatusCode provider_body_tr(
     const WorldHistoryProvider& provider,
     EntityId body_id,
     f64 t,
     StateTr& out,
     f64 tol = tol12
 ) {
-    ODStatus status = validate_world_history_provider(provider);
+    StatusCode status = validate_world_history_provider(provider);
     if (!od_status_success(status)) {
         return status;
     }
@@ -563,17 +563,17 @@ inline ODStatus provider_body_tr(
         return status;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus provider_body_att(
+inline StatusCode provider_body_att(
     const WorldHistoryProvider& provider,
     EntityId body_id,
     f64 t,
     StateAtt& out,
     f64 tol = tol12
 ) {
-    ODStatus status = validate_world_history_provider(provider);
+    StatusCode status = validate_world_history_provider(provider);
     if (!od_status_success(status)) {
         return status;
     }
@@ -583,17 +583,17 @@ inline ODStatus provider_body_att(
         return status;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus provider_station_tr(
+inline StatusCode provider_station_tr(
     const WorldHistoryProvider& provider,
     EntityId station_id,
     f64 t,
     StateTr& out,
     f64 tol = tol12
 ) {
-    ODStatus status = validate_world_history_provider(provider);
+    StatusCode status = validate_world_history_provider(provider);
     if (!od_status_success(status)) {
         return status;
     }
@@ -610,17 +610,17 @@ inline ODStatus provider_station_tr(
         return status;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-inline ODStatus provider_station_att(
+inline StatusCode provider_station_att(
     const WorldHistoryProvider& provider,
     EntityId station_id,
     f64 t,
     StateAtt& out,
     f64 tol = tol12
 ) {
-    ODStatus status = validate_world_history_provider(provider);
+    StatusCode status = validate_world_history_provider(provider);
     if (!od_status_success(status)) {
         return status;
     }
@@ -637,5 +637,5 @@ inline ODStatus provider_station_att(
         return status;
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }

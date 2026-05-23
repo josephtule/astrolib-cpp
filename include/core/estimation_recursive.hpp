@@ -24,7 +24,7 @@ struct ODEKFStepInput {
 };
 
 struct ODEKFStepResult {
-    ODStatus status = ODStatus::invalid_input;
+    StatusCode status = StatusCode::invalid_input;
     ODEKFState filter;
     vecXd residual;
     f64 residual_norm = 0.0;
@@ -43,15 +43,15 @@ struct ODEKFOfflineInput {
 };
 
 struct ODEKFResult {
-    ODStatus status = ODStatus::invalid_input;
+    StatusCode status = StatusCode::invalid_input;
     ODEKFState filter;
     i32 processed_measurements = 0;
     f64 residual_norm = 0.0;
     f64 raw_residual_norm = 0.0;
 };
 
-ODStatus od_ekf_step_validate_input(const ODEKFStepInput& input);
-ODStatus od_ekf_validate_input(const ODEKFOfflineInput& input);
+StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input);
+StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input);
 ODEKFStepResult od_ekf_step(const ODEKFStepInput& input);
 ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input);
 
@@ -59,7 +59,7 @@ struct ODEKFPredictResult {
     VarStateTr y;
     mat6d P = mat6d1;
     f64 t = 0.0;
-    ODStatus status = ODStatus::invalid_input;
+    StatusCode status = StatusCode::invalid_input;
 };
 
 ODEKFPredictResult od_ekf_predict(

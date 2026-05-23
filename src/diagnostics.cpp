@@ -1075,7 +1075,7 @@ void run_batch_od_diag() {
         std::println("LUMVE Final Position Error = {}", final_r_err);
         std::println("LUMVE Final Velocity Error = {}", final_v_err);
         std::println("LUMVE Success = {}", od_status_success(result.status));
-        std::println("LUMVE Status: {}", od_status_string(result.status));
+        std::println("LUMVE Status: {}", status_string(result.status));
         std::println("LUMVE Measurements = {}", input.measurements.size());
         std::println("LUMVE Iterations = {}", result.iterations);
         std::println("LUMVE Residual Norm = {}", result.residual_norm);
@@ -1552,7 +1552,7 @@ void run_ekf_world_diag() {
         std::println("MIXED EKF Final Velocity Error = {}", final_v_err);
         std::println("MIXED EKF Final Time = {}", result.filter.t);
         std::println("MIXED EKF Success = {}", od_status_success(result.status));
-        std::println("MIXED EKF Status: {}", od_status_string(result.status));
+        std::println("MIXED EKF Status: {}", status_string(result.status));
         std::println(
             "MIXED EKF Processed Measurements = {}",
             result.processed_measurements
@@ -2653,7 +2653,7 @@ void run_world_measurement_context_diag() {
         );
 
         MeasurementContext ctx;
-        ODStatus ctx_status = make_world_station_measurement_context(
+        StatusCode ctx_status = make_world_station_measurement_context(
             world,
             ctx,
             stat_id,
@@ -2668,7 +2668,7 @@ void run_world_measurement_context_diag() {
             diag_case.angle_out
         );
 
-        std::println("{} Status: {}", diag_case.name, od_status_string(ctx_status));
+        std::println("{} Status: {}", diag_case.name, status_string(ctx_status));
         std::println("{} via World: {}", diag_case.name, z_world);
         std::println("{} via Context: {}", diag_case.name, z_ctx);
         std::println("{} Error: {}", diag_case.name, (z_world - z_ctx).norm());
@@ -3008,13 +3008,13 @@ void run_iod_lumve_ekf_init_diag() {
     std::println();
     std::println("IOD Used As Initial Guess = {}", use_iod_initial_guess && iod_guess_ok);
     std::println("IOD Success = {}", iod_res.success);
-    std::println("IOD Status: {}", iod_status_string(iod_res.status));
+    std::println("IOD Status: {}", istatus_string(iod_res.status));
     std::println("IOD Initial Error = {}", iod_err);
 
     std::println();
 
     std::println("LUMVE Success = {}", od_status_success(lumve_result.status));
-    std::println("LUMVE Status: {}", od_status_string(lumve_result.status));
+    std::println("LUMVE Status: {}", status_string(lumve_result.status));
     std::println("LUMVE Initial Error = {}", lumve_initial_err);
     std::println("LUMVE Final Error = {}", lumve_final_err);
     std::println("LUMVE Measurements = {}", lumve_input.measurements.size());
@@ -3028,7 +3028,7 @@ void run_iod_lumve_ekf_init_diag() {
     std::println();
 
     std::println("EKF Success = {}", od_status_success(ekf_result.status));
-    std::println("EKF Status: {}", od_status_string(ekf_result.status));
+    std::println("EKF Status: {}", status_string(ekf_result.status));
     std::println("EKF Initial Error = {}", ekf_initial_err);
     std::println("EKF Final Error = {}", ekf_final_err);
     std::println("EKF Final Position Error = {}", ekf_final_r_err);
@@ -3226,7 +3226,7 @@ void run_world_ekf_step_diag() {
     std::println("Initial Error = {}", initial_err);
 
     std::println("World EKF Success = {}", od_status_success(world_step_result.status));
-    std::println("World EKF Status: {}", od_status_string(world_step_result.status));
+    std::println("World EKF Status: {}", status_string(world_step_result.status));
     if (od_status_success(step_result.status)) {
         StateTr world_err = world_step_result.filter.x - x0_truth;
         f64 world_state_err = statetr_to_vec6d(world_err).norm();
@@ -3242,7 +3242,7 @@ void run_world_ekf_step_diag() {
     }
 
     std::println("Direct EKF Success = {}", od_status_success(step_result.status));
-    std::println("Direct EKF Status: {}", od_status_string(step_result.status));
+    std::println("Direct EKF Status: {}", status_string(step_result.status));
     if (od_status_success(step_result.status)) {
         StateTr direct_err = step_result.filter.x - x0_truth;
         f64 direct_state_err = statetr_to_vec6d(direct_err).norm();
@@ -3310,8 +3310,8 @@ void run_ekf_prediction_only_diag() {
     print_diag_title("EKF Prediction Only Diagnostic");
     std::println("Predict Target Time = {}", t_target);
     std::println("Prediction Only Success = {}", od_status_success(step_result.status));
-    std::println("Prediction Only Status: {}", od_status_string(step_result.status));
-    std::println("Raw Predict Status: {}", od_status_string(predict_result.status));
+    std::println("Prediction Only Status: {}", status_string(step_result.status));
+    std::println("Raw Predict Status: {}", status_string(predict_result.status));
     std::println("Predicted Time = {}", step_result.filter.t);
     std::println("Expected Time = {}", t_target);
     std::println("Predicted State Finite = {}", step_state_finite);
@@ -3323,7 +3323,7 @@ void run_ekf_prediction_only_diag() {
     std::println("Prediction Covariance Norm = {}", step_result.filter.P.norm());
 }
 
-static ODStatus make_realtime_ekf_diag_schedule(
+static StatusCode make_realtime_ekf_diag_schedule(
     const World& world,
     f64 t,
     i32 i,
@@ -3345,7 +3345,7 @@ static ODStatus make_realtime_ekf_diag_schedule(
         for (const EntityId stat_id : stat_ids) {
             const Station* stat = world.station(stat_id);
             if (stat == nullptr) {
-                return ODStatus::observer_not_found;
+                return StatusCode::observer_not_found;
             }
 
             // estimation
@@ -3368,10 +3368,10 @@ static ODStatus make_realtime_ekf_diag_schedule(
         }
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
-static ODStatus make_realtime_ekf_diag_events_from_schedule(
+static StatusCode make_realtime_ekf_diag_events_from_schedule(
     const World& world,
     const svec<ODRealtimeScheduleItem>& schedule,
     svec<ODRealtimeEvent>& events,
@@ -3385,10 +3385,10 @@ static ODStatus make_realtime_ekf_diag_events_from_schedule(
 
         if (item.has_measurement) {
             if (item.instrument_id == kInvalidInstrumentId) {
-                return ODStatus::instrument_not_found;
+                return StatusCode::instrument_not_found;
             }
 
-            ODStatus status;
+            StatusCode status;
             if (noise_opts.enabled) {
                 status = make_noisy_world_measurement_event_instrument(
                     world,
@@ -3426,7 +3426,7 @@ static ODStatus make_realtime_ekf_diag_events_from_schedule(
         }
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 void run_realtime_ekf_world_update_diag() {
@@ -3475,27 +3475,27 @@ void run_realtime_ekf_world_update_diag() {
     R_pv.block<3, 3>(0, 0) *= sigma_r * sigma_r;
     R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
 
-    ODStatus radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(radec_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    ODStatus range_status
+    StatusCode range_status
         = add_range_instrument(*stat1, matXd1<1> * sigma_range * sigma_range);
     if (!od_status_success(range_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    ODStatus azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(azel_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
     InstrumentId rel_pv_id;
-    ODStatus rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
+    StatusCode rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
     if (!od_status_success(rel_posvel_status)) {
         std::println("Failed to add instrument");
         return;
@@ -3539,7 +3539,7 @@ void run_realtime_ekf_world_update_diag() {
         f64 t_meas = world.t_sim();
 
         svec<ODRealtimeScheduleItem> schedule;
-        ODStatus schedule_status = make_realtime_ekf_diag_schedule(
+        StatusCode schedule_status = make_realtime_ekf_diag_schedule(
             world,
             t_meas,
             i,
@@ -3549,7 +3549,7 @@ void run_realtime_ekf_world_update_diag() {
             schedule
         );
 
-        if (schedule_status != ODStatus::ok) {
+        if (schedule_status != StatusCode::ok) {
             last_result.status = schedule_status;
             ++failed_updates;
             break;
@@ -3557,13 +3557,13 @@ void run_realtime_ekf_world_update_diag() {
         schedule_items_generated += schedule.size();
 
         svec<ODRealtimeEvent> events;
-        ODStatus event_status = make_realtime_ekf_diag_events_from_schedule(
+        StatusCode event_status = make_realtime_ekf_diag_events_from_schedule(
             world,
             schedule,
             events,
             noise_opts
         );
-        if (event_status != ODStatus::ok) {
+        if (event_status != StatusCode::ok) {
             last_result.status = event_status;
             ++failed_updates;
             break;
@@ -3578,7 +3578,7 @@ void run_realtime_ekf_world_update_diag() {
         }
 
         event_status = validate_realtime_ekf_events(events, t_meas);
-        if (event_status != ODStatus::ok) {
+        if (event_status != StatusCode::ok) {
             last_result.status = event_status;
             ++failed_updates;
             break;
@@ -3624,7 +3624,7 @@ void run_realtime_ekf_world_update_diag() {
         last_result = od_ekf_update_world(input_predict_final);
         if (od_status_success(last_result.status)) {
             filter = last_result.filter;
-            if (last_result.status == ODStatus::prediction_only) {
+            if (last_result.status == StatusCode::prediction_only) {
                 ++prediction_updates;
                 ++processed_events;
             }
@@ -3644,7 +3644,7 @@ void run_realtime_ekf_world_update_diag() {
     print_station_instruments(*stat2);
     std::println();
 
-    std::println("Final Status: {}", od_status_string(last_result.status));
+    std::println("Final Status: {}", status_string(last_result.status));
     std::println("Final Success = {}", od_status_success(last_result.status));
     std::println();
 
@@ -3686,7 +3686,7 @@ void run_station_instrument_diag() {
     radec_instr1.enabled = true;
     radec_instr1.name = "Ra/Dec Observer";
     radec_instr1.R = mat2d1 * sigma_rad * sigma_rad;
-    ODStatus radec_status1
+    StatusCode radec_status1
         = add_station_instrument(*stat1, radec_instr1, radec_instr1.id);
 
     StationInstrument radec_instr2;
@@ -3694,7 +3694,7 @@ void run_station_instrument_diag() {
     radec_instr2.enabled = true;
     radec_instr2.name = "Ra/Dec Observer";
     radec_instr2.R = mat2d1 * sigma_rad * sigma_rad;
-    ODStatus radec_status2
+    StatusCode radec_status2
         = add_station_instrument(*stat1, radec_instr2, radec_instr2.id);
 
     StationInstrument range_instr;
@@ -3702,18 +3702,18 @@ void run_station_instrument_diag() {
     range_instr.enabled = true;
     range_instr.name = "Range Observer";
     range_instr.R = matXd1<1> * sigma_range * sigma_range;
-    ODStatus range_status = add_station_instrument(*stat1, range_instr, range_instr.id);
+    StatusCode range_status = add_station_instrument(*stat1, range_instr, range_instr.id);
 
     matXd R_radec;
-    ODStatus radec_id_status
+    StatusCode radec_id_status
         = station_measurement_covariance(*stat1, radec_instr1.id, R_radec);
 
     matXd R_range;
-    ODStatus range_type_status
+    StatusCode range_type_status
         = station_measurement_covariance(*stat1, ObservationType::range, R_range);
 
     matXd R_radec_type;
-    ODStatus radec_type_status
+    StatusCode radec_type_status
         = station_measurement_covariance(*stat1, ObservationType::radec, R_radec_type);
 
     f64 t = world.t_sim();
@@ -3721,7 +3721,7 @@ void run_station_instrument_diag() {
     EntityId sat_id = scenario.sat1_id;
 
     ODWorldMeasurementEvent range_type_event;
-    ODStatus range_type_event_status = make_world_measurement_event(
+    StatusCode range_type_event_status = make_world_measurement_event(
         world,
         ObservationType::range,
         stat_id,
@@ -3731,7 +3731,7 @@ void run_station_instrument_diag() {
     );
 
     ODWorldMeasurementEvent radec_type_event;
-    ODStatus radec_type_event_status = make_world_measurement_event(
+    StatusCode radec_type_event_status = make_world_measurement_event(
         world,
         ObservationType::radec,
         stat_id,
@@ -3741,7 +3741,7 @@ void run_station_instrument_diag() {
     );
 
     ODWorldMeasurementEvent radec_id_event;
-    ODStatus radec_id_event_status = make_world_measurement_event_instrument(
+    StatusCode radec_id_event_status = make_world_measurement_event_instrument(
         world,
         radec_instr1.id,
         stat_id,
@@ -3751,7 +3751,7 @@ void run_station_instrument_diag() {
     );
 
     ODWorldMeasurementEvent invalid_id_event;
-    ODStatus invalid_id_event_status = make_world_measurement_event_instrument(
+    StatusCode invalid_id_event_status = make_world_measurement_event_instrument(
         world,
         kInvalidInstrumentId,
         stat_id,
@@ -3761,34 +3761,34 @@ void run_station_instrument_diag() {
     );
 
     print_diag_title("Station Instrument Diagnostic");
-    std::println("Add RA/Dec 1 Status: {}", od_status_string(radec_status1));
+    std::println("Add RA/Dec 1 Status: {}", status_string(radec_status1));
     std::println("Add RA/Dec 1 ID: {}", radec_instr1.id);
-    std::println("Add RA/Dec 2 Status: {}", od_status_string(radec_status2));
+    std::println("Add RA/Dec 2 Status: {}", status_string(radec_status2));
     std::println("Add RA/Dec 2 ID: {}", radec_instr2.id);
-    std::println("Add Range Status: {}", od_status_string(range_status));
+    std::println("Add Range Status: {}", status_string(range_status));
     std::println("Add Range ID: {}", range_instr.id);
     std::println("Station Instrument Count: {}", stat1->instruments.size());
     std::println("Next Instrument ID: {}", stat1->next_instrument_id);
-    std::println("RA/Dec Query By ID Status: {}", od_status_string(radec_id_status));
+    std::println("RA/Dec Query By ID Status: {}", status_string(radec_id_status));
     std::println("RA/Dec Query By ID R Norm: {}", R_radec.norm());
-    std::println("Range Query By Type Status: {}", od_status_string(range_type_status));
+    std::println("Range Query By Type Status: {}", status_string(range_type_status));
     std::println("Range Query By Type R Norm: {}", R_range.norm());
-    std::println("RA/Dec Query By Type Status: {}", od_status_string(radec_type_status));
+    std::println("RA/Dec Query By Type Status: {}", status_string(radec_type_status));
     std::println("RA/Dec Query By Type Expected Ambiguous = true");
     std::println(
         "Range Event By Type Status: {}",
-        od_status_string(range_type_event_status)
+        status_string(range_type_event_status)
     );
     std::println("Range Event By Type z Size: {}", range_type_event.measurement.z.size());
     std::println("Range Event By Type R Norm: {}", range_type_event.measurement.R.norm());
     std::println(
         "RA/Dec Event By Type Status: {}",
-        od_status_string(radec_type_event_status)
+        status_string(radec_type_event_status)
     );
     std::println("RA/Dec Event By Type Expected Ambiguous = true");
     std::println(
         "RA/Dec Event By ID Status: {}",
-        od_status_string(radec_id_event_status)
+        status_string(radec_id_event_status)
     );
     std::println(
         "RA/Dec Event By ID Type: {}",
@@ -3798,7 +3798,7 @@ void run_station_instrument_diag() {
     std::println("RA/Dec Event By ID R Norm: {}", radec_id_event.measurement.R.norm());
     std::println(
         "Invalid Instrument Event Status: {}",
-        od_status_string(invalid_id_event_status)
+        status_string(invalid_id_event_status)
     );
     print_diag_title();
 }
@@ -3894,7 +3894,7 @@ void run_world_history_diag() {
     push_world_history_sample(history, sample2);
 
     vecXd z_radec_t1_interp;
-    ODStatus z_radec_status = world_predict_measurement_history(
+    StatusCode z_radec_status = world_predict_measurement_history(
         world,
         history,
         ObservationType::radec,
@@ -3904,7 +3904,7 @@ void run_world_history_diag() {
         z_radec_t1_interp
     );
     vecXd z_azel_t1_interp;
-    ODStatus z_azel_status = world_predict_measurement_history(
+    StatusCode z_azel_status = world_predict_measurement_history(
         world,
         history,
         ObservationType::azel,
@@ -3918,14 +3918,14 @@ void run_world_history_diag() {
     StateAtt x_att_sat_t1 = sample1.x_att.at(sat_id);
 
     StateTr x_tr_sat_t1_interp;
-    ODStatus sat_tr_status
+    StatusCode sat_tr_status
         = sample_tr_interp_linear(history, sat_id, t1, x_tr_sat_t1_interp);
     StateAtt x_att_sat_t1_interp;
-    ODStatus sat_att_status
+    StatusCode sat_att_status
         = sample_att_interp_linear(history, sat_id, t1, x_att_sat_t1_interp);
 
     StateTr x_tr_stat_t1_interp;
-    ODStatus stat_tr_status = sample_station_tr_interp_linear(
+    StatusCode stat_tr_status = sample_station_tr_interp_linear(
         world,
         history,
         stat1_id,
@@ -3933,7 +3933,7 @@ void run_world_history_diag() {
         x_tr_stat_t1_interp
     );
     StateAtt x_att_stat_t1_interp;
-    ODStatus stat_att_status = sample_station_att_interp_linear(
+    StatusCode stat_att_status = sample_station_att_interp_linear(
         world,
         history,
         stat1_id,
@@ -3950,10 +3950,10 @@ void run_world_history_diag() {
     std::println("Sampled at t1 = {}s", t1);
     std::println("Satellite Queries ------");
     if (!od_status_success(sat_tr_status)) {
-        std::println("Translation Status: {}", od_status_string(sat_tr_status));
+        std::println("Translation Status: {}", status_string(sat_tr_status));
     }
     if (!od_status_success(sat_att_status)) {
-        std::println("Attitude Status: {}", od_status_string(sat_att_status));
+        std::println("Attitude Status: {}", status_string(sat_att_status));
     }
     std::println("Sampled Position = {}", x_tr_sat_t1.r);
     std::println("Interpolated Position = {}", x_tr_sat_t1_interp.r);
@@ -3970,10 +3970,10 @@ void run_world_history_diag() {
     std::println();
     std::println("Station Queries ------");
     if (!od_status_success(stat_tr_status)) {
-        std::println("Translation Status: {}", od_status_string(stat_tr_status));
+        std::println("Translation Status: {}", status_string(stat_tr_status));
     }
     if (!od_status_success(stat_att_status)) {
-        std::println("Attitude Status: {}", od_status_string(stat_att_status));
+        std::println("Attitude Status: {}", status_string(stat_att_status));
     }
     std::println("Sampled Position = {}", x_tr_stat_t1.r);
     std::println("Interpolated Position = {}", x_tr_stat_t1_interp.r);
@@ -3991,7 +3991,7 @@ void run_world_history_diag() {
 
     std::println("Radec Measurements ------");
     if (!od_status_success(z_radec_status)) {
-        std::println("Measurement Status: {}", od_status_string(z_radec_status));
+        std::println("Measurement Status: {}", status_string(z_radec_status));
     }
     std::println("Sampled Measurement = {}", z_radec_t1);
     std::println("Interpolated Measurment = {}", z_radec_t1_interp);
@@ -4004,7 +4004,7 @@ void run_world_history_diag() {
 
     std::println("Az/El Measurements ------");
     if (!od_status_success(z_azel_status)) {
-        std::println("Measurement Status: {}", od_status_string(z_azel_status));
+        std::println("Measurement Status: {}", status_string(z_azel_status));
     }
     std::println("Sampled Measurement = {}", z_azel_t1);
     std::println("Interpolated Measurment = {}", z_azel_t1_interp);
@@ -4017,19 +4017,19 @@ void run_world_history_diag() {
 
     // bad queries
     StateTr x_tr_bad;
-    ODStatus status;
+    StatusCode status;
     status = sample_tr_interp_linear(history, sat_id, t0 - 1.0, x_tr_bad);
-    std::println("Query t < t0, status: {}", od_status_string(status));
+    std::println("Query t < t0, status: {}", status_string(status));
     status = sample_tr_interp_linear(history, sat_id, t2 + 1.0, x_tr_bad);
-    std::println("Query t > t2, status: {}", od_status_string(status));
+    std::println("Query t > t2, status: {}", status_string(status));
     status = sample_tr_interp_linear(history, sat_id + 100, t1, x_tr_bad);
-    std::println("Query missing body, status: {}", od_status_string(status));
+    std::println("Query missing body, status: {}", status_string(status));
     WorldHistory history_empty;
     status = sample_tr_interp_linear(history_empty, sat_id, t1, x_tr_bad);
-    std::println("Query empty history, status: {}", od_status_string(status));
+    std::println("Query empty history, status: {}", status_string(status));
 }
 
-static ODStatus make_realtime_ekf_diag_history_events_from_schedule(
+static StatusCode make_realtime_ekf_diag_history_events_from_schedule(
     const World& world,
     const WorldHistory& history,
     const svec<ODRealtimeScheduleItem>& schedule,
@@ -4044,10 +4044,10 @@ static ODStatus make_realtime_ekf_diag_history_events_from_schedule(
 
         if (item.has_measurement) {
             if (item.instrument_id == kInvalidInstrumentId) {
-                return ODStatus::instrument_not_found;
+                return StatusCode::instrument_not_found;
             }
 
-            ODStatus status;
+            StatusCode status;
             if (noise_opts.enabled) {
                 status = make_noisy_world_measurement_event_history_instrument(
                     world,
@@ -4087,7 +4087,7 @@ static ODStatus make_realtime_ekf_diag_history_events_from_schedule(
         }
     }
 
-    return ODStatus::ok;
+    return StatusCode::ok;
 }
 
 void run_world_history_ekf_diag() {
@@ -4136,27 +4136,27 @@ void run_world_history_ekf_diag() {
     R_pv.block<3, 3>(0, 0) *= sigma_r * sigma_r;
     R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
 
-    ODStatus radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(radec_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    ODStatus range_status
+    StatusCode range_status
         = add_range_instrument(*stat1, matXd1<1> * sigma_range * sigma_range);
     if (!od_status_success(range_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    ODStatus azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(azel_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
     InstrumentId rel_pv_id;
-    ODStatus rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
+    StatusCode rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
     if (!od_status_success(rel_posvel_status)) {
         std::println("Failed to add instrument");
         return;
@@ -4206,7 +4206,7 @@ void run_world_history_ekf_diag() {
         f64 t_meas = world.t_sim();
 
         svec<ODRealtimeScheduleItem> schedule;
-        ODStatus schedule_status = make_realtime_ekf_diag_schedule(
+        StatusCode schedule_status = make_realtime_ekf_diag_schedule(
             world,
             t_meas,
             i,
@@ -4216,7 +4216,7 @@ void run_world_history_ekf_diag() {
             schedule
         );
 
-        if (schedule_status != ODStatus::ok) {
+        if (schedule_status != StatusCode::ok) {
             last_result.status = schedule_status;
             ++failed_updates;
             break;
@@ -4224,14 +4224,14 @@ void run_world_history_ekf_diag() {
         schedule_items_generated += schedule.size();
 
         svec<ODRealtimeEvent> events;
-        ODStatus event_status = make_realtime_ekf_diag_history_events_from_schedule(
+        StatusCode event_status = make_realtime_ekf_diag_history_events_from_schedule(
             world,
             history,
             schedule,
             events,
             noise_opts
         );
-        if (event_status != ODStatus::ok) {
+        if (event_status != StatusCode::ok) {
             last_result.status = event_status;
             ++failed_updates;
             break;
@@ -4246,7 +4246,7 @@ void run_world_history_ekf_diag() {
         }
 
         event_status = validate_realtime_ekf_events(events, t_meas);
-        if (event_status != ODStatus::ok) {
+        if (event_status != StatusCode::ok) {
             last_result.status = event_status;
             ++failed_updates;
             break;
@@ -4295,7 +4295,7 @@ void run_world_history_ekf_diag() {
         last_result = od_ekf_update_world(input_predict_final);
         if (od_status_success(last_result.status)) {
             filter = last_result.filter;
-            if (last_result.status == ODStatus::prediction_only) {
+            if (last_result.status == StatusCode::prediction_only) {
                 ++prediction_updates;
                 ++processed_events;
             }
@@ -4315,7 +4315,7 @@ void run_world_history_ekf_diag() {
     print_station_instruments(*stat2);
     std::println();
 
-    std::println("Final Status: {}", od_status_string(last_result.status));
+    std::println("Final Status: {}", status_string(last_result.status));
     std::println("Final Success = {}", od_status_success(last_result.status));
     std::println();
 
@@ -4345,5 +4345,5 @@ void run_world_history_ekf_diag() {
         pwd + "/assets/output/sat_csv_out_test.csv",
         csv_opts
     );
-    std::println("Write Status: {}", od_status_string(status));
+    std::println("Write Status: {}", status_string(status));
 }
