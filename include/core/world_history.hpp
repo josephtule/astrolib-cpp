@@ -455,7 +455,8 @@ inline StatusCode sample_station_att_interp_linear(
 
     EntityId anchor_id = stat->anchor_id;
     StateAtt x_att_anchor;
-    StatusCode status = sample_att_interp_linear(history, anchor_id, t, x_att_anchor, tol);
+    StatusCode status
+        = sample_att_interp_linear(history, anchor_id, t, x_att_anchor, tol);
     if (!od_status_success(status)) return status;
 
     out.q = stat_att_enu_from_detic(x_att_anchor, stat->llh_BCBF);
@@ -513,7 +514,8 @@ inline StatusCode sample_att_history(
 
     case HistoryInterpolation::nearest: {
         if (body->body_type == BodyType::station) {
-            return sample_station_att_nearest(world, history, id, t, out, opts.tol);
+            status = sample_station_att_nearest(world, history, id, t, out, opts.tol);
+            return status;
         }
         return sample_att_nearest(history, id, t, out, opts.tol);
     } break;
@@ -521,9 +523,12 @@ inline StatusCode sample_att_history(
         [[fallthrough]]; // NOTE: maybe do normalized linear instead of slerp?
     case HistoryInterpolation::slerp: {
         if (body->body_type == BodyType::station) {
-            return sample_station_att_interp_linear(world, history, id, t, out, opts.tol);
+            status
+                = sample_station_att_interp_linear(world, history, id, t, out, opts.tol);
+            return status;
         }
-        return sample_station_att_interp_linear(world, history, id, t, out, opts.tol);
+        status = sample_att_interp_linear(history, id, t, out, opts.tol);
+        return status;
     } break;
     }
 

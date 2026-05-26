@@ -3,6 +3,7 @@
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
 #include "core/estimation_recursive.hpp"
+#include "core/interpolation.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
 #include "core/observation_type.hpp"
@@ -502,6 +503,7 @@ StatusCode make_world_measurement_event_history(
     f64 t,
     const matXd& R,
     ODWorldMeasurementEvent& event,
+    const HistorySampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
     f64 tol
@@ -515,6 +517,7 @@ StatusCode make_world_measurement_event_history(
         target_id,
         t,
         z_pred,
+        sample_opts,
         angle_in,
         angle_out,
         tol
@@ -551,6 +554,7 @@ StatusCode make_world_measurement_event_history_instrument(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
+    const HistorySampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
     f64 tol
@@ -575,6 +579,7 @@ StatusCode make_world_measurement_event_history_instrument(
         t,
         instrument.R,
         event,
+        sample_opts,
         angle_in,
         angle_out,
         tol
@@ -595,6 +600,7 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
     f64 t,
     ODWorldMeasurementEvent& event,
     const MeasurementNoiseOptions& noise_opts,
+    const HistorySampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
     f64 tol
@@ -607,6 +613,7 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
         target_id,
         t,
         event,
+        sample_opts,
         angle_in,
         angle_out,
         tol

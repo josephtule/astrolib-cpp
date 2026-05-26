@@ -2,9 +2,11 @@
 
 #include "core/estimation_common.hpp"
 #include "core/estimation_recursive.hpp"
+#include "core/interpolation.hpp"
 #include "core/measurement.hpp"
 #include "core/world.hpp"
 #include "core/world_history.hpp"
+#include "util/constants.hpp"
 #include "util/units.hpp"
 
 struct ODWorldMeasurementEvent {
@@ -147,7 +149,6 @@ StatusCode make_noisy_world_measurement_event_instrument(
     f64 tol = tol12
 );
 
-
 StatusCode make_world_measurement_event_history(
     const World& world,
     const WorldHistory& history,
@@ -157,6 +158,7 @@ StatusCode make_world_measurement_event_history(
     f64 t,
     const matXd& R,
     ODWorldMeasurementEvent& event,
+    const HistorySampleOptions& sample_opts,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
@@ -170,6 +172,7 @@ StatusCode make_world_measurement_event_history_instrument(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
+    const HistorySampleOptions& sample_opts,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
@@ -184,6 +187,7 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
     f64 t,
     ODWorldMeasurementEvent& event,
     const MeasurementNoiseOptions& noise_opts,
+    const HistorySampleOptions& sample_opts,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12

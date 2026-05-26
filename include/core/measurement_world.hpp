@@ -4,6 +4,7 @@
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
+#include "core/interpolation.hpp"
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
 #include "core/od_dynamics.hpp"
@@ -218,23 +219,18 @@ inline StatusCode world_predict_measurement_history(
     EntityId target_id,
     f64 t,
     vecXd& z_pred,
+    const HistorySampleOptions& sample_opts = HistorySampleOptions{},
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12
 ) {
     StateTr x_tr_observer;
-    StatusCode status = sample_station_tr_interp_linear(
-        world,
-        history,
-        observer_id,
-        t,
-        x_tr_observer,
-        tol
-    );
+       StatusCode status
+        = sample_tr_history(world, history, observer_id, t, x_tr_observer, sample_opts);
     if (!od_status_success(status)) return status;
 
     StateTr x_tr_target;
-    status = sample_tr_interp_linear(history, target_id, t, x_tr_target, tol);
+    status = sample_tr_history(world, history, target_id, t, x_tr_target, sample_opts);
     if (!od_status_success(status)) return status;
 
     MeasurementContext ctx;
@@ -250,11 +246,11 @@ inline StatusCode world_predict_measurement_history(
         if (anchor == nullptr) return StatusCode::observer_not_found;
 
         StateTr x_tr_anchor;
-        status = sample_tr_interp_linear(history, anchor->id, t, x_tr_anchor, tol);
+        status = sample_tr_history(world, history, anchor->id, t, x_tr_anchor, sample_opts);
         if (!od_status_success(status)) return status;
 
         StateAtt x_att_anchor;
-        status = sample_att_interp_linear(history, anchor->id, t, x_att_anchor, tol);
+        status = sample_att_history(world, history, anchor->id, t, x_att_anchor, sample_opts);
         if (!od_status_success(status)) return status;
         if (!observer->anchored || observer->anchor_id == kInvalidEntityId) {
             return StatusCode::observer_not_found;

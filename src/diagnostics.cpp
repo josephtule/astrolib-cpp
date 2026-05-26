@@ -9,6 +9,7 @@
 #include "core/history_io.hpp"
 #include "core/ingest.hpp"
 #include "core/integrator.hpp"
+#include "core/interpolation.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
 #include "core/observation_type.hpp"
@@ -2386,8 +2387,9 @@ void run_render_pipeline_diag() {
         //     sat_nums,
         //     tle_opts
         // );
+        i32 num_sats = 100;
         TLEStatus tle_status
-            = read_tle_data_count(pwd + "/assets/tle_all.txt", tles, 32, tle_opts);
+            = read_tle_data_count(pwd + "/assets/tle_all.txt", tles, num_sats, tle_opts);
         if (tle_status != TLEStatus::ok) {
             std::println("TLE Read Failure: {}", tle_status_string(tle_status));
             return;
@@ -3475,7 +3477,8 @@ void run_realtime_ekf_world_update_diag() {
     R_pv.block<3, 3>(0, 0) *= sigma_r * sigma_r;
     R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
 
-    StatusCode radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode radec_status
+        = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(radec_status)) {
         std::println("Failed to add instrument");
         return;
@@ -3786,10 +3789,7 @@ void run_station_instrument_diag() {
         status_string(radec_type_event_status)
     );
     std::println("RA/Dec Event By Type Expected Ambiguous = true");
-    std::println(
-        "RA/Dec Event By ID Status: {}",
-        status_string(radec_id_event_status)
-    );
+    std::println("RA/Dec Event By ID Status: {}", status_string(radec_id_event_status));
     std::println(
         "RA/Dec Event By ID Type: {}",
         observation_type_str(radec_id_event.measurement.type)
@@ -4034,7 +4034,8 @@ static StatusCode make_realtime_ekf_diag_history_events_from_schedule(
     const WorldHistory& history,
     const svec<ODRealtimeScheduleItem>& schedule,
     svec<ODRealtimeEvent>& events,
-    const MeasurementNoiseOptions& noise_opts
+    const MeasurementNoiseOptions& noise_opts,
+    const HistorySampleOptions& sample_opts
 ) {
     // materialize the schedule
     events.clear();
@@ -4057,7 +4058,8 @@ static StatusCode make_realtime_ekf_diag_history_events_from_schedule(
                     item.target_id,
                     item.t,
                     event,
-                    noise_opts
+                    noise_opts,
+                    sample_opts
                 );
             } else {
                 status = make_world_measurement_event_history_instrument(
@@ -4067,7 +4069,8 @@ static StatusCode make_realtime_ekf_diag_history_events_from_schedule(
                     item.observer_id,
                     item.target_id,
                     item.t,
-                    event
+                    event,
+                    sample_opts
                 );
             }
             if (!od_status_success(status)) {
@@ -4136,7 +4139,8 @@ void run_world_history_ekf_diag() {
     R_pv.block<3, 3>(0, 0) *= sigma_r * sigma_r;
     R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
 
-    StatusCode radec_status = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode radec_status
+        = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(radec_status)) {
         std::println("Failed to add instrument");
         return;
@@ -4196,6 +4200,10 @@ void run_world_history_ekf_diag() {
     std::mt19937_64 rng(12345);
     MeasurementNoiseOptions noise_opts{.rng = rng, .enabled = true, .diagonal = false};
 
+    HistorySampleOptions sample_opts;
+    sample_opts.tr_interp = HistoryInterpolation::nearest;
+    sample_opts.att_interp = HistoryInterpolation::nearest;
+
     WorldHistory history;
     history.max_samples = 10;
 
@@ -4222,6 +4230,9 @@ void run_world_history_ekf_diag() {
             break;
         }
         schedule_items_generated += schedule.size();
+        // for (auto& item : schedule) {
+        //     item.t = item.t - dt / 4.0;
+        // }
 
         svec<ODRealtimeEvent> events;
         StatusCode event_status = make_realtime_ekf_diag_history_events_from_schedule(
@@ -4229,7 +4240,8 @@ void run_world_history_ekf_diag() {
             history,
             schedule,
             events,
-            noise_opts
+            noise_opts,
+            sample_opts
         );
         if (event_status != StatusCode::ok) {
             last_result.status = event_status;
