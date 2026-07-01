@@ -160,3 +160,10 @@ inline void normalize_quaternion_inplace(vec4d& q, T tol = tol12) {
     if (q_mag <= tol) return;
     q /= q_mag;
 }
+
+template <class T>
+inline mat3<T> matrix_cross(const vec3<T>& v) {
+    const T T0 = T(0);
+
+    return mat3<T>{T0, -v(2), v(1), v(2), T0, -v(0), -v(1), v(0), T0};
+}

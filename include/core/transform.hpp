@@ -1,7 +1,9 @@
 #pragma once
 
 #include "core/body.hpp"
+#include "core/estimation_common.hpp"
 #include "util/constants.hpp"
+#include "util/math.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
@@ -52,6 +54,16 @@ inline mat3<T> rotZ_active(T angle, UAngle uin = UAngle::radian) {
 }
 
 enum struct RotAxis : i32 { x = 1, y = 2, z = 3 };
+inline StatusCode i32_to_rotaxis(i32 i, RotAxis& out) {
+    switch (i) {
+    case 1: out = RotAxis::x; break;
+    case 2: out = RotAxis::y; break;
+    case 3: out = RotAxis::z; break;
+    default: return StatusCode::invalid_input;
+    }
+
+    return StatusCode::ok;
+}
 
 template <typename T>
 inline mat3<T> rot(T angle, RotAxis axis, UAngle uin = UAngle::radian) {
@@ -120,6 +132,56 @@ inline mat3<T> ep_to_dcm(const vec4<T>& q) {
     R(2, 2) = -q11 - q22 + q33 + q44; // = 1.0 - 2.0 * q11 - 2.0 * q22;
 
     return R;
+}
+
+template <class T>
+inline vec4<T> crp_to_ep(const vec3<T> crp) {
+    vec4<T> q = q_identity;
+
+    T rho2 = crp.squaredNorm();
+    T denom = std::sqrt(static_cast<T>(1.0) + rho2);
+    for (i32 i = 0; i < 3; ++i) {
+        q(i) = crp(i) / denom;
+    }
+    q(3) = static_cast<T>(1.0) / denom;
+
+    return q;
+}
+
+template <class T>
+inline mat3<T> crp_to_dcm(const vec3<T> crp) {
+    T T0 = static_cast<T>(0.0);
+    T T1 = static_cast<T>(1.0);
+    T T2 = static_cast<T>(2.0);
+    T rho2 = crp.squaredNorm();
+    mat3<T> eye3 = mat3<T>::Identity();
+
+    return (T1 / (T1 + rho2))
+           * ((T1 - rho2) * eye3 + T2 * crp * crp.transpose() - T2 * matrix_cross(crp));
+}
+
+template <class T>
+inline vec4<T> mrp_to_ep(const vec3<T> mrp) {
+    vec4<T> q = q_identity;
+
+    T T1 = static_cast<T>(1.0);
+    T T2 = static_cast<T>(2.0);
+    T sig2 = mrp.squaredNorm();
+    T denom = T1 + sig2;
+
+    for (i32 i = 0; i < 3; ++i) {
+        q(i) = T2 / denom;
+    }
+    q(3) = (T1 - sig2) / denom;
+
+    return q;
+}
+
+template <class T>
+inline mat3<T> mrp_to_dcm(const vec3<T> mrp) {
+    T sig2 = mrp.squaredNorm();
+    vec3<T> crp = (static_cast<T>(2.0) * mrp) / (static_cast<T>(1.0 - sig2));
+    return crp_to_ep(crp);
 }
 
 template <typename T>
@@ -357,3 +419,17 @@ inline vec3d detic_to_bcbf(
     return r_bcbf;
 }
 
+template <typename T>
+inline vec4<T> quat_from_axis_angle_passive(
+    const vec3<T>& axis,
+    T angle,
+    const UAngle u_in = UAngle::radian
+) {
+    if (u_in != UAngle::radian) {
+        angle = convert_angle(angle, u_in, UAngle::radian);
+    }
+
+    T sao2 = std::sin(angle / static_cast<T>(2.0));
+    T cao2 = std::cos(angle / static_cast<T>(2.0));
+    return vec4{axis(0) * sao2, axis(1) * sao2, axis(2) * sao2, cao2};
+}

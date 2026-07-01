@@ -571,7 +571,6 @@ inline VarStateTr propagate_var_tr_od(
         return deriv_var_tr_od(t, y, cfg);
     };
     for (i32 i = 0; i < n_steps; ++i) {
-        // y = rk4_step_var_tr_od(t, y, dt_step, cfg);
         auto ty
             = step_integrator<VarStateTr, VarDerivTr>(f, t, y, dt_step, cfg.integrator);
         t = ty.first;

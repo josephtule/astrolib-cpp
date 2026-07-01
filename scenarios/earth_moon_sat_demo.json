@@ -1,0 +1,112 @@
+{
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "metadata": {
+        "name": "earth_moon_sat_demo",
+        "rng_seed": 12345
+    },
+    "units": {
+        "length": "km",
+        "time": "s",
+        "angle": "rad",
+        "mass": "kg"
+    },
+    "frames": {
+        "simulation_inertial": "I",
+        "attitude_quaternion": "passive_N_to_B",
+        "station_local": "ENU"
+    },
+    "providers": {
+        "gravity": [
+            {
+                "id": "EGM2008_gfc",
+                "type": "egm2008",
+                "path": "assets/EGM2008.gfc.txt",
+                "normalized": true
+            },
+            {
+                "id": "JGL165P1_gfc",
+                "type": "JGL165P1",
+                "path": "assets/JGL165P1.gfc.txt",
+                "normalized": true
+            }
+        ]
+    },
+    "celestials": [
+        {
+            "id": "earth",
+            "model": "wgs84",
+            "state_tr": {
+                "r": [0.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 0.0]
+            },
+            "state_att": {
+                "type": "axis_angle",
+                "axis": [1.0, 0.0, 0.0],
+                "angle": 0.4014257279586958,
+                "w": [0.0, 0.0, 7.2921159e-5]
+            },
+            "gravity": {
+                "model": "spherical_harmonics",
+                "degree": 4,
+                "order": 4,
+                "coefficients": "EGM2008_gfc"
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "moon",
+            "model": "custom",
+            "state_tr": {},
+            "state_att": {},
+            "gravity": {
+                "model": "spherical_harmonics",
+                "degree": 4,
+                "order": 4,
+                "coefficients": "JGL165P1_gfc"
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        }
+    ],
+    "satellites": [
+        {
+            "id": "sat1",
+            "state_tr": {
+                "r": [7000.0, 0.0, 0.0],
+                "v": [0.0, 7.5, 1.0]
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "diag": [100.0, 200.0, 300.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        }
+    ],
+    "world_stepper": {
+        "translation_integrator": "rk4",
+        "attitude_integrator": "rk4",
+        "substeps": 1,
+        "ticks": 10,
+        "time_scale": 0.1
+    },
+    "raylib_settings": {
+        "target_fps": 60,
+        "background_color": [30, 30, 30, 255],
+        "draw_inertial_axes": true
+    }
+}

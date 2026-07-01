@@ -1,0 +1,105 @@
+{
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "metadata": {
+        "name": "earth_station_leo_demo",
+        "rng_seed": 12345
+    },
+    "units": {
+        "length": "km",
+        "time": "s",
+        "angle": "rad",
+        "mass": "kg"
+    },
+    "frames": {
+        "simulation_inertial": "I",
+        "attitude_quaternion": "passive_N_to_B",
+        "station_local": "ENU"
+    },
+    "providers": {
+        "gravity": [
+            {
+                "id": "EGM2008_gfc",
+                "type": "egm2008",
+                "path": "assets/EGM2008.gfc.txt",
+                "normalized": true
+            }
+        ]
+    },
+    "celestials": [
+        {
+            "id": "earth",
+            "model": "wgs84",
+            "state_tr": {
+                "r": [0.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 0.0]
+            },
+            "state_att": {
+                "type": "axis_angle",
+                "axis": [1.0, 0.0, 0.0],
+                "angle": 0.4014257279586958,
+                "w": [0.0, 0.0, 7.2921159e-5]
+            },
+            "gravity": {
+                "model": "spherical_harmonics",
+                "degree": 6,
+                "order": 6,
+                "coefficients": "EGM2008_gfc"
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        }
+    ],
+    "satellites": [
+        {
+            "id": "sat1",
+            "state_tr": {
+                "r": [7000.0, 0.0, 0.0],
+                "v": [0.0, 7.5, 1.0]
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "diag": [100.0, 200.0, 300.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        }
+    ],
+    "stations": [
+        {
+            "id": "stat1",
+            "anchor": "earth",
+            "coordinate_type": "detic_llh",
+            "llh": [0.7853981633974483, 0.7853981633974483, 0.0],
+            "local_frame": "ENU",
+            "instruments": [
+                {
+                    "id": "stat1_radec",
+                    "type": "radec",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "diag": [1.0e-10, 1.0e-10]
+                    }
+                }
+            ]
+        }
+    ],
+    "world_stepper": {
+        "translation_integrator": "rk4",
+        "attitude_integrator": "rk4",
+        "substeps": 1,
+        "ticks": 10,
+        "time_scale": 0.1
+    }
+}

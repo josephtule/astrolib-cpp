@@ -1,15 +1,28 @@
 #pragma once
 
+#include "core/estimation_common.hpp"
 #include "util/constants.hpp"
 #include "util/typedefs.hpp"
 
-enum struct UAngle : i32 {
-    radian,
-    degree,
-    arcminute,
-    arcsecond,
-    milliarcsecond
-};
+enum struct UAngle : i32 { radian, degree, arcminute, arcsecond, milliarcsecond };
+
+inline StatusCode string_to_uangle(std::string str, UAngle& out) {
+    if (str == "radian") {
+        out = UAngle::radian;
+    } else if (str == "degree") {
+        out = UAngle::degree;
+    } else if (str == "arcminute") {
+        out = UAngle::arcminute;
+    } else if (str == "arcsecond") {
+        out = UAngle::arcsecond;
+    } else if (str == "milliarcsecond") {
+        out = UAngle::milliarcsecond;
+    } else {
+        return StatusCode::invalid_input;
+    }
+
+    return StatusCode::ok;
+}
 
 enum struct ULength : i32 {
     nanometer,
@@ -60,7 +73,7 @@ T convert_angle(T val, UAngle uin, UAngle uout) {
     // convert to output units
     switch (uout) {
     case UAngle::radian: break;
-    case UAngle::milliarcsecond: val*=static_cast<T>(1000); [[fallthrough]];
+    case UAngle::milliarcsecond: val *= static_cast<T>(1000); [[fallthrough]];
     case UAngle::arcsecond: val *= static_cast<T>(60); [[fallthrough]];
     case UAngle::arcminute: val *= static_cast<T>(60); [[fallthrough]];
     case UAngle::degree: val *= rad_to_deg; break;

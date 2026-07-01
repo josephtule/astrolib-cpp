@@ -241,3 +241,5 @@ template <class T, int N, int M>
 inline mat<f64, N, M> mf64(const mat<T, N, M>& m) {
     return m.template cast<f64>();
 }
+
+inline vec4d q_identity{0.0, 0.0, 0.0, 1.0};

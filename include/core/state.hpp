@@ -7,7 +7,6 @@ struct StateTr {
     vec3d v = vec3d0; // velocity, inertial
 };
 
-inline vec4d q_identity{0.0, 0.0, 0.0, 1.0};
 struct StateAtt {
     vec4d q = q_identity; // euler-parameter/quaternion, N -> B
     vec3d w = vec3d0;     // angular velocity, in body frame

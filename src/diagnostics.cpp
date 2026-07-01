@@ -4233,6 +4233,22 @@ void run_world_history_ekf_diag() {
         // for (auto& item : schedule) {
         //     item.t = item.t - dt / 4.0;
         // }
+        // TODO: the above runs if you comment out
+        // if (event.t < t_prev - tol_time) {
+        //     return StatusCode::time_mismatch;
+        // }
+        // in estimation_world.cpp and
+        // if (dt < -tol) {
+        //     result.status = StatusCode::propagation_failed;
+        //     return result;
+        // } else if (std::abs(dt) <= tol) {
+        //     // same epoch
+        //     dt = 0.0;
+        // }
+        // in estimation_recursive.
+        // will likely need to allow backwards propagation with the above comments, do the
+        // prediction/measurement/ekf, then propagate forward again back to the world step
+        // time?
 
         svec<ODRealtimeEvent> events;
         StatusCode event_status = make_realtime_ekf_diag_history_events_from_schedule(
