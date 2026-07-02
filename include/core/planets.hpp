@@ -180,6 +180,4 @@ inline bool read_gfc(
         S(n, m) = s;
     }
     return true;
-
-    return true;
 }

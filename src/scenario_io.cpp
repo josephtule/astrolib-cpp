@@ -584,6 +584,27 @@ static StatusCode parse_flat_mat3d(const json& value, mat3d& out, const string& 
     return StatusCode::ok;
 }
 
+static StatusCode parse_flat_matXd(
+    const json& value,
+    matXd& out,
+    const i32 n,
+    const i32 m,
+    const string& path
+) {
+    if (!value.is_array()) return StatusCode::invalid_input;
+    if (n <= 0 || m <= 0 || value.size() != n * m) return StatusCode::invalid_input;
+
+    matXd temp(n, m);
+    for (i32 i = 0; i < n * m; ++i) {
+        if (!value.at(i).is_number()) return StatusCode::invalid_input;
+        temp(i / m, i % m) = value[i].get<f64>();
+        if (!isfinite(temp(i / m, i % m))) return StatusCode::invalid_input;
+    }
+
+    out = temp;
+    return StatusCode::ok;
+}
+
 template <int N, int M>
 static StatusCode parse_flat_matNMd(
     const json& value,
@@ -608,10 +629,13 @@ static StatusCode parse_nested_matXd(const json& value, matXd& out, const string
     // array = [[row0], [row1], ...]
     if (!value.is_array()) return StatusCode::invalid_input;
     i32 n = value.size();
+    if (n <= 0) return StatusCode::invalid_input;
+    if (!value[0].is_array()) return StatusCode::invalid_input;
     i32 m = value[0].size();
 
     matXd temp(n, m);
     for (i32 i = 0; i < n; ++i) {
+        if (!value[i].is_array()) return StatusCode::invalid_input;
         i32 m_current = value[i].size();
         if (m_current != m) return StatusCode::invalid_input; // check row size
         for (i32 j = 0; j < m; ++j) {
@@ -627,10 +651,11 @@ static StatusCode parse_nested_matXd(const json& value, matXd& out, const string
 }
 
 static StatusCode parse_nested_mat3d(const json& value, mat3d& out, const string& path) {
-    if (!value.is_array()) return StatusCode::invalid_input;
+    if (!value.is_array() || value.size() != 3) return StatusCode::invalid_input;
 
     mat3d temp;
     for (i32 i = 0; i < 3; ++i) {
+        if (!value[i].is_array()) return StatusCode::invalid_input;
         i32 m_current = value[i].size();
         if (m_current != 3) return StatusCode::invalid_input;
         for (i32 j = 0; j < 3; ++j) {
@@ -696,7 +721,7 @@ static StatusCode parse_array(
     std::array<T, N> temp;
     for (i32 i = 0; i < N; ++i) {
         if (!value.at(i).is_number()) return StatusCode::invalid_input;
-        temp[i] = value[i].get<f64>();
+        temp[i] = value[i].get<T>();
         if (!isfinite(temp[i])) return StatusCode::invalid_input;
     }
 
@@ -746,6 +771,22 @@ static StatusCode parse_opt_flat_mat3d(
     if (!found) return StatusCode::ok;
 
     return parse_flat_mat3d(*child, out, path + "." + key);
+}
+
+static StatusCode parse_req_flat_matXd(
+    const json& object,
+    const string& key,
+    matXd& out,
+    const i32 n,
+    const i32 m,
+    const string& path
+) {
+    const json* child = nullptr;
+
+    StatusCode status = get_req_child(object, key, child, path);
+    if (status != StatusCode::ok) return status;
+
+    return parse_flat_matXd(*child, out, n, m, path + "." + key);
 }
 
 template <int N, int M>
@@ -804,7 +845,7 @@ static StatusCode parse_req_vec3d(
 static StatusCode parse_opt_vec3d(
     const json& object,
     const string& key,
-    bool found,
+    bool& found,
     vec3d& out,
     const string& path
 ) {
@@ -851,15 +892,20 @@ static StatusCode parse_state_tr_config(
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
 
-    StatusCode status = parse_req_vec3d(object, "r", out.r, path);
+    StatusCode status;
+    const json* state_tr = nullptr;
+    status = get_req_child(object, "state_tr", state_tr, path);
     if (status != StatusCode::ok) return status;
 
-    status = parse_req_vec3d(object, "v", out.v, path);
+    status = parse_req_vec3d(*state_tr, "r", out.r, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_req_vec3d(*state_tr, "v", out.v, path);
     if (status != StatusCode::ok) return status;
 
     bool found_ulength;
     status = parse_opt_units_length(
-        object,
+        *state_tr,
         "units_length",
         found_ulength,
         out.units_length,
@@ -894,24 +940,24 @@ static StatusCode parse_covariance(
 
     i32 input_size = -1;
     if (type == "diagonal" || type == "diag") {
-        status = parse_array_size(object, "diag", input_size, path);
+        status = parse_array_size(object, "values", input_size, path);
         if (status != StatusCode::ok) return status;
         if (input_size != dim) return StatusCode::invalid_covariance;
 
         vecXd temp_diag;
-        status = parse_req_vecXd(object, "diag", temp_diag, path);
+        status = parse_req_vecXd(object, "values", temp_diag, path);
         if (status != StatusCode::ok) return status;
 
         out.covariance = temp_diag.asDiagonal();
     } else if (type == "flattened" || type == "flat") {
-        status = parse_req_nested_matXd(object, "diag", out.covariance, path);
+        status = parse_req_flat_matXd(object, "values", out.covariance, dim, dim, path);
         if (status != StatusCode::ok) return status;
     } else if (type == "matrix" || type == "mat" || type == "nested") {
-        status = parse_array_size(object, "matrix", input_size, path);
+        status = parse_array_size(object, "values", input_size, path);
         if (status != StatusCode::ok) return status;
-        if (input_size != dim * dim) return StatusCode::invalid_covariance;
+        if (input_size != dim) return StatusCode::invalid_covariance;
 
-        status = parse_req_nested_matXd(object, "matrix", out.covariance, path);
+        status = parse_req_nested_matXd(object, "values", out.covariance, path);
         if (status != StatusCode::ok) return status;
     } else {
         return StatusCode::invalid_input;
@@ -930,7 +976,7 @@ static StatusCode parse_instrument_config(
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
 
-    StatusCode status = parse_req_string(object, "name", out.name, path);
+    StatusCode status = parse_req_string(object, "id", out.id, path);
     if (status != StatusCode::ok) return status;
 
     string type_str;
@@ -968,10 +1014,13 @@ static StatusCode parse_state_att_config(
     if (!object.is_object()) return StatusCode::invalid_input;
 
     StatusCode status;
+    const json* state_att = nullptr;
+    status = get_req_child(object, "state_att", state_att, path);
+    if (status != StatusCode::ok) return status;
 
     bool found_uangle;
     status = parse_opt_units_angle(
-        object,
+        *state_att,
         "units_angle",
         found_uangle,
         out.units_angle,
@@ -981,31 +1030,25 @@ static StatusCode parse_state_att_config(
     if (!found_uangle) out.units_angle = UAngle::radian;
 
     bool found_type = false;
-    status = parse_opt_attitude_type(object, "type", found_type, out.type, path);
+    status = parse_opt_attitude_type(*state_att, "type", found_type, out.type, path);
     if (status != StatusCode::ok) return status;
 
     if (found_type) {
         switch (out.type) {
         case AttitudeType::quaternion: {
-            status = parse_req_vec4d(object, "q", out.q, path);
+            status = parse_req_vec4d(*state_att, "q", out.q, path);
             if (status != StatusCode::ok) return status;
         } break;
         case AttitudeType::dcm: {
-            status = parse_req_flat_matNMd(object, "dcm", out.dcm, path);
+            status = parse_req_flat_matNMd(*state_att, "dcm", out.dcm, path);
             if (status != StatusCode::ok) return status;
             out.q = dcm_to_ep(out.dcm);
         } break;
         case AttitudeType::axis_angle: {
-            string temp_units_angle = "";
-            status = parse_req_string(object, "units_angle", temp_units_angle, path);
-            if (status != StatusCode::ok) return status;
-            status = parse_units_angle(temp_units_angle, out.units_angle);
+            status = parse_req_vec3d(*state_att, "axis", out.axis, path);
             if (status != StatusCode::ok) return status;
 
-            status = parse_req_vec3d(object, "axis", out.axis, path);
-            if (status != StatusCode::ok) return status;
-
-            status = parse_req_f64(object, "angle", out.angle, path);
+            status = parse_req_f64(*state_att, "angle", out.angle, path);
             if (status != StatusCode::ok) return status;
             out.axis.normalize();
 
@@ -1013,15 +1056,15 @@ static StatusCode parse_state_att_config(
         } break;
         case AttitudeType::euler_angles: {
             string temp_units_angle = "";
-            status = parse_req_string(object, "units_angle", temp_units_angle, path);
+            status = parse_req_string(*state_att, "units_angle", temp_units_angle, path);
             if (status != StatusCode::ok) return status;
             status = parse_units_angle(temp_units_angle, out.units_angle);
             if (status != StatusCode::ok) return status;
 
-            status = parse_req_vec3d(object, "angles", out.angles, path);
+            status = parse_req_vec3d(*state_att, "angles", out.angles, path);
             if (status != StatusCode::ok) return status;
 
-            status = parse_req_array<i32, 3>(object, "sequence", out.sequence, path);
+            status = parse_req_array<i32, 3>(*state_att, "sequence", out.sequence, path);
             if (status != StatusCode::ok) return status;
 
             std::array<RotAxis, 3> rots;
@@ -1034,12 +1077,12 @@ static StatusCode parse_state_att_config(
             out.q = dcm_to_ep(dcm);
         } break;
         case AttitudeType::crp: {
-            status = parse_req_vec3d(object, "axis", out.axis, path);
+            status = parse_req_vec3d(*state_att, "axis", out.axis, path);
             if (status != StatusCode::ok) return status;
             out.q = crp_to_ep(out.axis);
         } break;
         case AttitudeType::mrp: {
-            status = parse_req_vec3d(object, "axis", out.axis, path);
+            status = parse_req_vec3d(*state_att, "axis", out.axis, path);
             if (status != StatusCode::ok) return status;
             out.q = mrp_to_ep(out.axis);
         } break;
@@ -1054,7 +1097,7 @@ static StatusCode parse_state_att_config(
     }
 
     bool found_w;
-    status = parse_opt_vec3d(object, "w", found_w, out.w, path);
+    status = parse_opt_vec3d(*state_att, "w", found_w, out.w, path);
     if (status != StatusCode::ok) return status;
     if (!found_w) {
         out.w = vec3d0;
@@ -1077,35 +1120,22 @@ static StatusCode parse_gravity_provider_config(
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
 
-    StatusCode status = parse_req_string(object, "id", out.id, path);
+    StatusCode status;
+
+    status = parse_req_string(object, "id", out.id, path);
     if (status != StatusCode::ok) return status;
 
-    bool gravity_model_found = false;
-    status
-        = parse_opt_gravity_model(object, "model", gravity_model_found, out.model, path);
+    status = parse_req_string(object, "type", out.type, path);
     if (status != StatusCode::ok) return status;
 
-    switch (out.model) {
-    case GravityModel::pointmass: break;
-    case GravityModel::zonal: [[fallthrough]];
-    case GravityModel::spherical_harmonics: {
-        status = parse_req_string(object, "path", out.filepath, path);
-        if (status != StatusCode::ok) return status;
+    status = parse_req_string(object, "path", out.filepath, path);
+    if (status != StatusCode::ok) return status;
 
-        bool found_normalized = false;
-        status = parse_opt_bool(
-            object,
-            "normalized",
-            found_normalized,
-            out.normalized,
-            path
-        );
-        if (status != StatusCode::ok) return status;
-        if (!found_normalized) {
-            out.normalized = true; // default
-        }
-    } break;
-    default: return StatusCode::gravity_model_not_found;
+    bool found_normalized = false;
+    status = parse_opt_bool(object, "normalized", found_normalized, out.normalized, path);
+    if (status != StatusCode::ok) return status;
+    if (!found_normalized) {
+        out.normalized = true; // default
     }
 
     return StatusCode::ok;
@@ -1118,41 +1148,109 @@ static StatusCode parse_gravity_config(
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
 
-    StatusCode status = parse_req_gravity_model(object, "model", out.model, path);
+    StatusCode status;
+    const json* gravity = nullptr;
+    status = get_req_child(object, "gravity", gravity, path);
     if (status != StatusCode::ok) return status;
 
-    status = parse_req_f64(object, "mu", out.mu, path);
+    status = parse_req_gravity_model(*gravity, "model", out.model, path);
     if (status != StatusCode::ok) return status;
+
+    bool found_mu;
+    status = parse_opt_f64(*gravity, "mu", found_mu, out.mu, path);
+    if (status != StatusCode::ok) return status;
+    // use from celestial model provider if missing
 
     // may parse higher fidelity model but use lower fidelity model
 
     bool _ = false;
-    // no defaults
+
+    status = parse_opt_f64(*gravity, "radius", _, out.radius, path);
+    if (status != StatusCode::ok) return status;
+    // TODO: use from celestial model or determine where to get reference radius (file or
+    // computed)
 
     if (out.model == GravityModel::pointmass) {
-        status = parse_opt_f64(object, "radius", _, out.radius, path);
+        status = parse_opt_i32(*gravity, "degree", _, out.degree, path);
         if (status != StatusCode::ok) return status;
 
-        status = parse_opt_i32(object, "degree", _, out.degree, path);
+        status = parse_opt_i32(*gravity, "order", _, out.order, path);
         if (status != StatusCode::ok) return status;
 
-        status = parse_opt_i32(object, "order", _, out.order, path);
-        if (status != StatusCode::ok) return status;
-
-        status = parse_opt_string(object, "coefficients", _, out.coefficients, path);
+        status = parse_opt_string(*gravity, "coefficients", _, out.coefficients, path);
         if (status != StatusCode::ok) return status;
     } else {
-        status = parse_req_f64(object, "radius", out.radius, path);
+        status = parse_req_i32(*gravity, "degree", out.degree, path);
         if (status != StatusCode::ok) return status;
 
-        status = parse_req_i32(object, "degree", out.degree, path);
+        status = parse_req_i32(*gravity, "order", out.order, path);
         if (status != StatusCode::ok) return status;
 
-        status = parse_req_i32(object, "order", out.order, path);
+        status = parse_req_string(*gravity, "coefficients", out.coefficients, path);
+        if (status != StatusCode::ok) return status;
+    }
+
+    return StatusCode::ok;
+}
+
+static StatusCode parse_celestial_model_config(
+    const json& object,
+    ScenarioCelestialModelConfig& out,
+    const string& path
+) {
+    if (!object.is_object()) return StatusCode::invalid_input;
+
+    StatusCode status;
+    const json* model = nullptr;
+    status = get_req_child(object, "model", model, path);
+    if (status != StatusCode::ok) return status;
+
+    bool found_id;
+    status = parse_opt_string(*model, "id", found_id, out.id, path);
+    if (status != StatusCode::ok) return status;
+    if (!found_id) {
+        out.id = "custom";
+
+        status = parse_gravity_config(*model, out.gravity_model, path);
         if (status != StatusCode::ok) return status;
 
-        status = parse_req_string(object, "coefficients", out.coefficients, path);
+        status = parse_req_f64(*model, "semimajor_axis", out.semimajor_axis, path);
         if (status != StatusCode::ok) return status;
+
+        status = parse_req_f64(*model, "semiminor_axis", out.semiminor_axis, path);
+        if (status != StatusCode::ok) return status;
+
+        bool found;
+        status = parse_opt_f64(*model, "mean_radius", found, out.mean_radius, path);
+        if (status != StatusCode::ok) return status;
+        if (!found) {
+            out.mean_radius = std::pow(
+                out.semimajor_axis * out.semimajor_axis * out.semiminor_axis,
+                1.0 / 3.0
+            );
+        }
+
+        status = parse_opt_f64(*model, "eccentricity", found, out.eccentricity, path);
+        if (status != StatusCode::ok) return status;
+        if (!found) {
+            out.eccentricity = std::sqrt(
+                1.0
+                - out.semiminor_axis * out.semiminor_axis
+                      / (out.semimajor_axis * out.semimajor_axis)
+            );
+        }
+
+        status = parse_opt_f64(*model, "flattening", found, out.flattening, path);
+        if (status != StatusCode::ok) return status;
+        if (!found) {
+            out.flattening
+                = (out.semimajor_axis - out.semiminor_axis) / out.semimajor_axis;
+        }
+    } else {
+        status = parse_gravity_config(*model, out.gravity_model, path);
+        if (status != StatusCode::ok) return status;
+
+        // let celestial model provider handle the rest
     }
 
     return StatusCode::ok;
@@ -1166,14 +1264,17 @@ static StatusCode parse_propagation_config(
     if (!object.is_object()) return StatusCode::invalid_input;
 
     StatusCode status;
+    const json* propagation = nullptr;
+    status = get_req_child(object, "propagation", propagation, path);
+    if (status != StatusCode::ok) return status;
 
     bool found_tr = false;
-    status = parse_opt_bool(object, "translation", found_tr, out.translation, path);
+    status = parse_opt_bool(*propagation, "translation", found_tr, out.translation, path);
     if (status != StatusCode::ok) return status;
     if (!found_tr) out.translation = true;
 
     bool found_att = false;
-    status = parse_opt_bool(object, "attitude", found_att, out.attitude, path);
+    status = parse_opt_bool(*propagation, "attitude", found_att, out.attitude, path);
     if (status != StatusCode::ok) return status;
     if (!found_att) out.attitude = false;
 
@@ -1197,16 +1298,13 @@ static StatusCode parse_celestial_config(
     status = parse_opt_string(object, "name", _, out.name, path);
     if (status != StatusCode::ok) return status;
 
-    status = parse_req_string(object, "model", out.model, path);
+    status = parse_celestial_model_config(object, out.model, path);
     if (status != StatusCode::ok) return status;
 
     status = parse_state_tr_config(object, out.x_tr, path);
     if (status != StatusCode::ok) return status;
 
     status = parse_state_att_config(object, out.x_att, path);
-    if (status != StatusCode::ok) return status;
-
-    status = parse_gravity_config(object, out.gravity, path);
     if (status != StatusCode::ok) return status;
 
     status = parse_propagation_config(object, out.propagation, path);
@@ -1224,47 +1322,81 @@ static StatusCode parse_opt_mass_properties_config(
     if (!object.is_object()) return StatusCode::invalid_input;
     StatusCode status;
 
-    const json* child = nullptr;
-    status = get_opt_child(object, "mass_properties", child, found, path);
+    const json* mass_properties = nullptr;
+    status = get_opt_child(object, "mass_properties", mass_properties, found, path);
     if (status != StatusCode::ok) return status;
     if (!found) return StatusCode::ok;
 
     bool found_mass;
-    status = parse_opt_f64(*child, "mass", found_mass, out.mass, path);
+    status = parse_opt_f64(*mass_properties, "mass", found_mass, out.mass, path);
     if (status != StatusCode::ok) return status;
     if (!found_mass) out.mass = 0.0;
 
-    bool found_type;
-    status = parse_opt_string(*child, "type", found_type, out.type, path);
-    if (status != StatusCode::ok) return StatusCode::ok;
-    if (found_type) {
-        bool found_PA;
-        status = parse_opt_bool(
-            *child,
-            "principle_axes",
-            found_PA,
-            out.principle_axes,
-            path
-        );
-        if (!found_PA) out.principle_axes = true;
+    bool found_inertia;
+    const json* inertia_tensor = nullptr;
+    status = get_opt_child(
+        *mass_properties,
+        "inertia_tensor",
+        inertia_tensor,
+        found_inertia,
+        path
+    );
+    if (status != StatusCode::ok) return status;
 
-        if (out.type == "diagonal" || out.type == "diag") {
-            vec3d diag;
-            status = parse_req_vec3d(*child, "inertia", diag, path);
-            if (status != StatusCode::ok) return status;
+    if (!found_inertia && !found_mass) {
+        // empty mass properties
+        found = false;
+        return StatusCode::ok;
+    }
 
-            out.inertia = diag.asDiagonal();
-        } else if (out.type == "flattened" || out.type == "flat") {
-            status = parse_req_flat_mat3d(*child, "inertia", out.inertia, path);
-            if (status != StatusCode::ok) return status;
-        } else if (out.type == "matrix" || out.type == "mat" || out.type == "nested") {
-            status = parse_req_nested_mat3d(*child, "inertia", out.inertia, path);
-            if (status != StatusCode::ok) return status;
+    if (found_inertia) {
+        bool found_type;
+        status = parse_opt_string(*inertia_tensor, "type", found_type, out.type, path);
+        if (status != StatusCode::ok) return status;
+        if (found_type) {
+            bool found_PA;
+            status = parse_opt_bool(
+                *inertia_tensor,
+                "principle_axes",
+                found_PA,
+                out.principle_axes,
+                path
+            );
+            if (!found_PA) out.principle_axes = true;
+
+            if (out.type == "diagonal" || out.type == "diag") {
+                vec3d diag;
+                status = parse_req_vec3d(*inertia_tensor, "values", diag, path);
+                if (status != StatusCode::ok) return status;
+
+                out.inertia = diag.asDiagonal();
+            } else if (out.type == "flattened" || out.type == "flat") {
+                status
+                    = parse_req_flat_mat3d(*inertia_tensor, "values", out.inertia, path);
+                if (status != StatusCode::ok) return status;
+            } else if (
+                out.type == "matrix" || out.type == "mat" || out.type == "nested"
+            ) {
+                status = parse_req_nested_mat3d(
+                    *inertia_tensor,
+                    "values",
+                    out.inertia,
+                    path
+                );
+                if (status != StatusCode::ok) return status;
+            } else {
+                return StatusCode::invalid_input;
+            }
         } else {
-            return StatusCode::invalid_input;
+            found = found_type;
         }
-    } else {
-        found = found_type;
+    }
+
+    if (!found_inertia && found_mass) {
+        // default to cube 1x1x1m cube with mass 1kg
+        out.principle_axes = true;
+        f64 length = 1.0 / 1000;
+        out.inertia = 1.0 / 6.0 * out.mass * length * length * mat3d1;
     }
 
     return StatusCode::ok;
@@ -1348,8 +1480,10 @@ static StatusCode parse_station_config(
     status = parse_opt_string(object, "name", _, out.name, path);
     if (status != StatusCode::ok) return status;
 
-    status = parse_req_bool(object, "anchored", out.anchored, path);
+    bool found_anchored;
+    status = parse_opt_bool(object, "anchored", found_anchored, out.anchored, path);
     if (status != StatusCode::ok) return status;
+    if (!found_anchored) out.anchored = true;
 
     if (out.anchored) {
         status = parse_req_string(object, "anchor", out.anchor, path);
@@ -1367,7 +1501,7 @@ static StatusCode parse_station_config(
         if (!found_coord) out.coordinate_type = "detic_llh"; // default
         // TODO: create enum for this?
         if (out.coordinate_type == "detic_llh") {
-            status = parse_req_vec3d(object, "llh_BCBF", out.llh_BCBF, path);
+            status = parse_req_vec3d(object, "llh", out.llh_BCBF, path);
             if (status != StatusCode::ok) return status;
 
             if (out.units_angle != UAngle::degree) {
@@ -1433,7 +1567,7 @@ static StatusCode parse_station_config(
         out.instruments.reserve(num_instruments);
         for (i32 i = 0; i < num_instruments; ++i) {
             ScenarioInstrumentConfig temp_instrument;
-            status = parse_instrument_config(*child, temp_instrument, path);
+            status = parse_instrument_config(child->at(i), temp_instrument, path);
             if (status != StatusCode::ok) return status;
 
             out.instruments.push_back(temp_instrument);
@@ -1549,11 +1683,12 @@ static StatusCode parse_scenario_config(
     if (!object.is_object()) return StatusCode::invalid_input;
 
     StatusCode status;
+    ScenarioConfig temp;
 
-    status = parse_scenario_schema(object, out.schema, path);
+    status = parse_scenario_schema(object, temp.schema, path);
     if (status != StatusCode::ok) return status;
 
-    status = parse_metadata_config(object, out.metadata, path);
+    status = parse_metadata_config(object, temp.metadata, path);
     if (status != StatusCode::ok) return status;
 
     const json* providers = nullptr;
@@ -1561,20 +1696,25 @@ static StatusCode parse_scenario_config(
     status = get_opt_child(object, "providers", providers, found_providers, path);
     if (status != StatusCode::ok) return status;
     if (found_providers) {
-        const json* gravity = nullptr;
+        const json* gravity_provider = nullptr;
         bool found_gravity;
-        status = get_opt_child(object, "gravity", gravity, found_gravity, path);
+        status
+            = get_opt_child(*providers, "gravity", gravity_provider, found_gravity, path);
         if (status != StatusCode::ok) return status;
         if (found_gravity) {
             i32 num_gravity_providers = 0;
-            status = parse_array_size(*gravity, num_gravity_providers, path);
+            status = parse_array_size(*gravity_provider, num_gravity_providers, path);
             if (status != StatusCode::ok) return status;
             for (i32 i = 0; i < num_gravity_providers; ++i) {
-                ScenarioGravityProviderConfig temp;
-                status = parse_gravity_provider_config(gravity->at(i), temp, path);
+                ScenarioGravityProviderConfig grav_prov;
+                status = parse_gravity_provider_config(
+                    gravity_provider->at(i),
+                    grav_prov,
+                    path
+                );
                 if (status != StatusCode::ok) return status;
 
-                out.gravity_providers.push_back(temp);
+                temp.gravity_providers.push_back(grav_prov);
             }
         }
     }
@@ -1588,11 +1728,11 @@ static StatusCode parse_scenario_config(
         status = parse_array_size(*celestials, num_celestials, path);
         if (status != StatusCode::ok) return status;
         for (i32 i = 0; i < num_celestials; ++i) {
-            ScenarioCelestialConfig temp;
-            status = parse_celestial_config(celestials->at(i), temp, path);
+            ScenarioCelestialConfig cel;
+            status = parse_celestial_config(celestials->at(i), cel, path);
             if (status != StatusCode::ok) return status;
 
-            out.celestials.push_back(temp);
+            temp.celestials.push_back(cel);
         }
     }
 
@@ -1605,11 +1745,11 @@ static StatusCode parse_scenario_config(
         status = parse_array_size(*satellites, num_satellites, path);
         if (status != StatusCode::ok) return status;
         for (i32 i = 0; i < num_satellites; ++i) {
-            ScenarioSatelliteConfig temp;
-            status = parse_satellite_config(satellites->at(i), temp, path);
+            ScenarioSatelliteConfig sat;
+            status = parse_satellite_config(satellites->at(i), sat, path);
             if (status != StatusCode::ok) return status;
 
-            out.satellites.push_back(temp);
+            temp.satellites.push_back(sat);
         }
     }
 
@@ -1622,11 +1762,11 @@ static StatusCode parse_scenario_config(
         status = parse_array_size(*stations, num_stations, path);
         if (status != StatusCode::ok) return status;
         for (i32 i = 0; i < num_stations; ++i) {
-            ScenarioStationConfig temp;
-            status = parse_station_config(stations->at(i), temp, path);
+            ScenarioStationConfig stat;
+            status = parse_station_config(stations->at(i), stat, path);
             if (status != StatusCode::ok) return status;
 
-            out.stations.push_back(temp);
+            temp.stations.push_back(stat);
         }
     }
 
@@ -1634,12 +1774,14 @@ static StatusCode parse_scenario_config(
     status = parse_opt_world_stepper_config(
         object,
         found_world_stepper,
-        out.world_stepper,
+        temp.world_stepper,
         path
     );
     if (status != StatusCode::ok) return status;
 
     // TODO: add missing
+
+    out = temp;
 
     return StatusCode::ok;
 }
@@ -1660,7 +1802,12 @@ StatusCode load_scenario_json(const std::string& filepath, ScenarioConfig& out) 
     json root;
     try {
         // file >> root;
-        root = json::parse(file);
+        root = json::parse(
+            file,
+            nullptr, // parser callback
+            true,    // allow exceptions
+            true     // ignore comments
+        );
     } catch (const json::parse_error&) {
         return StatusCode::parse_failed;
     } catch (const json::type_error&) {
@@ -1669,11 +1816,14 @@ StatusCode load_scenario_json(const std::string& filepath, ScenarioConfig& out) 
 
     StatusCode status;
 
-    status = parse_scenario_config(root, out, "root");
+    ScenarioConfig temp;
+    status = parse_scenario_config(root, temp, "root");
     if (status != StatusCode::ok) return status;
 
-    status = validate_scenario_config(out);
+    status = validate_scenario_config(temp);
     if (status != StatusCode::ok) return status;
+
+    out = temp;
 
     return StatusCode::ok;
 }

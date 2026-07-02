@@ -7,17 +7,17 @@
         "name": "earth_moon_sat_demo",
         "rng_seed": 12345
     },
-    "units": {
-        "length": "km",
-        "time": "s",
-        "angle": "rad",
-        "mass": "kg"
-    },
-    "frames": {
-        "simulation_inertial": "I",
-        "attitude_quaternion": "passive_N_to_B",
-        "station_local": "ENU"
-    },
+    // "units": {
+    //     "length": "km",
+    //     "time": "s",
+    //     "angle": "rad",
+    //     "mass": "kg"
+    // },
+    // "frames": {
+    //     "simulation_inertial": "I",
+    //     "attitude_quaternion": "passive_N_to_B",
+    //     "station_local": "ENU"
+    // },
     "providers": {
         "gravity": [
             {
@@ -37,7 +37,6 @@
     "celestials": [
         {
             "id": "earth",
-            "model": "wgs84",
             "state_tr": {
                 "r": [0.0, 0.0, 0.0],
                 "v": [0.0, 0.0, 0.0]
@@ -48,11 +47,14 @@
                 "angle": 0.4014257279586958,
                 "w": [0.0, 0.0, 7.2921159e-5]
             },
-            "gravity": {
-                "model": "spherical_harmonics",
-                "degree": 4,
-                "order": 4,
-                "coefficients": "EGM2008_gfc"
+            "model": {
+                "id": "wgs84",
+                "gravity": {
+                    "model": "spherical_harmonics",
+                    "degree": 4,
+                    "order": 4,
+                    "coefficients": "EGM2008_gfc"
+                }
             },
             "propagation": {
                 "translation": true,
@@ -61,14 +63,23 @@
         },
         {
             "id": "moon",
-            "model": "custom",
-            "state_tr": {},
-            "state_att": {},
-            "gravity": {
-                "model": "spherical_harmonics",
-                "degree": 4,
-                "order": 4,
-                "coefficients": "JGL165P1_gfc"
+            "state_tr": {
+                "r": [384400.0, 0.0, 0.0],
+                "v": [0.0, 1.022, 0.0]
+            },
+            "state_att": {
+                "type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 2.6617e-6]
+            },
+            "model": {
+                "id": "custom",
+                "gravity": {
+                    "model": "spherical_harmonics",
+                    "degree": 4,
+                    "order": 4,
+                    "coefficients": "JGL165P1_gfc"
+                }
             },
             "propagation": {
                 "translation": true,
@@ -88,7 +99,7 @@
                 "inertia_tensor": {
                     "principle_axes": true,
                     "type": "diagonal",
-                    "diag": [100.0, 200.0, 300.0]
+                    "values": [100.0, 200.0, 300.0]
                 }
             },
             "propagation": {

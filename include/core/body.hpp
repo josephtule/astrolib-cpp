@@ -66,7 +66,8 @@ struct Celestial : public Body {
     f64 mean_radius = 0.0;
     f64 semimajor_axis = 0.0;
     f64 semiminor_axis = 0.0;
-    f64 eccentricity = 0.0, flattening = 0.0;
+    f64 eccentricity = 0.0;
+    f64 flattening = 0.0;
 
     // Spin
     f64 spin_rate() const { return x_att.w.norm(); }

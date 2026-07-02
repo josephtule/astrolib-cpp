@@ -7,12 +7,12 @@
         "name": "earth_station_leo_demo",
         "rng_seed": 12345
     },
-    "units": {
-        "length": "km",
-        "time": "s",
-        "angle": "rad",
-        "mass": "kg"
-    },
+    // "units": {
+    //     "length": "km",
+    //     "time": "s",
+    //     "angle": "rad",
+    //     "mass": "kg"
+    // },
     "frames": {
         "simulation_inertial": "I",
         "attitude_quaternion": "passive_N_to_B",
@@ -31,7 +31,6 @@
     "celestials": [
         {
             "id": "earth",
-            "model": "wgs84",
             "state_tr": {
                 "r": [0.0, 0.0, 0.0],
                 "v": [0.0, 0.0, 0.0]
@@ -42,11 +41,14 @@
                 "angle": 0.4014257279586958,
                 "w": [0.0, 0.0, 7.2921159e-5]
             },
-            "gravity": {
-                "model": "spherical_harmonics",
-                "degree": 6,
-                "order": 6,
-                "coefficients": "EGM2008_gfc"
+            "model": {
+                "id": "wgs84",
+                "gravity": {
+                    "model": "spherical_harmonics",
+                    "degree": 6,
+                    "order": 6,
+                    "coefficients": "EGM2008_gfc"
+                }
             },
             "propagation": {
                 "translation": true,
@@ -66,7 +68,7 @@
                 "inertia_tensor": {
                     "principle_axes": true,
                     "type": "diagonal",
-                    "diag": [100.0, 200.0, 300.0]
+                    "values": [100.0, 200.0, 300.0]
                 }
             },
             "propagation": {
@@ -89,7 +91,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "diag": [1.0e-10, 1.0e-10]
+                        "values": [1.0e-10, 1.0e-10]
                     }
                 }
             ]

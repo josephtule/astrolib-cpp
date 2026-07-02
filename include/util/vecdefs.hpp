@@ -243,3 +243,5 @@ inline mat<f64, N, M> mf64(const mat<T, N, M>& m) {
 }
 
 inline vec4d q_identity{0.0, 0.0, 0.0, 1.0};
+
+using MyColor = array<u8, 4>;

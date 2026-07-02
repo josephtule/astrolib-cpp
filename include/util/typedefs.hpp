@@ -1,11 +1,11 @@
 #pragma once
 
-#include <string>
 #include <complex>
 #include <cstdint>
 #include <deque>
 #include <limits>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -41,6 +41,8 @@ template <class C>
 using sptr = std::shared_ptr<C>;
 template <class C>
 using dque = std::deque<C>;
+template <class T, int N>
+using array = std::array<T, N>;
 
 template <typename T>
 inline constexpr T qNaN = std::numeric_limits<T>::quiet_NaN();

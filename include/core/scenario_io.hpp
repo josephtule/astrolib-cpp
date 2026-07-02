@@ -4,9 +4,9 @@
 #include "core/estimation_common.hpp"
 #include "core/integrator.hpp"
 #include "core/observation_type.hpp"
+#include "core/od_dynamics.hpp"
 #include "core/state.hpp"
 #include "core/transform.hpp"
-#include "raylib.h"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
@@ -42,7 +42,7 @@ struct ScenarioFramesConfig {
 
 struct ScenarioGravityProviderConfig {
     string id;
-    GravityModel model = GravityModel::pointmass;
+    string type;
     // optional for zonal and spherical harmonics
     string filepath;
     bool normalized = true;
@@ -57,6 +57,18 @@ struct ScenarioGravityConfig {
     i32 degree = 0;
     i32 order = 0;
     string coefficients;
+};
+
+struct ScenarioCelestialModelConfig {
+    string id;
+
+    ScenarioGravityConfig gravity_model;
+
+    f64 mean_radius = 0.0;
+    f64 semimajor_axis = 0.0;
+    f64 semiminor_axis = 0.0;
+    f64 eccentricity = 0.0;
+    f64 flattening = 0.0;
 };
 
 struct ScenarioPropagationConfig {
@@ -90,9 +102,11 @@ struct ScenarioStateAttConfig {
 struct ScenarioCelestialConfig {
     string id;
     string name;
-    string model;
+    ScenarioCelestialModelConfig model;
     ScenarioStateTrConfig x_tr;
     ScenarioStateAttConfig x_att;
+    CelestialAttitudeModel attitude_model = CelestialAttitudeModel::fixed;
+    // RadiationModel radition_model = RadiationModel::none;
     ScenarioPropagationConfig propagation;
     ScenarioGravityConfig gravity;
 };
@@ -120,7 +134,7 @@ struct ScenarioCovarianceConfig {
 };
 
 struct ScenarioInstrumentConfig {
-    string name;
+    string id;
     ObservationType type = ObservationType::radec;
     bool enabled = true;
     ScenarioCovarianceConfig covariance_cfg;
@@ -150,6 +164,7 @@ struct ScenarioStationConfig {
 
     svec<ScenarioInstrumentConfig> instruments;
 };
+
 struct ScenarioWorldStepperConfig {
     IntegratorType integrator_tr = IntegratorType::rk4;
     IntegratorType integrator_att = IntegratorType::rk4;
@@ -157,11 +172,13 @@ struct ScenarioWorldStepperConfig {
     u32 ticks = 1;
     f64 time_scale = 1.0;
 };
+
 struct ScenarioGraphicsConfig {
     i32 target_fps = 60;
-    Color background_color = {30, 30, 30, 255};
+    MyColor background_color = {30, 30, 30, 255};
     bool draw_inertial_axes = true;
 };
+
 struct ScenarioConfig {
     ScenarioSchemaConfig schema;
     ScenarioMetadataConfig metadata;
