@@ -6,24 +6,6 @@
 
 enum struct UAngle : i32 { radian, degree, arcminute, arcsecond, milliarcsecond };
 
-inline StatusCode string_to_uangle(std::string str, UAngle& out) {
-    if (str == "radian") {
-        out = UAngle::radian;
-    } else if (str == "degree") {
-        out = UAngle::degree;
-    } else if (str == "arcminute") {
-        out = UAngle::arcminute;
-    } else if (str == "arcsecond") {
-        out = UAngle::arcsecond;
-    } else if (str == "milliarcsecond") {
-        out = UAngle::milliarcsecond;
-    } else {
-        return StatusCode::invalid_input;
-    }
-
-    return StatusCode::ok;
-}
-
 enum struct ULength : i32 {
     nanometer,
     millimeter,
@@ -35,6 +17,7 @@ enum struct ULength : i32 {
     mile,
     au,
 };
+inline constexpr ULength length_default = ULength::kilometer;
 
 enum struct UTime : i32 {
     year,
@@ -47,6 +30,7 @@ enum struct UTime : i32 {
     microsecond,
     nanosecond,
 };
+inline constexpr UTime time_default = UTime::second;
 
 enum struct UMass : i32 {
     MICROGRAM,
@@ -56,6 +40,7 @@ enum struct UMass : i32 {
     POUNDMASS,
     OUNCEMASS,
 };
+inline constexpr UMass mass_default = UMass::KILOGRAM;
 
 template <typename T>
 T convert_angle(T val, UAngle uin, UAngle uout) {

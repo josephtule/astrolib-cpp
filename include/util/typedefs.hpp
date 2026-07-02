@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <complex>
 #include <cstdint>
 #include <deque>
@@ -10,6 +11,8 @@
 #include <vector>
 
 // Type aliases
+using string = std::string;
+
 using f32 = float;
 using f64 = double;
 using c64 = std::complex<f32>;

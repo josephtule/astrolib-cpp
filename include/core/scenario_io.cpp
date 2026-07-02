@@ -41,8 +41,8 @@ struct ScenarioFramesConfig {
 
 struct ScenarioGravityProviderConfig {
     string id;
-    string type;
-    string path;
+    string model;
+    string filepath;
     bool normalized = true;
 };
 

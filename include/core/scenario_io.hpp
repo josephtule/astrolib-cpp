@@ -1,12 +1,15 @@
 #pragma once
 
+#include "core/body.hpp"
 #include "core/estimation_common.hpp"
+#include "core/integrator.hpp"
+#include "core/observation_type.hpp"
 #include "core/state.hpp"
+#include "core/transform.hpp"
+#include "raylib.h"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
-
-using string = std::string;
 
 struct ScenarioSchemaConfig {
     string name = "astrolib.scenario";
@@ -14,8 +17,7 @@ struct ScenarioSchemaConfig {
 };
 struct ScenarioMetadataConfig {
     string name = "earth_moon_sat_demo";
-    u64 rng_seed = 12345;
-    bool has_rng_seed = true;
+    u32 rng_seed = 12345;
 };
 
 struct ScenarioUnitConfig {
@@ -40,14 +42,17 @@ struct ScenarioFramesConfig {
 
 struct ScenarioGravityProviderConfig {
     string id;
-    string type;
-    string path;
+    GravityModel model = GravityModel::pointmass;
+    // optional for zonal and spherical harmonics
+    string filepath;
     bool normalized = true;
 };
 
 struct ScenarioGravityConfig {
-    string model = "pointmass";
+    GravityModel model = GravityModel::pointmass;
     f64 mu = 0.0;
+
+    // optional for zonal and spherical harmonics
     f64 radius = 0.0;
     i32 degree = 0;
     i32 order = 0;
@@ -59,8 +64,14 @@ struct ScenarioPropagationConfig {
     bool attitude = false;
 };
 
+struct ScenarioStateTrConfig {
+    vec3d r, v;
+
+    ULength units_length = ULength::kilometer;
+};
+
 struct ScenarioStateAttConfig {
-    string type = "quaternion"; // axis_angle, euler_angles, dcm, crp, mrp
+    AttitudeType type = AttitudeType::quaternion;
     // quaternion
     vec4d q = q_identity;
     // axis angle
@@ -80,27 +91,92 @@ struct ScenarioCelestialConfig {
     string id;
     string name;
     string model;
-    StateTr x_tr;
+    ScenarioStateTrConfig x_tr;
     ScenarioStateAttConfig x_att;
     ScenarioPropagationConfig propagation;
     ScenarioGravityConfig gravity;
 };
 
+struct ScenarioMassPropertiesConfig {
+    f64 mass = 0.0;
+
+    string type = "diag";
+    bool principle_axes = true;
+    mat3d inertia = mat3d1;
+};
+
 struct ScenarioSatelliteConfig {
     string id;
     string name;
-    StateTr x_tr;
+    ScenarioStateTrConfig x_tr;
     ScenarioStateAttConfig x_att;
     ScenarioPropagationConfig propagation;
-    f64 mass = 0.0;
-    vec3d inertia_diag = vec3d0;
+    ScenarioMassPropertiesConfig mass_properties;
 };
 
-struct ScenarioCovarianceConfig;
-struct ScenarioInstrumentConfig;
-struct ScenarioStationConfig;
-struct ScenarioWorldStepperConfig;
-struct ScenarioConfig {};
+struct ScenarioCovarianceConfig {
+    string type = "diagonal";
+    matXd covariance;
+};
+
+struct ScenarioInstrumentConfig {
+    string name;
+    ObservationType type = ObservationType::radec;
+    bool enabled = true;
+    ScenarioCovarianceConfig covariance_cfg;
+};
+
+struct ScenarioStationConfig {
+    string id;
+    string name;
+
+    ScenarioPropagationConfig propagation;
+    bool anchored = true;
+    string anchor;
+
+    // optional dependent in anchoring
+    // anchored
+    string coordinate_type = "detic_llh";
+    vec3d llh_BCBF = vec3d0;
+    vec3d r_body = vec3d0;
+    string local_frame;
+    // unanchored
+    ScenarioStateTrConfig x_tr;
+    ScenarioStateAttConfig x_att;
+    ScenarioMassPropertiesConfig mass_properties;
+
+    UAngle units_angle = UAngle::radian;
+    ULength units_length = ULength::kilometer;
+
+    svec<ScenarioInstrumentConfig> instruments;
+};
+struct ScenarioWorldStepperConfig {
+    IntegratorType integrator_tr = IntegratorType::rk4;
+    IntegratorType integrator_att = IntegratorType::rk4;
+    u32 substeps = 1;
+    u32 ticks = 1;
+    f64 time_scale = 1.0;
+};
+struct ScenarioGraphicsConfig {
+    i32 target_fps = 60;
+    Color background_color = {30, 30, 30, 255};
+    bool draw_inertial_axes = true;
+};
+struct ScenarioConfig {
+    ScenarioSchemaConfig schema;
+    ScenarioMetadataConfig metadata;
+
+    svec<ScenarioGravityProviderConfig> gravity_providers;
+    // svec<ScenarioEphemerisProviderConfig> ephemeris_providers;
+
+    svec<ScenarioCelestialConfig> celestials;
+    svec<ScenarioSatelliteConfig> satellites;
+    svec<ScenarioStationConfig> stations;
+    // svec<ScenarioInstrumentConfig> instrument_templates;
+
+    ScenarioWorldStepperConfig world_stepper;
+    ScenarioGraphicsConfig graphics_settings;
+};
 
 StatusCode load_scenario_json(const std::string& filepath, ScenarioConfig& out);
 StatusCode validate_scenario_config(const ScenarioConfig& cfg);

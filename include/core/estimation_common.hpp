@@ -27,87 +27,47 @@ enum struct StatusCode {
     file_close_failed,
     unsupported_method,
     body_not_found,
+    gravity_model_not_found,
+    attitude_type_not_found,
+    file_open_failed,
+    parse_failed,
 };
+// inline constexpr StatusCode ok = StatusCode::ok;
 
 inline std::string status_string(StatusCode status) {
-    std::string str;
     switch (status) {
-    case StatusCode::ok: {
-        str = "Ok";
-    } break;
-    case StatusCode::invalid_input: {
-        str = "Invalid Input";
-    } break;
-    case StatusCode::empty_measurements: {
-        str = "Empty Measurements";
-    } break;
-    case StatusCode::size_mismatch: {
-        str = "Size Mismatch";
-    } break;
-    case StatusCode::propagation_failed: {
-        str = "Propagation Failed";
-    } break;
-    case StatusCode::singular_normal_matrix: {
-        str = "Singular Normal Matrix";
-    } break;
-    case StatusCode::prediction_only: {
-        str = "Prediction Only";
-    } break;
-    case StatusCode::max_iters_reached: {
-        str = "Max Iterations reached";
-    } break;
-    case StatusCode::correction_rejected: {
-        str = "Correction Rejected";
-    } break;
-    case StatusCode::invalid_covariance: {
-        str = "Invalid Covariance";
-    } break;
-    case StatusCode::singular_innovation: {
-        str = "Singular Innovation";
-    } break;
-    case StatusCode::observer_not_found: {
-        str = "Observer not found";
-    } break;
-    case StatusCode::target_not_found: {
-        str = "Target not found";
-    } break;
-    case StatusCode::time_mismatch: {
-        str = "Time mismatch";
-    } break;
-    case StatusCode::empty_events: {
-        str = "Empty Events";
-    } break;
-    case StatusCode::instrument_not_found: {
-        str = "Instrument not found";
-    } break;
-    case StatusCode::empty_history: {
-        str = "Empty history";
-    } break;
-    case StatusCode::sample_not_found: {
-        str = "Sample not found";
-    } break;
-    case StatusCode::interp_failed: {
-        str = "Interpolation failed";
-    } break;
-    case StatusCode::file_not_found: {
-        str = "File not found";
-    } break;
-    case StatusCode::file_write_failed: {
-        str = "File write failed";
-    } break;
-    case StatusCode::file_close_failed: {
-        str = "File close failed";
-    } break;
-    case StatusCode::unsupported_method: {
-        str = "Unsupported Method";
-    } break;
-    case StatusCode::body_not_found: {
-        str = "Body not found";
-    } break;
+    case StatusCode::ok: return "Ok";
+    case StatusCode::invalid_input: return "Invalid Input";
+    case StatusCode::empty_measurements: return "Empty Measurements";
+    case StatusCode::size_mismatch: return "Size Mismatch";
+    case StatusCode::propagation_failed: return "Propagation Failed";
+    case StatusCode::singular_normal_matrix: return "Singular Normal Matrix";
+    case StatusCode::prediction_only: return "Prediction Only";
+    case StatusCode::max_iters_reached: return "Max Iterations reached";
+    case StatusCode::correction_rejected: return "Correction Rejected";
+    case StatusCode::invalid_covariance: return "Invalid Covariance";
+    case StatusCode::singular_innovation: return "Singular Innovation";
+    case StatusCode::observer_not_found: return "Observer not found";
+    case StatusCode::target_not_found: return "Target not found";
+    case StatusCode::time_mismatch: return "Time mismatch";
+    case StatusCode::empty_events: return "Empty Events";
+    case StatusCode::instrument_not_found: return "Instrument not found";
+    case StatusCode::empty_history: return "Empty history";
+    case StatusCode::sample_not_found: return "Sample not found";
+    case StatusCode::interp_failed: return "Interpolation failed";
+    case StatusCode::file_not_found: return "File not found";
+    case StatusCode::file_write_failed: return "File write failed";
+    case StatusCode::file_close_failed: return "File close failed";
+    case StatusCode::unsupported_method: return "Unsupported Method";
+    case StatusCode::body_not_found: return "Body not found";
+    case StatusCode::gravity_model_not_found: return "Gravity Model not found";
+    case StatusCode::attitude_type_not_found: return "Attitude type not found";
+    case StatusCode::file_open_failed: return "File open failed";
+    case StatusCode::parse_failed: return "Parse failed";
     }
-    return str;
+
+    return "Unknown Status";
 }
-using StatusCode = StatusCode; // TODO: do full rename
 
 inline bool od_status_success(StatusCode status) {
     return status == StatusCode::ok || status == StatusCode::prediction_only;
