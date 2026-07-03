@@ -1,4 +1,10 @@
 {
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.configureSettings": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+    },
+
     "markdown.math.enabled": true,
     "markdown.extension.math.enabled": false,
     "mdmath.macros": {
@@ -23,7 +29,5 @@
         "\\vmat": "\\begin{vmatrix}#1\\end{vmatrix}",
         "\\vvmat": "\\begin{Vmatrix}#1\\end{Vmatrix}"
     },
-    "cSpell.words": [
-        "raan"
-    ]
+    "cSpell.words": ["raan"]
 }

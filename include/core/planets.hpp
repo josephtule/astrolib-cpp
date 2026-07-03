@@ -12,7 +12,6 @@
 #include <sstream>
 
 inline Celestial wgs84(ULength u_len = ULength::kilometer) {
-
     Celestial earth;
     earth.gravity_model = GravityModel::pointmass;
 
@@ -47,6 +46,8 @@ inline Celestial wgs84(ULength u_len = ULength::kilometer) {
     default:
     }
 
+    earth.ref_radius = earth.semimajor_axis;
+
     earth.x_att.q = {0.0, 0.0, 0.0, 1.0};
     earth.x_att.w = {0.0, 0.0, omega};
     earth.attitude_model = CelestialAttitudeModel::simple_spin;
@@ -69,6 +70,61 @@ inline Celestial wgs84(ULength u_len = ULength::kilometer) {
 inline EntityId wgs84(World& world, ULength u_len = ULength::kilometer) {
     auto earth = std::make_unique<Celestial>(wgs84(u_len));
     EntityId id = world.insert_celestial(std::move(earth));
+    return id;
+}
+
+inline Celestial iau_moon(ULength u_len = ULength::kilometer) {
+    // NOTE: this is just a first pass, data obtained from various sources
+    Celestial moon;
+    moon.gravity_model = GravityModel::pointmass;
+
+    f64 omega = 2.6616995e-6;
+    switch (u_len) {
+    case ULength::meter:
+        moon.mu = 4902.800118e9;
+        moon.semimajor_axis = 1738.1e3;
+        moon.semiminor_axis = 1736.0e3;
+        moon.flattening = 0.0012;
+        moon.eccentricity
+            = std::sqrt(2.0 * moon.flattening - moon.flattening * moon.flattening);
+        moon.mean_radius = 1737.4e3;
+        break;
+    case ULength::kilometer:
+        moon.mu = 4902.800118;
+        moon.semimajor_axis = 1738.1;
+        moon.semiminor_axis = 1736.0;
+        moon.flattening = 0.0012;
+        moon.eccentricity
+            = std::sqrt(2.0 * moon.flattening - moon.flattening * moon.flattening);
+        moon.mean_radius = 1737.4;
+        break;
+    default: break;
+    }
+
+    moon.ref_radius = moon.semimajor_axis;
+
+    moon.x_att.q = {0.0, 0.0, 0.0, 1.0};
+    moon.x_att.w = {0.0, 0.0, omega};
+    moon.attitude_model = CelestialAttitudeModel::simple_spin;
+    moon.set_spin_rate(omega);
+
+    moon.J = vec7d{
+        0.0,
+        0.0,
+        202.7e-6,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    };
+
+    moon.name = "Moon (Earth)";
+    return moon;
+}
+
+inline EntityId iau_moon(World& world, ULength u_len = ULength::kilometer) {
+    auto moon = std::make_unique<Celestial>(iau_moon(u_len));
+    EntityId id = world.insert_celestial(std::move(moon));
     return id;
 }
 

@@ -18,6 +18,7 @@
 #include "core/orbit_determination.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
+#include "core/scenario_io.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
 #include "core/time.hpp"
@@ -26,8 +27,8 @@
 #include "core/world_history.hpp"
 #include "core/world_stepper.hpp"
 
-#include "graphics/renderer.hpp"
 #include "util/constants.hpp"
+#include "util/printing.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
@@ -36,6 +37,7 @@
 
 #include "graphics/raygen.hpp"
 #include "graphics/rdraw.hpp"
+#include "graphics/renderer.hpp"
 #include "raylib.h"
 #include "raymath.h"
 #include "rlgl.h"
@@ -1650,7 +1652,7 @@ void run_world_stepper_diag() {
         cfg.step_att = true;
         cfg.substeps = 1;
         cfg.ticks = 10;
-        cfg.time_scale = 1.0 / cfg.ticks;
+        cfg.dt_scale = 1.0 / cfg.ticks;
         cfg.integrator_tr = integrator_tr;
         cfg.integrator_att = IntegratorType::rk4;
 
@@ -1735,7 +1737,7 @@ void run_body_fixed_gravity_timing_diag() {
         cfg.integrator_att = IntegratorType::rk4;
         cfg.substeps = 1;
         cfg.ticks = 1;
-        cfg.time_scale = 1.0;
+        cfg.dt_scale = 1.0;
 
         WorldStepperStats stats;
         stats.success = true;
@@ -1783,7 +1785,7 @@ void run_body_fixed_gravity_timing_diag() {
         cfg.step_att = true;
         cfg.substeps = 1;
         cfg.ticks = 10;
-        cfg.time_scale = 1.0 / cfg.ticks;
+        cfg.dt_scale = 1.0 / cfg.ticks;
         cfg.integrator_tr = IntegratorType::rk1;
         cfg.integrator_att = IntegratorType::rk4;
 
@@ -1970,7 +1972,7 @@ void run_moving_source_world_diag() {
     cfg.step_att = true;
     cfg.substeps = 10;
     cfg.ticks = 1;
-    cfg.time_scale = 1.0;
+    cfg.dt_scale = 1.0;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
@@ -2251,7 +2253,7 @@ void run_staged_attitude_gravity_diag() {
     earth->degree = 4;
     earth->order = 4;
     bool gfc_ok = read_gfc(
-        pwd + "/assets/EGM2008.gfc.txt",
+        pwd + "/assets/earth/EGM2008.gfc.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -2279,7 +2281,7 @@ void run_staged_attitude_gravity_diag() {
     cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 1;
-    cfg.time_scale = 1.0;
+    cfg.dt_scale = 1.0;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
@@ -2332,6 +2334,7 @@ void run_staged_attitude_gravity_diag() {
 }
 
 void run_render_pipeline_diag() {
+    print_diag_title("Render Pipeline Diag");
     World world;
 
     // Earth
@@ -2342,7 +2345,7 @@ void run_render_pipeline_diag() {
     earth->degree = 4;
     earth->order = 4;
     bool gfc_ok = read_gfc(
-        pwd + "/assets/EGM2008.gfc.txt",
+        pwd + "/assets/earth/EGM2008.gfc.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -2387,7 +2390,7 @@ void run_render_pipeline_diag() {
         //     sat_nums,
         //     tle_opts
         // );
-        i32 num_sats = 100;
+        i32 num_sats = 10;
         TLEStatus tle_status
             = read_tle_data_count(pwd + "/assets/tle_all.txt", tles, num_sats, tle_opts);
         if (tle_status != TLEStatus::ok) {
@@ -2426,12 +2429,12 @@ void run_render_pipeline_diag() {
     cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 100;
-    cfg.time_scale = 2.0;
+    cfg.dt_scale = 2.0;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
     f64 t0 = 0.0;
-    f64 dt = 1.0 / cfg.ticks * cfg.time_scale;
+    f64 dt = 1.0 / cfg.ticks * cfg.dt_scale;
     world.reset_time(t0);
     WorldStepperStats stats;
     stats.success = true;
@@ -2514,7 +2517,10 @@ void run_render_pipeline_diag() {
         EndMode3D();
         EndDrawing();
     }
+    print_diag_title();
 }
+
+
 
 void run_world_workspace_diag() {
     print_diag_title("World Stepper Workspace");
@@ -2529,7 +2535,7 @@ void run_world_workspace_diag() {
     earth->degree = 4;
     earth->order = 4;
     bool gfc_ok = read_gfc(
-        pwd + "/assets/EGM2008.gfc.txt",
+        pwd + "/assets/earth/EGM2008.gfc.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -2565,7 +2571,7 @@ void run_world_workspace_diag() {
     cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 1;
-    cfg.time_scale = 1.0;
+    cfg.dt_scale = 1.0;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
@@ -2695,7 +2701,7 @@ void run_iod_lumve_ekf_init_diag() {
     earth->degree = truth_deg_ord;
     earth->order = truth_deg_ord;
     bool gfc_ok = read_gfc(
-        pwd + "/assets/EGM2008.gfc.txt",
+        pwd + "/assets/earth/EGM2008.gfc.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -2754,7 +2760,7 @@ void run_iod_lumve_ekf_init_diag() {
     cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 10;
-    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.dt_scale = 1.0 / cfg.ticks;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
     // radec + range measurements only
@@ -3003,9 +3009,9 @@ void run_iod_lumve_ekf_init_diag() {
     f64 ekf_final_v_err = (ekf_result.filter.x.v - x_truth_final.v).norm();
 
     print_diag_title("IOD -> LUMVE -> EKF Pipeline Diagnostic");
-    std::println("Truth Model = {}", gravity_model_name(truth_model));
+    std::println("Truth Model = {}", gravity_model_str(truth_model));
     std::println("Truth Degree/Order = {}", truth_deg_ord);
-    std::println("Estimator Model = {}", gravity_model_name(est_model));
+    std::println("Estimator Model = {}", gravity_model_str(est_model));
     std::println("Estimator Zonal Degree = {}", est_degree);
     std::println();
     std::println("IOD Used As Initial Guess = {}", use_iod_initial_guess && iod_guess_ok);
@@ -3137,7 +3143,7 @@ void run_world_ekf_step_diag() {
     earth->degree = truth_deg_ord;
     earth->order = truth_deg_ord;
     bool gfc_ok = read_gfc(
-        pwd + "/assets/EGM2008.gfc.txt",
+        pwd + "/assets/earth/EGM2008.gfc.txt",
         earth->C,
         earth->S,
         earth->degree,
@@ -3510,7 +3516,7 @@ void run_realtime_ekf_world_update_diag() {
     cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 10;
-    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.dt_scale = 1.0 / cfg.ticks;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
@@ -3838,7 +3844,7 @@ void run_world_history_diag() {
     cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 10;
-    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.dt_scale = 1.0 / cfg.ticks;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
@@ -4172,7 +4178,7 @@ void run_world_history_ekf_diag() {
     cfg.step_att = true;
     cfg.substeps = 1;
     cfg.ticks = 10;
-    cfg.time_scale = 1.0 / cfg.ticks;
+    cfg.dt_scale = 1.0 / cfg.ticks;
     cfg.integrator_tr = IntegratorType::rk4;
     cfg.integrator_att = IntegratorType::rk4;
 
@@ -4374,4 +4380,454 @@ void run_world_history_ekf_diag() {
         csv_opts
     );
     std::println("Write Status: {}", status_string(status));
+}
+
+static void print_state_tr_config(
+    const ScenarioStateTrConfig& x_tr,
+    const string& indent
+) {
+    std::print("{}State (tr, {}): ", indent, state_tr_type_str(x_tr.input_type));
+    switch (x_tr.input_type) {
+    case StateTrInputType::pos_vel: {
+        std::println("r = {}, v = {}", vec_string(x_tr.r), vec_string(x_tr.v));
+    } break;
+    case StateTrInputType::classical: {
+        std::println(
+            "sma = {}, ecc: {}, inc = {}, raan = {}, aop = {}, ta = {}",
+            x_tr.coes.sma,
+            x_tr.coes.ecc,
+            x_tr.coes.inc,
+            x_tr.coes.raan,
+            x_tr.coes.aop,
+            x_tr.coes.ta
+        );
+    } break;
+    }
+}
+static void print_state_att_config(
+    const ScenarioStateAttConfig& x_att,
+    const string& indent
+) {
+    std::print("{}State (att, {}): ", indent, state_att_type_str(x_att.input_type));
+    switch (x_att.input_type) {
+    case AttitudeType::quaternion: {
+        std::print("q = {}, ", vec_string(x_att.q));
+    } break;
+    case AttitudeType::dcm: {
+        std::print("dcm: R = {}, ", vec_string(x_att.dcm));
+    } break;
+    case AttitudeType::axis_angle: {
+        std::print(
+            "axis-angle: lambda = {}, angle: theta = {}, ",
+            x_att.axis,
+            x_att.angle
+        );
+    } break;
+    case AttitudeType::euler_angles: {
+        std::print(
+            "euler angles: angles = {}, sequence: {}, ",
+            vec_string(x_att.angles),
+            vec_string(x_att.sequence)
+        );
+    } break;
+    case AttitudeType::crp: {
+        std::print("classical rodriguez parameters: rho = {}, ", vec_string(x_att.axis));
+    } break;
+    case AttitudeType::mrp: {
+        std::print("modified rodriguez parameters: rho = {}, ", vec_string(x_att.axis));
+    } break;
+    }
+    std::println("w = {}", vec_string(x_att.w));
+}
+static void print_mass_properties_config(
+    const ScenarioMassPropertiesConfig& mp,
+    const string& indent
+) {
+    std::println("{}Mass: {}", indent, mp.mass);
+    std::println("{}Inertia Tensor: I = {}", indent, vec_string(mp.inertia));
+}
+
+void run_scenario_loader_diag() {
+    print_diag_title("JSON Scenario Loader");
+
+    // TODO: create function to print body properties (cel, sat, stat, etc.)
+
+    ScenarioConfig config;
+    StatusCode status
+        = load_scenario_json(pwd + "/scenarios/parser_stress_demo.json", config);
+    // = load_scenario_json(pwd + "/scenarios/earth_moon_sat_demo.json", config);
+    if (status == StatusCode::ok)
+        std::println("JSON scenario loaded successfully");
+    else
+        std::println("{}", status_string(status));
+
+    status = validate_scenario_config(config);
+    if (status != StatusCode::ok) {
+        std::println("{}", status_string(status));
+    } else {
+        std::println("Scenario configuration validated");
+
+        std::println();
+        std::println(
+            "Schema: name = {}, version = {}",
+            config.schema.name,
+            config.schema.version
+        );
+
+        std::println(
+            "Metadata: name = {}, rng seed = {}",
+            config.metadata.name,
+            config.metadata.rng_seed
+        );
+        std::println();
+
+        std::print(
+            "Time: type = {}, time scale = {}, ",
+            date_type_str(config.time.date_type),
+            time_scale_str(config.time.time_scale)
+        );
+        switch (config.time.date_type) {
+        case DateType::cal: {
+            print_cal(config.time.cal, CalendarPrintStyle::string);
+        } break;
+        case DateType::jd: {
+            std::println("jd: {}", jd_to_scalar(config.time.jd));
+        } break;
+        case DateType::mjd: {
+            std::println("mjd: {}", mjd_to_scalar(config.time.mjd));
+        } break;
+        }
+        std::println();
+
+        string indent = "    ";
+        string indent2 = indent + indent;
+
+        std::println("Providers count: {}", config.gravity_providers.size());
+        for (const auto& gravity_provider : config.gravity_providers) {
+            std::println("--- Gravity Provider ID: {}", gravity_provider.id);
+            std::println("{}Type: {}", indent, gravity_provider.format);
+            std::println("{}Filepath: {}", indent, gravity_provider.filepath);
+            std::println("{}Line Skips: {}", indent, gravity_provider.lineskips);
+            std::println("{}Normalized: {}", indent, gravity_provider.normalized);
+        }
+        std::println();
+
+        std::println("Celestials count: {}", config.celestials.size());
+        for (const auto& cel : config.celestials) {
+            std::println("--- Celestial ID: {}", cel.id);
+            std::println("{}Name: {}", indent, cel.name);
+            std::println("{}Model: {}", indent, cel.model.id);
+            std::println(
+                "{}Gravity Model: {}",
+                indent,
+                gravity_model_str(cel.model.gravity_model.model)
+            );
+            std::println(
+                "{}Gravity Coefficient Source: {}",
+                indent,
+                gravity_coefficient_source_str(cel.model.gravity_model.coefficient_source)
+            );
+            if (cel.model.gravity_model.coefficient_source
+                == GravityCoefficientSource::direct_zonal) {
+                std::println("{}J: {}", indent, cel.model.gravity_model.J);
+            }
+            print_state_tr_config(cel.x_tr, indent);
+            print_state_att_config(cel.x_att, indent);
+        }
+        std::println();
+
+        std::println("Satellites count: {}", config.satellites.size());
+        for (const auto& sat : config.satellites) {
+            std::println("--- Satellite ID: {}", sat.id);
+            std::println("{}Name: {}", indent, sat.name);
+            print_state_tr_config(sat.x_tr, indent);
+            print_state_att_config(sat.x_att, indent);
+            print_mass_properties_config(sat.mass_properties, indent);
+        }
+
+        std::println();
+        std::println("Stations count: {}", config.stations.size());
+        for (const auto& stat : config.stations) {
+            std::println("--- Station ID: {}", stat.id);
+            std::println("Name: {}", stat.name);
+            if (stat.anchored) {
+                std::println("{}Anchor name: {}", indent, stat.anchor);
+                std::println("{}LLH (BCBF): {}", indent, stat.llh_BCBF);
+                std::println("{}Local Frame: {}", indent, stat.local_frame);
+            } else {
+                print_mass_properties_config(stat.mass_properties, indent);
+                print_state_tr_config(stat.x_tr, indent);
+                print_state_att_config(stat.x_att, indent);
+            }
+
+            std::println("{}Instruments count: {}", indent, stat.instruments.size());
+            for (const auto& instrument : stat.instruments) {
+                std::println("{}--- Instrument ID: {}", indent2, instrument.id);
+                std::println(
+                    "{}Instrument Type: {}",
+                    indent2,
+                    observation_type_str(instrument.type)
+                );
+                std::println(
+                    "{}Measurement Covariance Dim: ({}, {})",
+                    indent2,
+                    instrument.covariance_cfg.covariance.rows(),
+                    instrument.covariance_cfg.covariance.cols()
+                );
+                std::println(
+                    "{}Measurement Covariance: R = {}",
+                    indent2,
+                    vec_string(instrument.covariance_cfg.covariance)
+                );
+            }
+        }
+    }
+
+    print_diag_title();
+}
+
+void run_build_world_from_scenario() {
+    print_diag_title("JSON Scenario World Builder");
+
+    ScenarioConfig cfg;
+    StatusCode status
+        = load_scenario_json(pwd + "/scenarios/parser_stress_demo.json", cfg);
+    // = load_scenario_json(pwd + "/scenarios/earth_moon_sat_demo.json", config);
+    if (status == StatusCode::ok) {
+        std::println("Parsing: Successful");
+    } else {
+        std::println("Parsing Error {}", status_string(status));
+        return;
+    }
+
+    status = validate_scenario_config(cfg);
+    if (status == StatusCode::ok) {
+        std::println("Validation: Successful");
+    } else {
+        std::println("Validation Error: {}", status_string(status));
+        return;
+    }
+
+    std::println("Scenario configuration validated");
+
+    std::println();
+    std::println("Schema: name = {}, version = {}", cfg.schema.name, cfg.schema.version);
+
+    std::println(
+        "Metadata: name = {}, rng seed = {}",
+        cfg.metadata.name,
+        cfg.metadata.rng_seed
+    );
+    std::println();
+
+    std::print(
+        "Time: type = {}, time scale = {}, ",
+        date_type_str(cfg.time.date_type),
+        time_scale_str(cfg.time.time_scale)
+    );
+    switch (cfg.time.date_type) {
+    case DateType::cal: {
+        print_cal(cfg.time.cal, CalendarPrintStyle::string);
+    } break;
+    case DateType::jd: {
+        std::println("jd: {}", jd_to_scalar(cfg.time.jd));
+    } break;
+    case DateType::mjd: {
+        std::println("mjd: {}", mjd_to_scalar(cfg.time.mjd));
+    } break;
+    }
+    std::println();
+
+    World world;
+    ScenarioBuildResult result;
+    status = build_world_from_scenario_config(cfg, world, result);
+    if (status == StatusCode::ok) {
+        std::println("World Build: Successful");
+    } else {
+        std::println("World Build Error: {}", status_string(status));
+        return;
+    }
+
+    std::println();
+    std::println("World Counts");
+    std::println("    Celestials: {}", world.num_celestials());
+    std::println("    Satellites: {}", world.num_satellites());
+    std::println("    Stations: {}", world.num_stations());
+    std::println();
+
+    std::println("Build Result Maps");
+    std::println("    Body IDs: {}", result.body_ids.size());
+    std::println("    Celestial IDs: {}", result.celestial_ids.size());
+    std::println("    Satellite IDs: {}", result.satellite_ids.size());
+    std::println("    Station IDs: {}", result.station_ids.size());
+    std::println();
+
+    std::println("Built Celestials");
+    for (EntityId id : world.celestial_ids()) {
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr) continue;
+        print_celestial(*cel);
+    }
+    std::println();
+
+    std::println("Built Satellites");
+    for (EntityId id : world.satellite_ids()) {
+        const Satellite* sat = world.satellite(id);
+        if (sat == nullptr) continue;
+        print_satellite(*sat);
+    }
+    std::println();
+
+    std::println("Built Stations");
+    for (EntityId id : world.station_ids()) {
+        const Station* stat = world.station(id);
+        if (stat == nullptr) continue;
+        print_station(*stat);
+    }
+
+    print_diag_title();
+}
+
+void run_scenario_render_diag() {
+    print_diag_title("Scenario Render Diag");
+
+    ScenarioConfig scenario_cfg;
+    StatusCode status
+        = load_scenario_json(pwd + "/scenarios/parser_stress_demo.json", scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Parsing Error: {}", status_string(status));
+        return;
+    }
+
+    status = validate_scenario_config(scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Validation Error: {}", status_string(status));
+        return;
+    }
+
+    World world;
+    ScenarioBuildResult build_result;
+    status = build_world_from_scenario_config(scenario_cfg, world, build_result);
+    if (status != StatusCode::ok) {
+        std::println("World Build Error: {}", status_string(status));
+        return;
+    }
+
+    std::println(
+        "World Build: celestials = {}, satellites = {}, stations = {}",
+        world.num_celestials(),
+        world.num_satellites(),
+        world.num_stations()
+    );
+
+    BuiltinRenderAssets assets;
+    RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets);
+    std::println(
+        "Render Instances: ellipsoids = {}, cubes = {}, cylinders = {}, custom = {}",
+        scene.ellipsoids.size(),
+        scene.cubes.size(),
+        scene.cylinders.size(),
+        scene.custom_models.size()
+    );
+
+    // integrator
+    WorldStepperConfig cfg;
+    cfg.step_tr = true;
+    cfg.step_att = true;
+    cfg.substeps = static_cast<i32>(scenario_cfg.world_stepper.substeps);
+    cfg.ticks = static_cast<i32>(scenario_cfg.world_stepper.ticks);
+    cfg.dt_scale = scenario_cfg.world_stepper.time_scale;
+    cfg.integrator_tr = scenario_cfg.world_stepper.integrator_tr;
+    cfg.integrator_att = scenario_cfg.world_stepper.integrator_att;
+
+    f64 t0 = scenario_cfg.time.t0;
+    f64 dt = 1.0 / f64(cfg.ticks) * cfg.dt_scale;
+    world.reset_time(t0);
+    WorldStepperStats stats;
+    stats.success = true;
+    WorldStepperWorkspace wksp;
+
+    i32 screenWidth = 960;
+    i32 screenHeight = 800;
+
+    SetTraceLogLevel(LOG_WARNING);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
+
+    InitWindow(screenWidth, screenHeight, "Scenario Render Diag");
+
+    Camera3D camera;
+    vec3f cam_pos = vec3f{1.0, 1.0, 1.0} * 25000;
+    camera.position = eig_to_rl(cam_pos);
+    camera.fovy = 45;
+    camera.projection = CAMERA_PERSPECTIVE;
+    camera.up = eig_to_rl(axis_z);
+    camera.target = eig_to_rl(origin);
+    rlSetClipPlanes(1.0e3, 1.0e9);
+
+    i32 sphere_i = 32;
+    Image checker_pattern = GenImageChecked(sphere_i, sphere_i, 1, 1, RAYWHITE, GRAY);
+    Texture2D texture = LoadTextureFromImage(checker_pattern);
+
+    Mesh sphere_mesh = GenMeshSphere(1., sphere_i, sphere_i);
+    Model sphere_model = LoadModelFromMesh(sphere_mesh);
+    sphere_model.transform = MatrixIdentity();
+    sphere_model.materials[0] = LoadMaterialDefault();
+    sphere_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
+
+    checker_pattern = GenImageChecked(2, 2, 1, 1, RAYWHITE, GRAY);
+    texture = LoadTextureFromImage(checker_pattern);
+    Mesh cube_mesh = GenMeshCube(1.0f, 1.0f, 1.0f);
+    Model cube_model = LoadModelFromMesh(cube_mesh);
+    cube_model.transform = MatrixIdentity();
+    cube_model.materials[0] = LoadMaterialDefault();
+    cube_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
+
+    Mesh cylinder_mesh = GenMeshCylinder(1.0f, 1.0f, sphere_i);
+    Model cylinder_model = LoadModelFromMesh(cylinder_mesh);
+    cylinder_model.transform = MatrixIdentity();
+    cylinder_model.materials[0] = LoadMaterialDefault();
+    cylinder_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
+
+    UnloadImage(checker_pattern);
+
+    SetTargetFPS(scenario_cfg.graphics_settings.target_fps);
+    Color bg = Color({
+        scenario_cfg.graphics_settings.background_color[0],
+        scenario_cfg.graphics_settings.background_color[1],
+        scenario_cfg.graphics_settings.background_color[2],
+        scenario_cfg.graphics_settings.background_color[3]
+    });
+
+    bool paused = false;
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        BeginMode3D(camera);
+        ClearBackground(bg);
+
+        RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets);
+        render_scene_snapshot(scene, sphere_model, cube_model, cylinder_model);
+
+        if (IsKeyPressed(KEY_SPACE)) {
+            paused = !paused;
+        }
+        if (!paused) {
+            stats += step_world(world, dt, cfg, wksp);
+            if (!stats.success) {
+                std::println("Simulation Failure");
+                break;
+            }
+        }
+        svec<EntityId> stat_ids = world.station_ids();
+        for (EntityId stat_id : stat_ids) {
+            draw_axes(
+                world.stat_x_tr_inertial(stat_id),
+                world.stat_x_att_inertial(stat_id),
+                1000.0f
+            );
+        }
+
+        EndMode3D();
+        EndDrawing();
+    }
+    print_diag_title();
 }

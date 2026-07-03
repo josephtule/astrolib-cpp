@@ -22,8 +22,8 @@
         "gravity": [
             {
                 "id": "EGM2008_gfc",
-                "type": "egm2008",
-                "path": "assets/EGM2008.gfc.txt",
+                "type": "gfc",
+                "path": "assets/earth/EGM2008.gfc.txt",
                 "normalized": true
             }
         ]
@@ -36,7 +36,7 @@
                 "v": [0.0, 0.0, 0.0]
             },
             "state_att": {
-                "type": "axis_angle",
+                "input_type": "axis_angle",
                 "axis": [1.0, 0.0, 0.0],
                 "angle": 0.4014257279586958,
                 "w": [0.0, 0.0, 7.2921159e-5]
@@ -75,6 +75,39 @@
                 "translation": true,
                 "attitude": false
             }
+        },
+        {
+            "id": "sat2",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 6785,
+                "ecc": 0.0006,
+                "inc": 51.6,
+                "raan": 0.0,
+                "aop": 0.0,
+                "ta": 0.0,
+                "units_angle": "degree",
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "euler_angles",
+                "angles": [45.0, 0.0, 0.0],
+                "sequence": [3, 2, 1],
+                "units_angle": "degree"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 200.0, 300.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
         }
     ],
     "stations": [
@@ -83,6 +116,8 @@
             "anchor": "earth",
             "coordinate_type": "detic_llh",
             "llh": [0.7853981633974483, 0.7853981633974483, 0.0],
+            "units_angle": "radian",
+            "units_length": "kilometer",
             "local_frame": "ENU",
             "instruments": [
                 {

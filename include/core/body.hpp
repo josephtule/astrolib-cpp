@@ -38,7 +38,7 @@ struct Body {
 };
 
 enum struct GravityModel { pointmass, zonal, spherical_harmonics };
-inline std::string gravity_model_name(GravityModel model) {
+inline std::string gravity_model_str(GravityModel model) {
     switch (model) {
     case GravityModel::pointmass: return "pointmass";
     case GravityModel::zonal: return "zonal";
@@ -63,6 +63,7 @@ struct Celestial : public Body {
     RadiationModel radiation_model = RadiationModel::none;
 
     // Shape
+    f64 ref_radius = 0.0; // used for gravity computations
     f64 mean_radius = 0.0;
     f64 semimajor_axis = 0.0;
     f64 semiminor_axis = 0.0;

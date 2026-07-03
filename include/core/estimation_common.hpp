@@ -2,6 +2,7 @@
 
 #include <string>
 
+// TODO: move this to status.hpp file
 enum struct StatusCode {
     ok,
     invalid_input,
@@ -31,6 +32,8 @@ enum struct StatusCode {
     attitude_type_not_found,
     file_open_failed,
     parse_failed,
+    celestial_model_not_found,
+    matrix_invert_failed,
 };
 // inline constexpr StatusCode ok = StatusCode::ok;
 
@@ -64,6 +67,8 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::attitude_type_not_found: return "Attitude type not found";
     case StatusCode::file_open_failed: return "File open failed";
     case StatusCode::parse_failed: return "Parse failed";
+    case StatusCode::celestial_model_not_found: return "Celestial Model not found";
+    case StatusCode::matrix_invert_failed: return "Matrix inversion failed";
     }
 
     return "Unknown Status";

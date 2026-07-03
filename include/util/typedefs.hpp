@@ -10,6 +10,8 @@
 #include <unordered_set>
 #include <vector>
 
+const std::string pwd = std::string(PROJECT_ROOT);
+
 // Type aliases
 using string = std::string;
 

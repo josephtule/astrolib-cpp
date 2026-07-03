@@ -8,9 +8,9 @@
 struct WorldStepperConfig {
     IntegratorType integrator_tr = IntegratorType::rk2;
     IntegratorType integrator_att = IntegratorType::rk4;
-    i32 substeps = 1;     // subdivisions per tick
-    i32 ticks = 1;        // repeated integration ticks per call
-    f64 time_scale = 1.0; // simulated-time multiplier applied to input dt
+    i32 substeps = 1;   // subdivisions per tick
+    i32 ticks = 1;      // repeated integration ticks per call
+    f64 dt_scale = 1.0; // simulated-time multiplier applied to input dt
     bool step_tr = true;
     bool step_att = false;
 };

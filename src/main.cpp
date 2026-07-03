@@ -10,14 +10,13 @@
 #include "graphics/raygen.hpp"
 #include "util/constants.hpp"
 #include "util/math.hpp"
+#include "util/tools.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
 #include <chrono>
 #include <iostream>
 #include <print>
-
-const std::string pwd = std::string(PROJECT_ROOT);
 
 int main() {
     World world;
@@ -109,13 +108,17 @@ int main() {
     // run_realtime_ekf_world_update_diag();
     // run_station_instrument_diag();
     // run_world_history_diag();
+    // run_scenario_loader_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
     auto start = std::chrono::high_resolution_clock::now();
     // run_render_pipeline_diag();
+    // run_world_history_ekf_diag();
+    
+    run_build_world_from_scenario();
+    // run_scenario_render_diag();
 
-    run_world_history_ekf_diag();
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
 

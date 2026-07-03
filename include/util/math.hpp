@@ -3,6 +3,7 @@
 #include "util/constants.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+#include <cmath>
 
 template <typename T, typename I>
 inline T pow_Ti(T x, I n) {
@@ -166,4 +167,118 @@ inline mat3<T> matrix_cross(const vec3<T>& v) {
     const T T0 = T(0);
 
     return mat3<T>{T0, -v(2), v(1), v(2), T0, -v(0), -v(1), v(0), T0};
+}
+
+// scalar checks
+
+template <class T>
+inline bool finite_pos(T val) {
+    return std::isfinite(val) && val > T(0);
+}
+
+template <class T>
+inline bool finite_nonneg(T val) {
+    return std::isfinite(val) && val >= T(0);
+}
+
+template <class T>
+inline bool finite_nonzero(T val, T tol = tol12) {
+    return std::isfinite(val) && std::isfinite(tol) && tol >= T(0) && std::abs(val) > tol;
+}
+
+template <class T>
+inline bool finite_inrange(
+    T val,
+    T low,
+    T up,
+    bool include_low = false,
+    bool include_up = false
+) {
+    if (!std::isfinite(val)) return false;
+    if (!std::isfinite(low)) return false;
+    if (!std::isfinite(up)) return false;
+    if (include_low && include_up) {
+        if (low > up) return false;
+    } else {
+        if (low >= up) return false;
+    }
+
+    bool above_low = include_low ? val >= low : val > low;
+    if (!above_low) return false;
+
+    bool below_up = include_up ? val <= up : val < up;
+    if (!below_up) return false;
+
+    return true;
+}
+
+// matrix/vector checks
+
+template <class Derived>
+inline bool finite_dense(const eig::DenseBase<Derived>& x) {
+    return x.allFinite();
+}
+
+template <class Derived>
+inline bool finite_nonempty_dense(const eig::DenseBase<Derived>& x) {
+    return x.rows() > 0 && x.cols() > 0 && x.allFinite();
+}
+
+template <class Derived>
+inline bool finite_vec(const eig::DenseBase<Derived>& v) {
+    return finite_dense(v);
+}
+
+template <class Derived>
+inline bool finite_nonempty_vec(const eig::DenseBase<Derived>& v) {
+    return v.size() > 0 && v.allFinite();
+}
+
+template <class Derived>
+inline bool finite_mat(const eig::DenseBase<Derived>& A) {
+    return finite_dense(A);
+}
+
+template <class Derived>
+inline bool finite_nonempty_mat(const eig::DenseBase<Derived>& A) {
+    return finite_nonempty_dense(A);
+}
+
+template <class Derived, class T>
+inline bool finite_norm_nonzero(const eig::MatrixBase<Derived>& v, T tol = tol12) {
+    return finite_dense(v) && finite_nonzero(v.norm(), tol);
+}
+
+template <class Derived>
+inline bool finite_norm_pos(const eig::MatrixBase<Derived>& v) {
+    return finite_dense(v) && finite_pos(v.norm());
+}
+
+// integer operations
+
+inline i32 floor_div(i32 a, i32 b) {
+    i32 q = a / b;
+    i32 r = a % b;
+
+    if (r != 0 && ((r > 0) != (b > 0))) {
+        --q;
+    }
+
+    return q;
+}
+
+inline i32 floor_mod(i32 a, i32 b) { return a - b * floor_div(a, b); }
+
+inline i32 count_digits(i32 n) {
+    if (n == 0) return 1;
+
+    n = abs(n); // Handle negative numbers
+    int count = 0;
+
+    while (n > 0) {
+        n /= 10;
+        count++;
+    }
+
+    return count;
 }

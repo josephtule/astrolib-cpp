@@ -730,9 +730,9 @@ WorldStepperStats step_world(
 
     if (cfg.substeps < 1) return stats;
     if (cfg.ticks < 1) return stats;
-    if (!std::isfinite(cfg.time_scale) || cfg.time_scale <= 0.0) return stats;
+    if (!std::isfinite(cfg.dt_scale) || cfg.dt_scale <= 0.0) return stats;
 
-    f64 dt_tick = dt * cfg.time_scale;
+    f64 dt_tick = dt * cfg.dt_scale;
     f64 dt_sub = dt_tick / cfg.substeps;
 
     svec<EntityId> att_ids = wksp.propagated_att_ids;

@@ -6,8 +6,6 @@
 #include "core/transform.hpp"
 #include "core/world.hpp"
 
-const std::string pwd = std::string(PROJECT_ROOT);
-
 enum struct WorldScenario {};
 
 struct EarthStationSatScenario {

@@ -22,14 +22,14 @@
         "gravity": [
             {
                 "id": "EGM2008_gfc",
-                "type": "egm2008",
-                "path": "assets/EGM2008.gfc.txt",
+                "type": "gfc",
+                "path": "assets/earth/EGM2008.gfc.txt",
                 "normalized": true
             },
             {
                 "id": "JGL165P1_gfc",
-                "type": "JGL165P1",
-                "path": "assets/JGL165P1.gfc.txt",
+                "type": "gfc",
+                "path": "assets/moon/JGL165P1.gfc.txt",
                 "normalized": true
             }
         ]

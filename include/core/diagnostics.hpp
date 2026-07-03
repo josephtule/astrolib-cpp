@@ -81,3 +81,6 @@ void run_realtime_ekf_world_update_diag();
 void run_station_instrument_diag();
 void run_world_history_diag();
 void run_world_history_ekf_diag();
+void run_scenario_loader_diag();
+void run_build_world_from_scenario();
+void run_scenario_render_diag();

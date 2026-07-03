@@ -1,5 +1,8 @@
 #pragma once
 
+#include "util/math.hpp"
+#include "util/printing.hpp"
+#include "util/tools.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
@@ -7,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <print>
+#include <string>
 
 enum struct TimeScale {
     utc, // coordinated universal time
@@ -16,6 +20,18 @@ enum struct TimeScale {
     tdb, // dynamical barycentric time
     gps, // global positioning system time
 };
+inline string time_scale_str(const TimeScale& scale) {
+    switch (scale) {
+    case TimeScale::utc: return "utc";
+    case TimeScale::ut1: return "ut1";
+    case TimeScale::tai: return "tai";
+    case TimeScale::tt: return "tt";
+    case TimeScale::tdb: return "tdb";
+    case TimeScale::gps: return "gps";
+    }
+
+    return "unknown";
+}
 
 struct CalendarTime {
     i32 year = 2000;
@@ -31,7 +47,7 @@ struct HMSTime {
     f64 second = 0.0;
 };
 
-struct JulianDate { // split for precision
+struct JulianDate {      // split for precision
     f64 day = 2451545.0; // J2000
     f64 frac = 0.0;
 };
@@ -361,18 +377,62 @@ inline i32 get_jd_index(const JulianDate& jd, ecref<vecX<JulianDate>> jds) {
     return i;
 }
 
-inline void print_cal(const CalendarTime& cal, bool vert = false) {
-    if (vert) {
-        std::println(
-            "Year: {}\nMonth: {}\nDay: {}\nHour: {}\nMinute: {}\nSecond: {}",
-            cal.year,
-            cal.month,
-            cal.day,
-            cal.hour,
-            cal.minute,
-            cal.second
-        );
-    } else {
+inline string cal_str(
+    const CalendarTime& cal,
+    i32 precision = 4,
+    string date_separator = "-",
+    string DT_separator = "T",
+    string time_separator = ":",
+    string filler = "0"
+) {
+    // "YYYY-MM-DDTHH:MM:SS.FFFF"
+    i32 num_fill = 0;
+    string zeros = "";
+
+    i32 y_digits = count_digits(cal.year);
+    num_fill = 4 - y_digits - (cal.year < 0 ? 1 : 0);
+    string year
+        = (y_digits < 4 ? repeat_char(filler, num_fill) : "") + std::to_string(cal.year);
+
+    i32 m_digits = count_digits(cal.month);
+    num_fill = 2 - m_digits - (cal.month < 0 ? 1 : 0);
+    string month
+        = (m_digits < 2 ? repeat_char(filler, num_fill) : "") + std::to_string(cal.month);
+
+    i32 d_digits = count_digits(cal.day);
+    num_fill = 2 - d_digits - (cal.day < 0 ? 1 : 0);
+    string day
+        = (d_digits < 2 ? repeat_char(filler, num_fill) : "") + std::to_string(cal.day);
+
+    i32 h_digits = count_digits(cal.hour);
+    num_fill = 2 - h_digits - (cal.day < 0 ? 1 : 0);
+    string hour
+        = (h_digits < 2 ? repeat_char(filler, num_fill) : "") + std::to_string(cal.hour);
+
+    i32 min_digits = count_digits(cal.minute);
+    num_fill = 2 - min_digits - (cal.minute < 0 ? 1 : 0);
+    string minute = (min_digits < 2 ? repeat_char(filler, num_fill) : "")
+                    + std::to_string(cal.minute);
+
+    i32 s_int = static_cast<i32>(cal.second);
+    f64 s_frac = cal.second - s_int;
+    i32 s_digits = count_digits(s_int);
+    num_fill = 2 - s_digits - (cal.second < 0.0 ? 1 : 0);
+    string second = (s_digits < 2 ? repeat_char(filler, num_fill) : "")
+                    + to_string_precision(cal.second, precision);
+
+    string str = year + date_separator + month + date_separator + day + DT_separator
+                 + hour + time_separator + minute + time_separator + second;
+    return str;
+}
+
+enum struct CalendarPrintStyle { separate, separate_vertical, string, vector };
+inline void print_cal(
+    const CalendarTime& cal,
+    CalendarPrintStyle style = CalendarPrintStyle::separate
+) {
+    switch (style) {
+    case CalendarPrintStyle::separate: {
         std::println(
             "Year: {}, Month: {}, Day: {}, Hour: {}, Minute: {}, Second: {}",
             cal.year,
@@ -382,7 +442,123 @@ inline void print_cal(const CalendarTime& cal, bool vert = false) {
             cal.minute,
             cal.second
         );
+    } break;
+    case CalendarPrintStyle::separate_vertical: {
+        std::println(
+            "Year: {}\nMonth: {}\nDay: {}\nHour: {}\nMinute: {}\nSecond: {}",
+            cal.year,
+            cal.month,
+            cal.day,
+            cal.hour,
+            cal.minute,
+            cal.second
+        );
+    } break;
+    case CalendarPrintStyle::vector: {
+        vec6d cal_vec;
+        cal_vec << cal.year, cal.month, cal.day, cal.hour, cal.minute, cal.second;
+        std::println("{}", vec_string(cal_vec));
+    } break;
+    case CalendarPrintStyle::string: {
+        std::println("{}", cal_str(cal));
+    } break;
     }
+}
+
+inline CalendarTime normalize_cal(const CalendarTime& cal) {
+    CalendarTime out = cal;
+
+    if (out.second < 0.0 || out.second >= 60.0) {
+        i32 dt_min = static_cast<i32>(std::floor(out.second / 60.0));
+
+        out.second -= static_cast<f64>(dt_min) * 60.0;
+        out.minute += dt_min;
+    }
+    if (out.second >= 60.0) {
+        out.second -= 60.0;
+        out.minute += 1;
+    } else if (out.second < 0.0) {
+        out.second += 60.0;
+        out.minute -= 1;
+    }
+
+    if (out.minute < 0 || out.minute >= 60) {
+        i32 dt_h = floor_div(out.minute, 60);
+
+        out.minute -= dt_h * 60;
+        out.hour += dt_h;
+    }
+
+    if (out.hour < 0 || out.hour >= 24) {
+        i32 dt_d = floor_div(out.hour, 24);
+
+        out.hour -= dt_d * 24;
+        out.day += dt_d;
+    }
+
+    if (out.month < 1 || out.month > 12) {
+        i32 month0 = out.month - 1;
+
+        i32 dt_y = floor_div(month0, 12);
+        out.month = floor_mod(month0, 12) + 1;
+        out.year += dt_y;
+    }
+
+    while (out.day <= 0) {
+        --out.month;
+
+        if (out.month <= 0) {
+            out.month = 12;
+            --out.year;
+        }
+
+        out.day += days_in_month(out.year, out.month);
+    }
+
+    while (out.day > days_in_month(out.year, out.month)) {
+        out.day -= days_in_month(out.year, out.month);
+
+        ++out.month;
+
+        if (out.month > 12) {
+            out.month = 1;
+            ++out.year;
+        }
+    }
+
+    return out;
+}
+
+inline bool validate_hms(const HMSTime& hms) {
+    i32 h = hms.hour;
+    i32 m = hms.minute;
+    f64 s = hms.second;
+
+    if (h < 0 || h > 23) return false;
+    if (m < 0 || m > 59) return false;
+    if (s < 0.0) return false;
+
+    return true;
+}
+inline bool validate_cal(const CalendarTime& cal) {
+    i32 y = cal.year;
+    i32 m = cal.month;
+    i32 d = cal.day;
+
+    if (m <= 0 || m > 12) return false;
+    if (d <= 0 || d > days_in_month(y, m)) return false;
+
+    return validate_hms(hms_from_cal(cal));
+}
+
+inline bool parse_cal_str(const string& str, CalendarTime& cal) {
+    // "YYYY-MM-DDTHH:MM:SS.FFFF...[SCALE]", assume strictly is this format
+
+    string y_str = str.substr(0, 4);
+    if (!is_numeric(y_str, true)) return false;
+    cal.year = std::stoi(y_str);
+
+    return true;
 }
 
 inline void print_chrono(auto duration, UTime units) {

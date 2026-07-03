@@ -315,7 +315,7 @@ vec3d World::gravity_accel_from(
         vec3d a_body = accel_gravity_spherical_harmonics(
             r_rel_body,
             source->mu,
-            source->mean_radius,
+            source->ref_radius,
             source->degree,
             source->order,
             source->C,
@@ -332,7 +332,7 @@ vec3d World::gravity_accel_from(
         vec3d a_body = accel_gravity_zonal(
             r_rel_body,
             source->mu,
-            source->mean_radius,
+            source->ref_radius,
             source->degree,
             source->J
         );                                        // Acceleration in body fixed frame

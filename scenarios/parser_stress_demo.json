@@ -1,0 +1,518 @@
+{
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "metadata": {
+        "name": "parser_stress_demo",
+        "rng_seed": 24680
+    },
+    "providers": {
+        "gravity": [
+            {
+                "id": "EGM2008_gfc",
+                "format": "gfc",
+                "path": "/assets/earth/EGM2008.gfc.txt",
+                "lineskips": 0,
+                "normalized": true
+            },
+            {
+                "id": "EGM2008_120",
+                "format": "egm",
+                "path": "/assets/egm2008_120.txt",
+                "lineskips": 0,
+                "normalized": true
+            },
+            {
+                "id": "JGL165P1_gfc",
+                "format": "JGL165P1",
+                "path": "/assets/moon/JGL165P1.gfc.txt",
+                "lineskips": 0,
+                "normalized": true
+            },
+            {
+                "id": "gggrx_1200a_sha",
+                "format": "nasa_sha",
+                "path": "assets/moon/gggrx_1200a_sha.tab.txt",
+                "lineskips": 1,
+                "normalized": true
+            }
+        ]
+    },
+    "celestials": [
+        {
+            "id": "earth",
+            "name": "Earth",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [0.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 0.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "axis_angle",
+                "axis": [1.0, 0.0, 0.0],
+                "angle": 23.0,
+                "w": [0.0, 0.0, 0.00417807413],
+                "units_angle": "degree"
+            },
+            "attitude_model": "simple_spin",
+            "model": {
+                "id": "wgs84",
+                "gravity": {
+                    "model": "spherical_harmonics",
+                    "degree": 6,
+                    "order": 6,
+                    "coefficients": "EGM2008_gfc"
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "moon",
+            "name": "Moon",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [384400.0, 0.0, 0.0],
+                "v": [0.0, 1.022, 0.0],
+                "units_length": "kilometer"
+            },
+            "model": {
+                "id": "custom",
+                "gravity": {
+                    "model": "pointmass",
+                    "mu": 4902.800066
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "mars",
+            "name": "Mars",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [225000000000.0, 0.0, 0.0],
+                "v": [0.0, 24077.0, 0.0],
+                "units_length": "meter"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.000070882]
+            },
+            "attitude_model": "simple_spin",
+            "model": {
+                "id": "custom",
+                "gravity": {
+                    "model": "zonal",
+                    "mu": 42828.375214,
+                    "radius": 3396.19,
+                    "degree": 3,
+                    "order": 0,
+                    "J": [0.0, 0.0, 0.00196045, -0.00003145]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        }
+    ],
+    "satellites": [
+        {
+            "id": "sat_quat_posvel_km",
+            "name": "Quaternion PosVel KM",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [7000.0, 0.0, 0.0],
+                "v": [0.0, 7.5, 1.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.001, 0.0, 0.0]
+            },
+            "mass_properties": {
+                "mass": 120.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 140.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "sat_dcm_posvel_meter",
+            "name": "DCM PosVel Meter",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [7100000.0, 100000.0, 0.0],
+                "v": [-100.0, 7500.0, 900.0],
+                "units_length": "meter"
+            },
+            "state_att": {
+                "input_type": "dcm",
+                "dcm": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.001, 0.0]
+            },
+            "mass_properties": {
+                "mass": 130.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [110.0, 130.0, 150.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "sat_axis_classical_deg",
+            "name": "Axis Angle Classical Degrees",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 7200.0,
+                "ecc": 0.001,
+                "inc": 51.6,
+                "raan": 15.0,
+                "aop": 25.0,
+                "ta": 35.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "axis_angle",
+                "axis": [0.0, 0.0, 1.0],
+                "angle": 30.0,
+                "w": [0.0, 0.0, 0.05],
+                "units_angle": "degree"
+            },
+            "mass_properties": {
+                "mass": 140.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [120.0, 140.0, 160.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "sat_euler_classical_rad_meter",
+            "name": "Euler Classical Radians Meter",
+            "state_tr": {
+                "input_type": "classical",
+                "central": "earth",
+                "sma": 7300000.0,
+                "ecc": 0.002,
+                "inc": 0.7853981633974483,
+                "raan": 0.17453292519943295,
+                "aop": 0.3490658503988659,
+                "ta": 0.5235987755982988,
+                "units_length": "meter",
+                "units_angle": "radian"
+            },
+            "state_att": {
+                "input_type": "euler_angles",
+                "angles": [10.0, 20.0, 30.0],
+                "sequence": [3, 2, 1],
+                "w": [0.01, 0.02, 0.03],
+                "units_angle": "degree"
+            },
+            "mass_properties": {
+                "mass": 150.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [130.0, 150.0, 170.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "sat_crp_posvel_mile",
+            "name": "CRP PosVel Mile",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [4500.0, 50.0, 25.0],
+                "v": [-0.05, 4.65, 0.5],
+                "units_length": "mile"
+            },
+            "state_att": {
+                "input_type": "crp",
+                "axis": [0.01, 0.02, 0.03],
+                "w": [0.001, 0.002, 0.003]
+            },
+            "mass_properties": {
+                "mass": 160.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [140.0, 160.0, 180.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "sat_mrp_classical_km",
+            "name": "MRP Classical KM",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 7600.0,
+                "ecc": 0.003,
+                "inc": 63.4,
+                "raan": 40.0,
+                "aop": 270.0,
+                "ta": 5.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "mrp",
+                "axis": [0.02, -0.01, 0.03],
+                "w": [0.0, 0.0, 0.001]
+            },
+            "mass_properties": {
+                "mass": 170.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [150.0, 170.0, 190.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        }
+    ],
+    "stations": [
+        {
+            "id": "stat_no_instruments",
+            "name": "No Instruments Station",
+            "anchor": "earth",
+            "coordinate_type": "detic_llh",
+            "llh": [45.0, -120.0, 0.5],
+            "units_angle": "degree",
+            "units_length": "kilometer",
+            "local_frame": "ENU"
+        },
+        {
+            "id": "stat_all_instruments",
+            "name": "All Instruments Station",
+            "anchor": "earth",
+            "coordinate_type": "detic_llh",
+            "llh": [0.7853981633974483, 0.7853981633974483, 0.0],
+            "units_angle": "radian",
+            "units_length": "kilometer",
+            "local_frame": "ENU",
+            "instruments": [
+                {
+                    "id": "all_radec",
+                    "type": "radec",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1.0e-10, 1.0e-10]
+                    }
+                },
+                {
+                    "id": "all_azel",
+                    "type": "azel",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [1.0e-8, 0.0],
+                            [0.0, 1.0e-8]
+                        ]
+                    }
+                },
+                {
+                    "id": "all_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "flattened",
+                        "values": [1.0e-4]
+                    }
+                },
+                {
+                    "id": "all_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1.0e-8]
+                    }
+                },
+                {
+                    "id": "all_pos",
+                    "type": "pos",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "flattened",
+                        "values": [
+                            1.0e-4, 0.0, 0.0, 0.0, 1.0e-4, 0.0, 0.0, 0.0, 1.0e-4
+                        ]
+                    }
+                },
+                {
+                    "id": "all_pos_vel",
+                    "type": "pos_vel",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [
+                            1.0e-4, 1.0e-4, 1.0e-4, 1.0e-8, 1.0e-8, 1.0e-8
+                        ]
+                    }
+                },
+                {
+                    "id": "all_rel_pos",
+                    "type": "rel_pos",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [1.0e-4, 0.0, 0.0],
+                            [0.0, 1.0e-4, 0.0],
+                            [0.0, 0.0, 1.0e-4]
+                        ]
+                    }
+                },
+                {
+                    "id": "all_rel_pos_vel",
+                    "type": "rel_pos_vel",
+                    "enabled": false,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [
+                            1.0e-4, 1.0e-4, 1.0e-4, 1.0e-8, 1.0e-8, 1.0e-8
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "id": "stat_body_fixed_meter",
+            "name": "Body Fixed Meter Station",
+            "anchor": "earth",
+            "coordinate_type": "body_fixed",
+            "r_body": [6378137.0, 0.0, 0.0],
+            "units_length": "meter",
+            "local_frame": "ENU",
+            "instruments": [
+                {
+                    "id": "body_fixed_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1.0e-4]
+                    }
+                }
+            ]
+        },
+        {
+            "id": "stat_free_tracking",
+            "name": "Free Tracking Station",
+            "anchored": false,
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [6800000.0, -1200000.0, 500000.0],
+                "v": [5000.0, 8200.0, -500.0],
+                "units_length": "meter"
+            },
+            "state_att": {
+                "input_type": "axis_angle",
+                "axis": [0.0, 1.0, 0.0],
+                "angle": 15.0,
+                "w": [0.0, 0.0, 0.1],
+                "units_angle": "degree"
+            },
+            "mass_properties": {
+                "mass": 250.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [200.0, 220.0, 240.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            },
+            "instruments": [
+                {
+                    "id": "free_station_pos_vel",
+                    "type": "pos_vel",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [
+                            1.0e-3, 1.0e-3, 1.0e-3, 1.0e-6, 1.0e-6, 1.0e-6
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "world_stepper": {
+        "delta_time": 1.0,
+        "translation_integrator": "rk4",
+        "attitude_integrator": "rk4",
+        "substeps": 1,
+        "ticks": 5,
+        "dt_scale": 5
+    },
+    "time": {
+        "t0": 0.0,
+        "date": {
+            "input_type": "calendar", // "jd", "mjd"
+            "cal": {
+                "input_type": "separate", // "vector", "string"
+                // "string": "2000-01-01T00:00:00.0000",
+                // "vector": [2000,1,1,0,0,0.0],
+                "year": 2000,
+                "month": 1,
+                "day": 1,
+                "hour": 0,
+                "minute": 0,
+                "second": 1.0
+            },
+            // "jd": { "day": 2451545.0, "frac": 0.0 },
+            // "mjd": { "day": 51544.0, "frac": 0.0 }
+            "time_scale": "utc"
+        }
+    },
+    "raylib_settings": {
+        "target_fps": 60,
+        "background_color": [10, 15, 20, 255],
+        "draw_inertial_axes": true
+    }
+}
