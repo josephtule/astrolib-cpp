@@ -468,5 +468,77 @@ inline vec3d detic_to_bcbf(
     return r_bcbf;
 }
 
+template <class T>
+inline vec3<T> cart_to_sph(const vec3<T>& c, T tol = tol9, UAngle uout = UAngle::radian) {
+    static_assert(std::is_floating_point_v<T>);
 
-// inline convert_attitude
+    // az from first axis, el from plane formed by first and second axis
+    // output is [az, el, r] or [ra, dec, r]
+
+    const T nan = std::numeric_limits<T>::quiet_NaN();
+
+    vec3<T> s;
+
+    T x = c(0);
+    T y = c(1);
+    T z = c(2);
+
+    T rho = std::sqrt(x * x + y * y);
+    T r = std::sqrt(x * x + y * y + z * z);
+
+    s(2) = r;
+
+    // zero vector: direction is undefined, so az and el are undefined.
+    if (r <= tol) {
+        s(0) = nan;
+        s(1) = nan;
+        s(2) = T(0);
+        return s;
+    }
+
+    // along third axis: azimuth is undefined, elevation is defined.
+    if (rho <= tol) {
+        s(0) = nan;
+    } else {
+        s(0) = std::atan2(y, x);
+    }
+
+    s(1) = std::atan2(z, rho);
+
+    if (uout != UAngle::radian) {
+        if (!std::isnan(s(0))) {
+            s(0) = convert_angle(s(0), UAngle::radian, uout);
+        }
+
+        if (!std::isnan(s(1))) {
+            s(1) = convert_angle(s(1), UAngle::radian, uout);
+        }
+    }
+
+    return s;
+}
+
+template <class T>
+inline vec3<T> sph_to_cart(const vec3<T>& s, UAngle uin = UAngle::radian) {
+    static_assert(std::is_floating_point_v<T>);
+    // input is [az, el, r] or [ra, dec, r]
+
+    T az = s(0);
+    T el = s(1);
+    T r = s(2);
+
+    if (uin != UAngle::radian) {
+        az = convert_angle(az, uin, UAngle::radian);
+        el = convert_angle(el, uin, UAngle::radian);
+    }
+
+    vec3<T> c;
+
+    T cel = std::cos(el);
+
+    c(0) = r * cel * std::cos(az);
+    c(1) = r * cel * std::sin(az);
+    c(2) = r * std::sin(el);
+
+    return c;
+}

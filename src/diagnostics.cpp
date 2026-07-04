@@ -27,6 +27,7 @@
 #include "core/world_history.hpp"
 #include "core/world_stepper.hpp"
 
+#include "graphics/render_loop.hpp"
 #include "util/constants.hpp"
 #include "util/printing.hpp"
 #include "util/typedefs.hpp"
@@ -2520,8 +2521,6 @@ void run_render_pipeline_diag() {
     print_diag_title();
 }
 
-
-
 void run_world_workspace_diag() {
     print_diag_title("World Stepper Workspace");
 
@@ -4639,8 +4638,9 @@ void run_build_world_from_scenario() {
     std::println();
 
     World world;
+    WorldStepperConfig stepper_cfg;
     ScenarioBuildResult result;
-    status = build_world_from_scenario_config(cfg, world, result);
+    status = build_world_from_scenario_config(cfg, world, result, stepper_cfg);
     if (status == StatusCode::ok) {
         std::println("World Build: Successful");
     } else {
@@ -4706,8 +4706,14 @@ void run_scenario_render_diag() {
     }
 
     World world;
+    WorldStepperConfig stepper_cfg;
     ScenarioBuildResult build_result;
-    status = build_world_from_scenario_config(scenario_cfg, world, build_result);
+    status = build_world_from_scenario_config(
+        scenario_cfg,
+        world,
+        build_result,
+        stepper_cfg
+    );
     if (status != StatusCode::ok) {
         std::println("World Build Error: {}", status_string(status));
         return;
@@ -4720,114 +4726,29 @@ void run_scenario_render_diag() {
         world.num_stations()
     );
 
-    BuiltinRenderAssets assets;
-    RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets);
-    std::println(
-        "Render Instances: ellipsoids = {}, cubes = {}, cylinders = {}, custom = {}",
-        scene.ellipsoids.size(),
-        scene.cubes.size(),
-        scene.cylinders.size(),
-        scene.custom_models.size()
-    );
-
     // integrator
-    WorldStepperConfig cfg;
-    cfg.step_tr = true;
-    cfg.step_att = true;
-    cfg.substeps = static_cast<i32>(scenario_cfg.world_stepper.substeps);
-    cfg.ticks = static_cast<i32>(scenario_cfg.world_stepper.ticks);
-    cfg.dt_scale = scenario_cfg.world_stepper.time_scale;
-    cfg.integrator_tr = scenario_cfg.world_stepper.integrator_tr;
-    cfg.integrator_att = scenario_cfg.world_stepper.integrator_att;
-
-    f64 t0 = scenario_cfg.time.t0;
-    f64 dt = 1.0 / f64(cfg.ticks) * cfg.dt_scale;
+    f64 t0 = 0.0;
+    f64 dt = 1.0;
     world.reset_time(t0);
     WorldStepperStats stats;
     stats.success = true;
     WorldStepperWorkspace wksp;
 
-    i32 screenWidth = 960;
-    i32 screenHeight = 800;
+    // windowing and graphics
+    // TODO: make build_render_config
+    RenderLoopConfig render_cfg{};
+    render_cfg.window_title = "Scenario Render Diag";
+    render_cfg.stepper_cfg = stepper_cfg;
+    render_cfg.camera.position = vec3f{1.0f, 1.0f, 1.0f} * 50000.0f;
+    render_cfg.camera.fovy = 45.0f;
+    render_cfg.camera.projection = CAMERA_PERSPECTIVE;
+    render_cfg.camera.up = axis_zf;
+    render_cfg.camera.target = originf;
+    rlSetClipPlanes(1.0e3, 1.0e6);
 
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
+    run_world_render_loop(world, render_cfg, dt);
 
-    InitWindow(screenWidth, screenHeight, "Scenario Render Diag");
-
-    Camera3D camera;
-    vec3f cam_pos = vec3f{1.0, 1.0, 1.0} * 25000;
-    camera.position = eig_to_rl(cam_pos);
-    camera.fovy = 45;
-    camera.projection = CAMERA_PERSPECTIVE;
-    camera.up = eig_to_rl(axis_z);
-    camera.target = eig_to_rl(origin);
-    rlSetClipPlanes(1.0e3, 1.0e9);
-
-    i32 sphere_i = 32;
-    Image checker_pattern = GenImageChecked(sphere_i, sphere_i, 1, 1, RAYWHITE, GRAY);
-    Texture2D texture = LoadTextureFromImage(checker_pattern);
-
-    Mesh sphere_mesh = GenMeshSphere(1., sphere_i, sphere_i);
-    Model sphere_model = LoadModelFromMesh(sphere_mesh);
-    sphere_model.transform = MatrixIdentity();
-    sphere_model.materials[0] = LoadMaterialDefault();
-    sphere_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
-
-    checker_pattern = GenImageChecked(2, 2, 1, 1, RAYWHITE, GRAY);
-    texture = LoadTextureFromImage(checker_pattern);
-    Mesh cube_mesh = GenMeshCube(1.0f, 1.0f, 1.0f);
-    Model cube_model = LoadModelFromMesh(cube_mesh);
-    cube_model.transform = MatrixIdentity();
-    cube_model.materials[0] = LoadMaterialDefault();
-    cube_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
-
-    Mesh cylinder_mesh = GenMeshCylinder(1.0f, 1.0f, sphere_i);
-    Model cylinder_model = LoadModelFromMesh(cylinder_mesh);
-    cylinder_model.transform = MatrixIdentity();
-    cylinder_model.materials[0] = LoadMaterialDefault();
-    cylinder_model.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = texture;
-
-    UnloadImage(checker_pattern);
-
-    SetTargetFPS(scenario_cfg.graphics_settings.target_fps);
-    Color bg = Color({
-        scenario_cfg.graphics_settings.background_color[0],
-        scenario_cfg.graphics_settings.background_color[1],
-        scenario_cfg.graphics_settings.background_color[2],
-        scenario_cfg.graphics_settings.background_color[3]
-    });
-
-    bool paused = false;
-    while (!WindowShouldClose()) {
-        BeginDrawing();
-        BeginMode3D(camera);
-        ClearBackground(bg);
-
-        RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets);
-        render_scene_snapshot(scene, sphere_model, cube_model, cylinder_model);
-
-        if (IsKeyPressed(KEY_SPACE)) {
-            paused = !paused;
-        }
-        if (!paused) {
-            stats += step_world(world, dt, cfg, wksp);
-            if (!stats.success) {
-                std::println("Simulation Failure");
-                break;
-            }
-        }
-        svec<EntityId> stat_ids = world.station_ids();
-        for (EntityId stat_id : stat_ids) {
-            draw_axes(
-                world.stat_x_tr_inertial(stat_id),
-                world.stat_x_att_inertial(stat_id),
-                1000.0f
-            );
-        }
-
-        EndMode3D();
-        EndDrawing();
-    }
     print_diag_title();
 }

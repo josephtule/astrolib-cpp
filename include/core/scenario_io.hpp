@@ -11,6 +11,7 @@
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
+#include "core/world_stepper.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
@@ -89,6 +90,7 @@ inline string gravity_coefficient_source_str(const GravityCoefficientSource& sou
 struct ScenarioGravityConfig {
     GravityModel model = GravityModel::pointmass;
     f64 mu = 0.0;
+    ULength units_length = ULength::kilometer;
 
     // optional for zonal and spherical harmonics
     f64 radius = 0.0; // NOTE: match to provider if used
@@ -159,6 +161,7 @@ struct ScenarioCelestialModelConfig {
     string id;
 
     ScenarioGravityConfig gravity_model;
+    ULength units_length = ULength::kilometer;
 
     f64 mean_radius = 0.0;
     f64 semimajor_axis = 0.0;
@@ -238,7 +241,7 @@ struct ScenarioWorldStepperConfig {
 
     u32 substeps = 1;
     u32 ticks = 1;
-    f64 time_scale = 1.0;
+    f64 dt_scale = 1.0;
 };
 
 struct ScenarioGraphicsConfig {
@@ -277,5 +280,6 @@ StatusCode validate_scenario_config(const ScenarioConfig& cfg);
 StatusCode build_world_from_scenario_config(
     const ScenarioConfig& cfg,
     World& world,
-    ScenarioBuildResult& result
+    ScenarioBuildResult& result,
+    WorldStepperConfig& stepper
 );

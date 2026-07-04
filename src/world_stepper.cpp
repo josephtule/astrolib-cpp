@@ -726,7 +726,9 @@ WorldStepperStats step_world(
     WorldStepperWorkspace& wksp
 ) {
     WorldStepperStats stats{.success = false};
-    rebuild_world_stepper_workspace(world, wksp);
+    if (wksp.dirty) {
+        rebuild_world_stepper_workspace(world, wksp);
+    }
 
     if (cfg.substeps < 1) return stats;
     if (cfg.ticks < 1) return stats;

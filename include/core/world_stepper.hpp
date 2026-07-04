@@ -12,7 +12,7 @@ struct WorldStepperConfig {
     i32 ticks = 1;      // repeated integration ticks per call
     f64 dt_scale = 1.0; // simulated-time multiplier applied to input dt
     bool step_tr = true;
-    bool step_att = false;
+    bool step_att = true;
 };
 
 struct WorldStepperWorkspace {

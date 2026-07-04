@@ -7,6 +7,8 @@
 #include "util/math.hpp"
 
 #define CYAN CLITERAL(Color){0, 255, 255, 255} // CYAN
+#define CUSTOMGRAY CLITERAL(Color){30, 30, 30, 255}
+
 template <class T>
 inline void draw_axes(const vec3<T>& r, const vec4<T>& q, f32 scale = 1.0f) {
     vec3d x = ep_rotate_fast_active(q, axis_x) * scale;
@@ -121,7 +123,7 @@ inline void draw_grid(
     const vec2f& max,
     const vec2f& inc,
     GridPlane plane = GridPlane::XY,
-    bool color_axes = false,
+    bool color_axes = true,
     const Color& grid_color = {180, 180, 180, 180}
 ) {
     f32 umin = min(0);
@@ -134,23 +136,28 @@ inline void draw_grid(
     if (uinc <= 0.0f || vinc <= 0.0f) return;
     if (umax < umin || vmax < vmin) return;
 
-    const Color pos_x_color = RED;
-    const Color pos_y_color = GREEN;
-    const Color pos_z_color = BLUE;
-
-    const Color neg_x_color = MAGENTA;
-    const Color neg_y_color = YELLOW;
-    const Color neg_z_color = CYAN;
-
     auto make_point
         = [plane](f32 u, f32 v) -> Vector3 { return map_plane_uv(u, v, plane); };
 
-    Color u_pos_color = RED;
-    Color u_neg_color = MAGENTA;
-    Color v_pos_color = GREEN;
-    Color v_neg_color = YELLOW;
+    Color u_pos_color = grid_color;
+    Color u_neg_color = grid_color;
+    Color v_pos_color = grid_color;
+    Color v_neg_color = grid_color;
 
-    map_plane_color(u_pos_color, u_neg_color, v_pos_color, v_neg_color, plane);
+    if (color_axes) {
+        u_pos_color = grid_color;
+        u_neg_color = grid_color;
+        v_pos_color = grid_color;
+        v_neg_color = grid_color;
+        const Color pos_x_color = RED;
+        const Color pos_y_color = GREEN;
+        const Color pos_z_color = BLUE;
+
+        const Color neg_x_color = MAGENTA;
+        const Color neg_y_color = YELLOW;
+        const Color neg_z_color = CYAN;
+        map_plane_color(u_pos_color, u_neg_color, v_pos_color, v_neg_color, plane);
+    }
 
     // draw central axes
     // draw +-u axis

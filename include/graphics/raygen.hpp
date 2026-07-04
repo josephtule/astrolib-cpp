@@ -8,6 +8,9 @@
 inline const Vector2 rlvec20 = Vector2{0.0f, 0.0f};
 inline const Vector3 rlvec30 = Vector3{0.0f, 0.0f, 0.0f};
 inline const Vector4 rlvec40 = Vector4{0.0f, 0.0f, 0.0f, 0.0f};
+inline const Vector3 rlaxis_x = Vector3{1.0f, 0.0f, 0.0f};
+inline const Vector3 rlaxis_y = Vector3{0.0f, 1.0f, 0.0f};
+inline const Vector3 rlaxis_z = Vector3{0.0f, 0.0f, 1.0f};
 
 template <typename T>
 inline vec3<T> rl_to_eig(const Vector3& v) {

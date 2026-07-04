@@ -12,6 +12,7 @@
 #include "core/transform.hpp"
 
 #include "core/world.hpp"
+#include "core/world_stepper.hpp"
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/tools.hpp"
@@ -1407,13 +1408,31 @@ static StatusCode parse_gravity_config(
 
     // may parse higher fidelity model but use lower fidelity model
 
-    bool _ = false;
-
-    status = parse_opt_f64(*gravity, "radius", _, out.radius, path);
+    bool found_units_length = false;
+    status = parse_opt_units_length(
+        *gravity,
+        "units_length",
+        found_units_length,
+        out.units_length,
+        path
+    );
     if (status != StatusCode::ok) return status;
-    // TODO: use from celestial model or determine where to get reference radius (file or
-    // computed)
+    if (!found_units_length) out.units_length = ULength::kilometer;
 
+    if (found_mu) {
+        f64 length_scale = convert_length(1.0, out.units_length, ULength::kilometer);
+        out.mu *= length_scale * length_scale * length_scale;
+    }
+
+    bool found_radius = false;
+
+    status = parse_opt_f64(*gravity, "radius", found_radius, out.radius, path);
+    if (status != StatusCode::ok) return status;
+    if (found_radius) {
+        out.radius = convert_length(out.radius, out.units_length, ULength::kilometer);
+    }
+
+    bool _ = false;
     if (out.model != GravityModel::pointmass) {
         status = parse_req_i32(*gravity, "degree", out.degree, path);
         if (status != StatusCode::ok) return status;
@@ -1468,6 +1487,63 @@ static StatusCode parse_gravity_config(
     return StatusCode::ok;
 }
 
+static StatusCode resolve_custom_celestial_shape_config(
+    ScenarioCelestialModelConfig& out,
+    const bool found_semimajor,
+    const bool found_semiminor,
+    const bool found_mean_radius
+) {
+    if (found_semimajor) {
+        out.semimajor_axis
+            = convert_length(out.semimajor_axis, out.units_length, ULength::kilometer);
+        if (!finite_nonneg(out.semimajor_axis)) return StatusCode::invalid_input;
+    }
+
+    if (found_semiminor) {
+        out.semiminor_axis
+            = convert_length(out.semiminor_axis, out.units_length, ULength::kilometer);
+        if (!finite_nonneg(out.semiminor_axis)) return StatusCode::invalid_input;
+    }
+
+    if (found_mean_radius) {
+        out.mean_radius
+            = convert_length(out.mean_radius, out.units_length, ULength::kilometer);
+        if (!finite_nonneg(out.mean_radius)) return StatusCode::invalid_input;
+    }
+
+    bool has_semimajor = finite_pos(out.semimajor_axis);
+    bool has_semiminor = finite_pos(out.semiminor_axis);
+    bool has_mean_radius = finite_pos(out.mean_radius);
+
+    f64 shape_fallback = 0.0;
+    if (has_semimajor) {
+        shape_fallback = out.semimajor_axis;
+    } else if (has_semiminor) {
+        shape_fallback = out.semiminor_axis;
+    } else if (has_mean_radius) {
+        shape_fallback = out.mean_radius;
+    } else {
+        return StatusCode::invalid_input;
+    }
+
+    if (!has_semimajor) out.semimajor_axis = shape_fallback;
+    if (!has_semiminor) out.semiminor_axis = shape_fallback;
+
+    if (out.semimajor_axis <= 0.0 || out.semiminor_axis <= 0.0)
+        return StatusCode::invalid_input;
+    if (out.semimajor_axis < out.semiminor_axis) return StatusCode::invalid_input;
+
+    if (!has_mean_radius) {
+        out.mean_radius = std::pow(
+            out.semimajor_axis * out.semimajor_axis * out.semiminor_axis,
+            1.0 / 3.0
+        );
+    }
+    if (!finite_pos(out.mean_radius)) return StatusCode::invalid_input;
+
+    return StatusCode::ok;
+}
+
 static StatusCode parse_celestial_model_config(
     const json& object,
     ScenarioCelestialModelConfig& out,
@@ -1485,29 +1561,71 @@ static StatusCode parse_celestial_model_config(
     if (status != StatusCode::ok) return status;
     if (!found_id) {
         out.id = "custom";
+    }
 
+    if (out.id == "custom") {
         status = parse_gravity_config(*model, out.gravity_model, path);
         if (status != StatusCode::ok) return status;
 
-        status = parse_req_f64(*model, "semimajor_axis", out.semimajor_axis, path);
+        bool found_units_length = false;
+        status = parse_opt_units_length(
+            *model,
+            "units_length",
+            found_units_length,
+            out.units_length,
+            path
+        );
+        if (status != StatusCode::ok) return status;
+        if (!found_units_length) out.units_length = ULength::kilometer;
+
+        bool found_semimajor = false;
+        status = parse_opt_f64(
+            *model,
+            "semimajor_axis",
+            found_semimajor,
+            out.semimajor_axis,
+            path
+        );
         if (status != StatusCode::ok) return status;
 
-        status = parse_req_f64(*model, "semiminor_axis", out.semiminor_axis, path);
+        bool found_semiminor = false;
+        status = parse_opt_f64(
+            *model,
+            "semiminor_axis",
+            found_semiminor,
+            out.semiminor_axis,
+            path
+        );
         if (status != StatusCode::ok) return status;
 
-        bool found;
-        status = parse_opt_f64(*model, "mean_radius", found, out.mean_radius, path);
+        bool found_mean_radius = false;
+        status = parse_opt_f64(
+            *model,
+            "mean_radius",
+            found_mean_radius,
+            out.mean_radius,
+            path
+        );
         if (status != StatusCode::ok) return status;
-        if (!found) {
-            out.mean_radius = std::pow(
-                out.semimajor_axis * out.semimajor_axis * out.semiminor_axis,
-                1.0 / 3.0
-            );
-        }
 
-        status = parse_opt_f64(*model, "eccentricity", found, out.eccentricity, path);
+        status = resolve_custom_celestial_shape_config(
+            out,
+            found_semimajor,
+            found_semiminor,
+            found_mean_radius
+        );
         if (status != StatusCode::ok) return status;
-        if (!found) {
+
+        bool found_eccentricity = false;
+        status = parse_opt_f64(
+            *model,
+            "eccentricity",
+            found_eccentricity,
+            out.eccentricity,
+            path
+        );
+        if (status != StatusCode::ok) return status;
+        if (!found_eccentricity) {
             out.eccentricity = std::sqrt(
                 1.0
                 - out.semiminor_axis * out.semiminor_axis
@@ -1515,9 +1633,16 @@ static StatusCode parse_celestial_model_config(
             );
         }
 
-        status = parse_opt_f64(*model, "flattening", found, out.flattening, path);
+        bool found_flattening = false;
+        status = parse_opt_f64(
+            *model,
+            "flattening",
+            found_flattening,
+            out.flattening,
+            path
+        );
         if (status != StatusCode::ok) return status;
-        if (!found) {
+        if (!found_flattening) {
             out.flattening
                 = (out.semimajor_axis - out.semiminor_axis) / out.semimajor_axis;
         }
@@ -1930,9 +2055,9 @@ static StatusCode parse_opt_world_stepper_config(
     if (status != StatusCode::ok) return status;
     if (!temp_found) out.ticks = 1;
 
-    status = parse_opt_f64(*child, "dt_scale", temp_found, out.time_scale, path);
+    status = parse_opt_f64(*child, "dt_scale", temp_found, out.dt_scale, path);
     if (status != StatusCode::ok) return status;
-    if (!temp_found) out.time_scale = 1.0;
+    if (!temp_found) out.dt_scale = 1.0;
 
     return StatusCode::ok;
 }
@@ -2556,7 +2681,7 @@ StatusCode validate_scenario_config(const ScenarioConfig& cfg) {
     if (global_ids.empty()) return StatusCode::invalid_input;
     if (cfg.world_stepper.substeps < 1) return StatusCode::invalid_input;
     if (cfg.world_stepper.ticks < 1) return StatusCode::invalid_input;
-    if (!finite_pos(cfg.world_stepper.time_scale)) {
+    if (!finite_pos(cfg.world_stepper.dt_scale)) {
         return StatusCode::invalid_input;
     }
 
@@ -3018,10 +3143,17 @@ static StatusCode apply_station_config(
 StatusCode build_world_from_scenario_config(
     const ScenarioConfig& cfg,
     World& world,
-    ScenarioBuildResult& result
+    ScenarioBuildResult& result,
+    WorldStepperConfig& stepper
 ) {
     StatusCode status;
     result = ScenarioBuildResult{};
+
+    stepper.integrator_att = cfg.world_stepper.integrator_att;
+    stepper.integrator_tr = cfg.world_stepper.integrator_tr;
+    stepper.dt_scale = cfg.world_stepper.dt_scale;
+    stepper.substeps = cfg.world_stepper.substeps;
+    stepper.ticks = cfg.world_stepper.ticks;
 
     for (const auto& cel_cfg : cfg.celestials) {
         auto cel = std::make_unique<Celestial>();

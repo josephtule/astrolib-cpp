@@ -1,74 +1,146 @@
 # astrolib-cpp
 
-# Data
+C++ astrodynamics and space-simulation sandbox for staged N-body orbit propagation, gravity modeling, station observations, orbit determination, scenario loading, and 3D visualization.
 
-Download the following data files and put into `/project_root/assets`
+This project is currently diagnostics-driven and under active development. APIs, scenario schema, and renderer structure are expected to change.
 
-## Spherical Harmonics: EGM2008
+## Current Capabilities
 
-https://earth-info.nga.mil/
+- Celestial bodies, satellites, and ground/free stations in a shared `World`
+- Translational and attitude state propagation with RK integrators
+- Point-mass, zonal, and spherical-harmonic gravity models
+- EGM/GFC/NASA SHA gravity coefficient readers
+- Time, Julian date, sidereal time, and Earth-orientation utilities
+- Station geometry, RA/Dec, Az/El, range, and range-rate measurements
+- IOD, batch least-squares, and EKF orbit-determination foundations
+- TLE parsing and conversion to satellite initial states
+- JSON scenario loading/building
+- Primitive history/snapshotting
+- Early Raylib-based 3D rendering diagnostics
 
-## Leap Seconds
+## Repository Layout
 
-https://data.iana.org/time-zones/data/leap-seconds.list
+```text
+include/
+  core/        astrodynamics, estimation, world, scenario, time, EOP
+  graphics/   Raylib rendering helpers
+  util/        math, units, typedefs, vector definitions
 
-## Nutation
+src/
+  diagnostics.cpp    diagnostic/demo entry points
+  main.cpp           currently selected diagnostic
+  scenario_io.cpp    JSON scenario parser/builder
+  world*.cpp         world model, stepping, history, measurements
+  ingest.cpp         TLE parsing
 
-https://hpiers.obspm.fr/eop-pc/models/models.html
-https://hpiers.obspm.fr/eoppc/bul/bulb/explanatory.html
+scenarios/           JSON scenario files
+assets/              local data files, not guaranteed to be committed
+external/            git submodules
+```
 
-### IAU 1980
+## Requirements
 
-https://hpiers.obspm.fr/eop-pc/models/nutations/nut_IAU1980.dat
+- CMake `>= 3.20`
+- C++23-capable compiler
+- Git
+- Raylib submodule
+- Eigen submodule
+- Internet access during first configure for `nlohmann_json` FetchContent, unless already cached
 
-### IERS 1996
+On macOS:
 
-https://iers-conventions.obspm.fr/content/chapter5/additional_info/tab5.3a.txt
+```sh
+brew install cmake ninja
+```
 
-## Polar Motion
+## Clone
 
-https://www.iers.org/IERS/EN/DataProducts/EarthOrientationData/eop
-https://datacenter.iers.org/data/latestVersion/EOP_C01_IAU1980_1846-now.txt
+```sh
+git clone <repo-url>
+cd astrolib-cpp
+git submodule update --init --recursive
+```
 
-### JPL EOP 2
+The current submodules are:
 
-https://eop2-external.jpl.nasa.gov/
+```text
+external/eigen
+external/raylib
+```
 
-### IERS EOP C01 (IAU 1980 and IAU 2000)
+## Data Setup
 
-https://datacenter.iers.org/data/latestVersion/EOP_C01_IAU1980_1846-now.txt
+Create the local asset folders:
 
-### IERS EOP C04 (IAU 2000A)
+```sh
+mkdir -p assets/earth assets/moon assets/mars assets/mercury assets/output
+```
 
-https://datacenter.iers.org/data/latestVersion/EOP_20u24_C04_one_file_1962-now.txt
+Several diagnostics and scenarios expect local data files under `assets/`. Data files are not committed to the repository.
 
-# NASA SPICE
+See [`docs/data.md`](docs/data.md) for expected filenames and public data sources.
 
-## Documentation
+## Build
 
-### Planetary Positions
+Recommended:
 
-https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkpos_c.html
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target astrolib
+```
 
-### Target IDs
+Without Ninja:
 
-https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/naif_ids.html
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target astrolib
+```
 
-### Frame IDs
+## Run
 
-https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/frames.html
+```sh
+./build/astrolib
+```
+
+The executable currently runs whichever diagnostic is enabled in `src/main.cpp`.
 
 
-# NASA Planetary Data System
- 
-## General
-https://pds.nasa.gov/tools/about/
+Run a different diagnostics by commenting/uncommenting diagnostic calls in `src/main.cpp`.
 
-## Geosciences
-https://pds-geosciences.wustl.edu/
+## Scenario Files
 
-### Gravity Models
-https://pds-geosciences.wustl.edu/dataserv/gravity_models.htm
+Example scenarios live in:
 
-# ICGEM (More Gravity Models)
-https://icgem.gfz.de/tom
+```text
+scenarios/parser_stress_demo.json
+scenarios/earth_station_leo_demo.json
+scenarios/earth_moon_sat_demo.json
+scenarios/earth_tle_demo.json
+```
+
+The scenario loader currently supports:
+
+- Celestial body definitions
+- Satellite definitions
+- Station definitions
+- Instruments
+- Gravity providers
+- Translational state from position/velocity or orbital elements
+- Attitude state from quaternion or axis-angle
+- Simple spin attitude model
+- Basic propagation flags
+
+The JSON schema is still evolving.
+
+## Rendering
+
+Rendering is currently diagnostic-driven through Raylib. It is not yet a stable application UI.
+
+The current render path can draw bodies, satellites, stations, and scenario-loaded objects. More structured renderer cleanup and UI integration are planned.
+
+
+## License
+
+TBD.
+
+External data files may have their own licenses or usage restrictions. Check the data provider before redistributing downloaded assets.

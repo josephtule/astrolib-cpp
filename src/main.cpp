@@ -7,12 +7,15 @@
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
-#include "graphics/raygen.hpp"
+
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/tools.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+
+#include "graphics/raygen.hpp"
+#include "graphics/render_assets.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -115,9 +118,9 @@ int main() {
     auto start = std::chrono::high_resolution_clock::now();
     // run_render_pipeline_diag();
     // run_world_history_ekf_diag();
-    
-    run_build_world_from_scenario();
-    // run_scenario_render_diag();
+
+    // run_build_world_from_scenario();
+    run_scenario_render_diag();
 
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
