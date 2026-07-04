@@ -16,7 +16,7 @@ enum struct RenderCameraMode {
 };
 
 struct RenderCameraConfig {
-    RenderCameraMode mode = RenderCameraMode::origin;
+    RenderCameraMode mode = RenderCameraMode::target;
 
     vec3f position = {0.0f, -20.0f, 10.0f};
     vec3f target = {0.0f, 0.0f, 0.0f};
@@ -31,6 +31,9 @@ struct RenderCameraConfig {
     f32 orbit_speed = 1.0f;
     f32 pan_speed = 1.0f;
     f32 fly_speed = 10000.0f;
+    f32 mouse_sensitivity = 0.001f;
+    f32 scroll_sensitivity = 0.5f;
+    f32 settings_scroll_sensitivity = 2.5f;
 };
 
 inline Camera3D make_render_camera(const RenderCameraConfig& cfg) {

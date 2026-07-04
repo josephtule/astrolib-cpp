@@ -23,6 +23,7 @@ Hold `Left Shift` for render/display toggles.
 | `Left Shift + ,` | Toggle body axes. |
 | `Left Shift + .` | Toggle inertial axes. |
 | `Left Shift + /` | Toggle colored axes. |
+| `Left Shift + '` | Toggle selected-body marker. |
 | `Left Shift + 1` | Toggle XY grid. |
 | `Left Shift + 2` | Toggle XZ grid. |
 | `Left Shift + 3` | Toggle ZY grid. |
@@ -40,6 +41,8 @@ Hold `Right Shift` for camera settings.
 | `Right Shift + 3` | Set camera mode to origin. |
 | `Right Shift + 4` | Set camera mode to free. |
 | `Right Shift + mouse wheel` | Adjust camera zoom/FOV step rate. |
+| `Right Shift + ]` | Cycle to the next target body in target camera mode. |
+| `Right Shift + [` | Cycle to the previous target body in target camera mode. |
 | `Right Shift + `` | Toggle mouse-wheel inversion. |
 | `Right Shift + -` | Decrease camera FOV. |
 | `Right Shift + =` | Increase camera FOV. |
@@ -72,6 +75,27 @@ In origin or target mode:
 
 Movement uses no modifier key and depends on the current camera mode.
 
+## Camera Modes
+
+| Mode | Behavior |
+| --- | --- |
+| Locked | Camera position and target are not changed by movement input. |
+| Origin | Camera orbits around the world origin. |
+| Target | Camera orbits around `target_id`; invalid targets fall back to the origin. |
+| Free | Camera translates with `WASD/QE`, rotates with mouse drag, and flies forward/back with mouse wheel. |
+
+Station targets use the station inertial position. Celestial and satellite targets use their translational state position.
+
+## Selected Body Marker
+
+The selected-body marker currently follows the camera `target_id` and only draws in target camera mode.
+
+| Body Type | Marker Behavior |
+| --- | --- |
+| Celestial | Draws a wire sphere scaled from the body's semimajor/semiminor axes. |
+| Satellite | Draws a fixed-size first-pass wire sphere at the satellite position. |
+| Station | Draws a fixed-size first-pass wire sphere at the station inertial position. |
+
 ### Origin/Target Mode
 
 | Input | Action |
@@ -89,6 +113,7 @@ In origin mode, the pivot is the world origin. In target mode, the pivot is the 
 | `W` / `S` | Move forward/back along the camera look direction. |
 | `A` / `D` | Strafe left/right in the camera plane. |
 | `Q` / `E` | Move down/up along the configured up axis. |
+| `Mouse wheel` | Move forward/back along the camera look direction. |
 | `Left mouse drag` | Rotate camera look direction. |
 
 ### Locked Mode
@@ -99,4 +124,4 @@ Locked mode does not apply camera movement.
 
 - Replace hardcoded input checks with a key map.
 - Add a key-map settings page after the UI shell exists.
-- Move mouse sensitivity and scroll sensitivity into runtime render settings.
+- Expose mouse sensitivity and scroll sensitivity in the UI.

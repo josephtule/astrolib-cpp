@@ -35,6 +35,10 @@ struct RenderDrawOptions {
     f32 inertial_axes_scale = 10000.0f;
     bool draw_labels = false;
 
+    bool draw_selected_body = true;
+    Color selected_color = Color{255, 200, 0, 80};
+    f32 selected_marker_scale = 1.25f;
+
     Color background = CUSTOMGRAY;
 
     bool draw_fps = true;
@@ -169,6 +173,14 @@ inline mat3f rot_model_to_body(RenderPrimitiveKind kind) {
     return mat3f1;
 }
 
+inline vec3f render_model_origin_offset_body(const RenderComponent& rc) {
+    if (rc.kind == RenderPrimitiveKind::cylinder) {
+        f32 h = rc.size.z() * rc.scale;
+        return -vec3f{0.0f, 0.0f, 0.5f * h};
+    }
+    return vec3f0;
+}
+
 inline RenderBodyInstance make_render_instance(
     EntityId entity_id,
     const StateTr& x_tr,
@@ -182,6 +194,11 @@ inline RenderBodyInstance make_render_instance(
     mat3f R_body_model = rot_model_to_body(rc.kind);
     mat3f R = get_scaledrot<f32>(inst.transform) * R_body_model;
     set_rotation<f32>(inst.transform, R);
+    if (rc.kind == RenderPrimitiveKind::cylinder) {
+        mat3f R_BN = mf32(ep_to_dcm(ep_conj(x_att.q)));
+        vec3f r = vf32(x_tr.r) + R_BN * render_model_origin_offset_body(rc);
+        set_translation(inst.transform, r);
+    }
 
     inst.entity_id = entity_id;
     inst.kind = rc.kind;
