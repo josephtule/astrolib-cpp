@@ -531,40 +531,64 @@ static void handle_input(RenderLoopConfig& cfg, const World& world, f32 dt) {
     sync_camera_tracking(cfg.camera, world);
 }
 
-void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
+struct RenderLoopState {
     WorldStepperStats stats;
-    stats.success = true;
     WorldStepperWorkspace wksp;
+    Camera3D camera;
+    RenderAssets assets;
+};
 
+static void init_render_loop_state(
+    const World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
+) {
+    state.stats.success = true;
+
+    state.camera = make_render_camera(cfg.camera);
+    state.assets = load_render_assets(cfg.assets);
+    init_camera(cfg.camera, world);
+    update_camera(cfg.camera, state.camera);
+}
+
+static void shutdown_render_loop_state(RenderLoopState& state) {
+    unload_render_assets(state.assets);
+}
+
+void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
     InitWindow(cfg.screen_width, cfg.screen_height, cfg.window_title.c_str());
 
-    Camera3D camera = make_render_camera(cfg.camera);
-    RenderAssets assets = load_render_assets(cfg.assets);
-    init_camera(cfg.camera, world);
-    update_camera(cfg.camera, camera);
+    RenderLoopState state;
+    init_render_loop_state(world, cfg, state);
 
     f64 dt = dt0;
     f32 dt_window;
-    render_single_frame(world, assets, cfg, camera);
-    // if (cfg.set_target_fps) SetTargetFPS(cfg.target_fps);
+
+    render_single_frame(world, state.assets, cfg, state.camera);
     while (!WindowShouldClose()) {
+        if (cfg.set_target_fps) SetTargetFPS(cfg.target_fps);
         dt_window = GetFrameTime();
 
         handle_input(cfg, world, dt_window);
-        update_camera(cfg.camera, camera);
+        update_camera(cfg.camera, state.camera);
 
         dt = cfg.realtime ? dt_window : dt0;
         if (!cfg.paused) {
-            stats += step_world(world, dt, cfg.stepper_cfg, wksp);
-            if (!stats.success) {
+            state.stats += step_world(world, dt, cfg.stepper_cfg, state.wksp);
+            if (!state.stats.success) {
                 std::println("Simulation Failure");
                 break;
             }
         }
-        render_single_frame(world, assets, cfg, camera);
+        render_single_frame(world, state.assets, cfg, state.camera);
     }
 
-    // TODO: add loop
-    unload_render_assets(assets);
+    shutdown_render_loop_state(state);
     CloseWindow();
 }
+
+static void render_ui_placeholder(
+    World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
+) {}
