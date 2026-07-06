@@ -54,9 +54,6 @@ static void draw_selected_body_marker(
     EntityId selected_id,
     const RenderDrawOptions& draw
 ) {
-    // TEMP:
-    i32 segments = 8;
-
     if (!draw.draw_selected_body) return;
 
     const Body* body = world.body(selected_id);
@@ -73,8 +70,8 @@ static void draw_selected_body_marker(
         DrawSphereWires(
             eig_to_rl(cel->x_tr.r),
             radius,
-            segments,
-            segments,
+            draw.selected_segements,
+            draw.selected_segements,
             draw.selected_color
         );
     } break;
@@ -83,8 +80,8 @@ static void draw_selected_body_marker(
         DrawSphereWires(
             eig_to_rl(body->x_tr.r),
             radius,
-            segments,
-            segments,
+            draw.selected_segements,
+            draw.selected_segements,
             draw.selected_color
         );
     } break;
@@ -93,8 +90,8 @@ static void draw_selected_body_marker(
         DrawSphereWires(
             eig_to_rl(world.stat_r_inertial(selected_id)),
             radius,
-            segments,
-            segments,
+            draw.selected_segements,
+            draw.selected_segements,
             draw.selected_color
         );
         // TODO: center of cylinder model is at the bottom, which is negligible for
@@ -149,9 +146,7 @@ static void render_single_frame(
     RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets.builtin);
     draw_render_scene(scene, assets);
 
-    if (cfg.camera.mode == RenderCameraMode::target) {
-        draw_selected_body_marker(world, cfg.camera.target_id, cfg.draw);
-    }
+    draw_selected_body_marker(world, cfg.camera.target_id, cfg.draw);
 
     EndMode3D();
     if (cfg.draw.draw_fps) DrawFPS(0, 0);
