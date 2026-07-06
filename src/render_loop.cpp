@@ -70,8 +70,8 @@ static void draw_selected_body_marker(
         DrawSphereWires(
             eig_to_rl(cel->x_tr.r),
             radius,
-            draw.selected_segements,
-            draw.selected_segements,
+            draw.selected_segments,
+            draw.selected_segments,
             draw.selected_color
         );
     } break;
@@ -80,8 +80,8 @@ static void draw_selected_body_marker(
         DrawSphereWires(
             eig_to_rl(body->x_tr.r),
             radius,
-            draw.selected_segements,
-            draw.selected_segements,
+            draw.selected_segments,
+            draw.selected_segments,
             draw.selected_color
         );
     } break;
@@ -90,8 +90,8 @@ static void draw_selected_body_marker(
         DrawSphereWires(
             eig_to_rl(world.stat_r_inertial(selected_id)),
             radius,
-            draw.selected_segements,
-            draw.selected_segements,
+            draw.selected_segments,
+            draw.selected_segments,
             draw.selected_color
         );
         // TODO: center of cylinder model is at the bottom, which is negligible for
@@ -100,15 +100,31 @@ static void draw_selected_body_marker(
     }
 }
 
+static void render_ui_placeholder(
+    World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
+) {
+    // ui placeholder will later update follow categories (first pass)
+
+    // simulation
+    // pause, ticks, substeps, dt_scale
+
+    // camera
+    // mode, target ID, FOV, orbit speed, fly speed, zoom rate
+
+    // render
+    // grids, axes, selected marker, FPS toggle
+}
+
 static void render_single_frame(
-    const World& world,
-    RenderAssets& assets,
-    const RenderLoopConfig& cfg,
-    Camera3D& camera
+    World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
 ) {
     BeginDrawing();
     ClearBackground(cfg.draw.background);
-    BeginMode3D(camera);
+    BeginMode3D(state.camera);
 
     render_grids(cfg.draw);
     if (cfg.draw.draw_body_axes) {
@@ -143,13 +159,14 @@ static void render_single_frame(
             }
         }
     }
-    RenderSceneSnapshot scene = build_render_scene_snapshot(world, assets.builtin);
-    draw_render_scene(scene, assets);
+    RenderSceneSnapshot scene = build_render_scene_snapshot(world, state.assets.builtin);
+    draw_render_scene(scene, state.assets);
 
     draw_selected_body_marker(world, cfg.camera.target_id, cfg.draw);
 
     EndMode3D();
     if (cfg.draw.draw_fps) DrawFPS(0, 0);
+    render_ui_placeholder(world, cfg, state);
     EndDrawing();
 }
 
@@ -531,13 +548,6 @@ static void handle_input(RenderLoopConfig& cfg, const World& world, f32 dt) {
     sync_camera_tracking(cfg.camera, world);
 }
 
-struct RenderLoopState {
-    WorldStepperStats stats;
-    WorldStepperWorkspace wksp;
-    Camera3D camera;
-    RenderAssets assets;
-};
-
 static void init_render_loop_state(
     const World& world,
     RenderLoopConfig& cfg,
@@ -564,9 +574,9 @@ void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
     f64 dt = dt0;
     f32 dt_window;
 
-    render_single_frame(world, state.assets, cfg, state.camera);
+    if (cfg.set_target_fps) SetTargetFPS(cfg.target_fps);
+    render_single_frame(world, cfg, state);
     while (!WindowShouldClose()) {
-        if (cfg.set_target_fps) SetTargetFPS(cfg.target_fps);
         dt_window = GetFrameTime();
 
         handle_input(cfg, world, dt_window);
@@ -580,15 +590,9 @@ void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
                 break;
             }
         }
-        render_single_frame(world, state.assets, cfg, state.camera);
+        render_single_frame(world, cfg, state);
     }
 
     shutdown_render_loop_state(state);
     CloseWindow();
 }
-
-static void render_ui_placeholder(
-    World& world,
-    RenderLoopConfig& cfg,
-    RenderLoopState& state
-) {}

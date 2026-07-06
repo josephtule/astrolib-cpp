@@ -4,3 +4,12 @@
 [submodule "external/raylib"]
 	path = external/raylib
 	url = https://github.com/raysan5/raylib.git
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "external/implot"]
+	path = external/implot
+	url = https://github.com/epezent/implot
+[submodule "external/rlimgui"]
+	path = external/rlimgui
+	url = https://github.com/raylib-extras/rlImGui.git

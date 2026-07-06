@@ -38,7 +38,7 @@ struct RenderDrawOptions {
     bool draw_selected_body = true;
     Color selected_color = Color{255, 200, 0, 80};
     f32 selected_marker_scale = 1.25f;
-    f32 selected_segements = 8;
+    i32 selected_segments = 8;
 
     Color background = CUSTOMGRAY;
 

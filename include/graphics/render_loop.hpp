@@ -26,4 +26,11 @@ struct RenderLoopConfig {
     RenderAssetConfig assets{};
 };
 
+struct RenderLoopState {
+    WorldStepperStats stats;
+    WorldStepperWorkspace wksp;
+    Camera3D camera;
+    RenderAssets assets;
+};
+
 void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0);
