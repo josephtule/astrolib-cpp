@@ -17,8 +17,6 @@ struct RenderLoopConfig {
     i32 target_fps = 60;
 
     bool realtime = false;
-    bool step_world = true;
-    bool paused = false;
     WorldStepperConfig stepper_cfg{};
 
     RenderCameraConfig camera{};
@@ -31,6 +29,14 @@ struct RenderLoopState {
     WorldStepperWorkspace wksp;
     Camera3D camera;
     RenderAssets assets;
+
+    f64 dt = 0.0; // dt used (either dt0 or frametime)
+
+    f32 frame_time = 0.0f;
+    f32 fps = 0.0f;
+    svec<f32> frame_time_ms;
+    svec<f32> fps_history;
+    i32 frame_history_max = 240;
 };
 
 void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0);

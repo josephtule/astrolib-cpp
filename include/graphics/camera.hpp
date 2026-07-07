@@ -14,6 +14,16 @@ enum struct RenderCameraMode {
     // track_axis
     // track_attitude
 };
+inline string camera_mode_str(const RenderCameraMode& mode){
+    switch (mode) {
+    case RenderCameraMode::locked: return "locked";
+    case RenderCameraMode::target: return "target";
+    case RenderCameraMode::origin: return "origin";
+    case RenderCameraMode::free: return "free";
+    }
+    return "unknoown";
+}
+
 
 struct RenderCameraConfig {
     RenderCameraMode mode = RenderCameraMode::target;

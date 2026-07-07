@@ -13,6 +13,7 @@ struct WorldStepperConfig {
     f64 dt_scale = 1.0; // simulated-time multiplier applied to input dt
     bool step_tr = true;
     bool step_att = true;
+    bool paused = false;
 };
 
 struct WorldStepperWorkspace {

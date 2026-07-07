@@ -238,7 +238,7 @@ struct ScenarioStationConfig {
 struct ScenarioWorldStepperConfig {
     IntegratorType integrator_tr = IntegratorType::rk4;
     IntegratorType integrator_att = IntegratorType::rk4;
-
+    bool paused = false;
     u32 substeps = 1;
     u32 ticks = 1;
     f64 dt_scale = 1.0;

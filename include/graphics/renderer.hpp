@@ -16,6 +16,7 @@
 #include "util/vecdefs.hpp"
 
 struct RenderDrawOptions {
+    bool draw_grids = true;
     bool draw_grid_xy = true;
     bool draw_grid_xz = false;
     bool draw_grid_zy = false;
@@ -43,6 +44,7 @@ struct RenderDrawOptions {
     Color background = CUSTOMGRAY;
 
     bool draw_fps = true;
+    bool plot_performance = false;
 };
 
 enum struct RenderPrimitiveKind {

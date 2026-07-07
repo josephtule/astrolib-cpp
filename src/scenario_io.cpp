@@ -2025,6 +2025,13 @@ static StatusCode parse_opt_world_stepper_config(
         return StatusCode::ok;
     }
 
+    bool found_paused;
+    status = parse_opt_bool(*child, "paused", found_paused, out.paused, path);
+    if (status!=StatusCode::ok) return status;
+    if (!found_paused) {
+        out.paused = false;
+    }
+
     bool found_int_tr;
     status = parse_opt_integrator_type(
         *child,
@@ -3154,6 +3161,7 @@ StatusCode build_world_from_scenario_config(
     stepper.dt_scale = cfg.world_stepper.dt_scale;
     stepper.substeps = cfg.world_stepper.substeps;
     stepper.ticks = cfg.world_stepper.ticks;
+    stepper.paused = cfg.world_stepper.paused;
 
     for (const auto& cel_cfg : cfg.celestials) {
         auto cel = std::make_unique<Celestial>();

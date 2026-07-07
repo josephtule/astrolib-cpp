@@ -46,14 +46,14 @@ add_library(render_ui_deps STATIC
     external/implot/implot.cpp
     external/implot/implot_items.cpp
 
-    external/rlImGui/rlImGui.cpp
+    external/rlimgui/rlImGui.cpp
 )
 target_include_directories(render_ui_deps PUBLIC
     external/imgui
     external/implot
-    external/rlImGui
+    external/rlimgui
 )
-target_link_libraries(render_ui_deps PUBLIC raylib)
+target_link_libraries(render_ui_deps PRIVATE raylib)
 target_link_libraries(${TARGET_NAME} PRIVATE render_ui_deps)
 
 

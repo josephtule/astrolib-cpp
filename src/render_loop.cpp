@@ -1,17 +1,23 @@
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/transform.hpp"
-#include "raylib.h"
 
+#include "core/world.hpp"
+#include "core/world_stepper.hpp"
 #include "graphics/camera.hpp"
 #include "graphics/raygen.hpp"
 #include "graphics/rdraw.hpp"
 #include "graphics/render_assets.hpp"
 #include "graphics/render_loop.hpp"
 #include "graphics/renderer.hpp"
-
+#include "graphics/ui.hpp"
+#include "imgui.h"
+#include "implot.h"
+#include "raylib.h"
 #include "raymath.h"
+
 #include "util/lightweight_tools.hpp"
+#include "util/math.hpp"
 #include "util/vecdefs.hpp"
 
 #include <algorithm>
@@ -27,25 +33,25 @@ static void render_grids(const RenderDrawOptions& cfg) {
         DrawLine3D(rlvec30, rlaxis_z * -cfg.inertial_axes_scale, CYAN);
     }
 
-    if (cfg.draw_grid_xy) {
-        vec2f min = vec2f{cfg.grid_x_min, cfg.grid_y_min};
-        vec2f max = vec2f{cfg.grid_x_max, cfg.grid_y_max};
-        vec2f inc = vec2f{cfg.u_inc, cfg.v_inc};
-        draw_grid(min, max, inc, GridPlane::XY, cfg.color_axes, cfg.grid_color);
-    }
-
-    if (cfg.draw_grid_xz) {
-        vec2f min = vec2f{cfg.grid_x_min, cfg.grid_z_min};
-        vec2f max = vec2f{cfg.grid_x_max, cfg.grid_z_max};
-        vec2f inc = vec2f{cfg.u_inc, cfg.v_inc};
-        draw_grid(min, max, inc, GridPlane::XZ, cfg.color_axes, cfg.grid_color);
-    }
-
-    if (cfg.draw_grid_zy) {
-        vec2f min = vec2f{cfg.grid_z_min, cfg.grid_y_min};
-        vec2f max = vec2f{cfg.grid_z_max, cfg.grid_y_max};
-        vec2f inc = vec2f{cfg.u_inc, cfg.v_inc};
-        draw_grid(min, max, inc, GridPlane::ZY, cfg.color_axes, cfg.grid_color);
+    if (cfg.draw_grids) {
+        if (cfg.draw_grid_xy) {
+            vec2f min = vec2f{cfg.grid_x_min, cfg.grid_y_min};
+            vec2f max = vec2f{cfg.grid_x_max, cfg.grid_y_max};
+            vec2f inc = vec2f{cfg.u_inc, cfg.v_inc};
+            draw_grid(min, max, inc, GridPlane::XY, cfg.color_axes, cfg.grid_color);
+        }
+        if (cfg.draw_grid_xz) {
+            vec2f min = vec2f{cfg.grid_x_min, cfg.grid_z_min};
+            vec2f max = vec2f{cfg.grid_x_max, cfg.grid_z_max};
+            vec2f inc = vec2f{cfg.u_inc, cfg.v_inc};
+            draw_grid(min, max, inc, GridPlane::XZ, cfg.color_axes, cfg.grid_color);
+        }
+        if (cfg.draw_grid_zy) {
+            vec2f min = vec2f{cfg.grid_z_min, cfg.grid_y_min};
+            vec2f max = vec2f{cfg.grid_z_max, cfg.grid_y_max};
+            vec2f inc = vec2f{cfg.u_inc, cfg.v_inc};
+            draw_grid(min, max, inc, GridPlane::ZY, cfg.color_axes, cfg.grid_color);
+        }
     }
 }
 
@@ -100,21 +106,223 @@ static void draw_selected_body_marker(
     }
 }
 
-static void render_ui_placeholder(
+namespace im = ImGui;
+
+static void render_simulation_ui(
     World& world,
     RenderLoopConfig& cfg,
     RenderLoopState& state
 ) {
-    // ui placeholder will later update follow categories (first pass)
+    im::Begin("Simulation");
+    WorldStepperConfig& stepper = cfg.stepper_cfg;
 
-    // simulation
-    // pause, ticks, substeps, dt_scale
+    im::Checkbox("Realtime", &cfg.realtime);
 
-    // camera
-    // mode, target ID, FOV, orbit speed, fly speed, zoom rate
+    im::Text("t = %.3f", world.t_sim());
+    im::Text("dt = %.3f", state.dt);
+    im::Text("effective dt = %.3f", state.dt * stepper.ticks * stepper.dt_scale);
 
+    im::Checkbox("Paused", &stepper.paused);
+
+    im::InputInt("Ticks", &stepper.ticks);
+    stepper.ticks = std::max(1, stepper.ticks);
+
+    im::InputInt("Substeps", &stepper.substeps);
+    stepper.substeps = std::max(1, stepper.substeps);
+
+    im::InputDouble("dt_scale", &stepper.dt_scale);
+    if (!finite_pos(stepper.dt_scale)) {
+        stepper.dt_scale = 1.0;
+    }
+
+    im::End();
+}
+
+static void render_renderer_ui(
+    World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
+) {
     // render
     // grids, axes, selected marker, FPS toggle
+
+    im::Begin("Renderer");
+
+    im::Checkbox("Show FPS", &cfg.draw.draw_fps);
+
+    bool changed_lock = im::Checkbox("Lock FPS", &cfg.set_target_fps);
+    bool changed_target_fps = false;
+    if (cfg.set_target_fps) {
+        changed_target_fps = im::InputInt("Target FPS", &cfg.target_fps);
+        if (!finite_pos(cfg.target_fps)) {
+            cfg.target_fps = 60;
+        }
+    }
+    if (changed_lock || changed_target_fps) {
+        SetTargetFPS(cfg.set_target_fps ? cfg.target_fps : 0);
+    }
+
+    im::Checkbox("Draw Grids", &cfg.draw.draw_grids);
+    if (cfg.draw.draw_grids) {
+        if (im::CollapsingHeader("Grids")) {
+            im::Indent();
+            im::Checkbox("Show XY Grid", &cfg.draw.draw_grid_xy);
+            im::Checkbox("Show ZY Grid", &cfg.draw.draw_grid_zy);
+            im::Checkbox("Show XZ Grid", &cfg.draw.draw_grid_xz);
+            im::Unindent();
+        };
+    }
+
+    if (im::CollapsingHeader("Axes")) {
+        im::Indent();
+        im::Checkbox("Show Inertial Axes", &cfg.draw.draw_inertial_axes);
+        im::Checkbox("Show Body Axes", &cfg.draw.draw_body_axes);
+        im::Checkbox("Color Axes", &cfg.draw.color_axes);
+        im::Unindent();
+    }
+
+    im::Checkbox("Highlight Selected Body", &cfg.draw.draw_selected_body);
+    // im::Checkbox("Draw Labels", &cfg.draw.draw_labels);
+
+    im::End();
+}
+
+static void render_camera_ui(
+    World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
+) {
+    // camera
+    im::Begin("Camera");
+    RenderCameraConfig& camera = cfg.camera;
+
+    im::Text(
+        "Position: [%.3f, %.3f, %.3f]",
+        camera.position(0),
+        camera.position(1),
+        camera.position(2)
+    );
+    im::Text(
+        "Target Position: [%.3f, %.3f, %.3f]",
+        camera.target(0),
+        camera.target(1),
+        camera.target(2)
+    );
+
+    // TODO: replace with dropdown for camera mode
+    im::Text("Camera Mode %s", camera_mode_str(camera.mode).c_str());
+
+    // TODO: add dropdown or +- or separate submenu
+    im::Text("Target ID: %llu", camera.target_id);
+
+    im::Checkbox("Invert Mousewheel", &camera.invert_mousewheel);
+
+    im::SliderFloat("FOV", &camera.fovy, 1.0f, 179.0f);
+    camera.fovy = std::clamp(camera.fovy, 1.0f, 179.0f); // TODO: might not be needed
+
+    im::InputFloat("Zoom Rate", &camera.zoom_rate);
+    if (!finite_pos(camera.zoom_rate)) {
+        RenderCameraConfig default_cfg{};
+        camera.zoom_rate = default_cfg.zoom_rate;
+    }
+    im::InputFloat("Fly Speed", &camera.fly_speed);
+    if (!finite_pos(camera.fly_speed)) {
+        RenderCameraConfig default_cfg{};
+        camera.fly_speed = default_cfg.fly_speed;
+    }
+    im::InputFloat("Orbit Speed", &camera.orbit_speed);
+    if (!finite_pos(camera.orbit_speed)) {
+        RenderCameraConfig default_cfg{};
+        camera.orbit_speed = default_cfg.orbit_speed;
+    }
+    im::InputFloat("Pan Speed", &camera.pan_speed);
+    if (!finite_pos(camera.pan_speed)) {
+        RenderCameraConfig default_cfg{};
+        camera.pan_speed = default_cfg.pan_speed;
+    }
+    if (im::Button("Reset Camera")) {
+        RenderCameraConfig default_cfg{};
+        camera.invert_mousewheel = default_cfg.invert_mousewheel;
+        camera.fovy = default_cfg.fovy;
+        camera.zoom_rate = default_cfg.zoom_rate;
+        camera.fly_speed = default_cfg.fly_speed;
+        camera.orbit_speed = default_cfg.orbit_speed;
+        camera.pan_speed = default_cfg.pan_speed;
+    }
+
+    im::End();
+}
+
+namespace imp = ImPlot;
+static void render_performance_ui(
+    World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
+) {
+    im::Begin("Performance");
+
+    im::Checkbox("Plot Performance", &cfg.draw.plot_performance);
+    if (cfg.draw.plot_performance) {
+        if (state.frame_time_ms.size() >= state.frame_history_max) {
+            state.frame_time_ms.erase(state.frame_time_ms.begin());
+        }
+        state.frame_time_ms.push_back(state.frame_time * 1000.0f);
+
+        if (state.fps_history.size() >= state.frame_history_max) {
+            state.fps_history.erase(state.fps_history.begin());
+        }
+        state.fps_history.push_back(state.fps);
+
+        // TODO: maybe add input field for plot limits
+        if (imp::BeginPlot("Frame Time")) {
+            imp::SetupAxes("sample", "ms");
+            imp::SetupAxisLimits(
+                ImAxis_X1,
+                0.0,
+                static_cast<f64>(state.frame_time_ms.size()),
+                ImGuiCond_Always
+            );
+            imp::SetupAxisLimits(ImAxis_Y1, 0.0, 30.0, ImGuiCond_Once);
+            // TODO: decide between bars and line
+            imp::PlotLine(
+                "frame ms",
+                state.frame_time_ms.data(),
+                state.frame_time_ms.size()
+            );
+
+            imp::EndPlot();
+        }
+
+        if (imp::BeginPlot("FPS")) {
+            imp::SetupAxes("sample", "fps");
+            imp::SetupAxisLimits(
+                ImAxis_X1,
+                0.0,
+                static_cast<f64>(state.fps_history.size()),
+                ImGuiCond_Always
+            );
+            imp::SetupAxisLimits(ImAxis_Y1, 0.0, 500.0, ImGuiCond_Once);
+
+            imp::PlotLine("fps", state.fps_history.data(), state.fps_history.size());
+            imp::EndPlot();
+        }
+    } else {
+        if (!state.frame_time_ms.empty()) state.frame_time_ms.clear();
+        if (!state.fps_history.empty()) state.fps_history.clear();
+    }
+
+    im::End();
+}
+
+static void render_ui_frame(World& world, RenderLoopConfig& cfg, RenderLoopState& state) {
+    begin_render_ui_frame();
+
+    render_performance_ui(world, cfg, state);
+    render_simulation_ui(world, cfg, state);
+    render_camera_ui(world, cfg, state);
+    render_renderer_ui(world, cfg, state);
+
+    end_render_ui_frame();
 }
 
 static void render_single_frame(
@@ -166,7 +374,7 @@ static void render_single_frame(
 
     EndMode3D();
     if (cfg.draw.draw_fps) DrawFPS(0, 0);
-    render_ui_placeholder(world, cfg, state);
+    render_ui_frame(world, cfg, state);
     EndDrawing();
 }
 
@@ -339,7 +547,7 @@ static void move_free_camera(
 
 static void handle_sim_input(RenderLoopConfig& cfg) {
     if (IsKeyPressed(KEY_SPACE)) {
-        toggle(cfg.paused);
+        toggle(cfg.stepper_cfg.paused);
     }
     if (IsKeyPressed(KEY_UP)) {
         cfg.stepper_cfg.ticks += 1;
@@ -458,6 +666,9 @@ static void handle_camera_settings_input(
         RenderCameraConfig default_cfg{};
         camera.fovy = default_cfg.fovy;
         camera.zoom_rate = default_cfg.zoom_rate;
+        camera.fly_speed = default_cfg.fly_speed;
+        camera.orbit_speed = default_cfg.orbit_speed;
+        camera.pan_speed = default_cfg.pan_speed;
     }
 
     if (IsKeyPressed(KEY_BACKSPACE)) {
@@ -529,20 +740,26 @@ static void handle_camera_movement_input(
 static void handle_input(RenderLoopConfig& cfg, const World& world, f32 dt) {
     // TODO: create a key map and key map settings page where users can change map
 
+    const ImGuiIO& io = ImGui::GetIO();
+    bool ui_wants_mouse = io.WantCaptureMouse;
+    bool ui_wants_keyboard = io.WantCaptureKeyboard;
+
     bool render_modifier = IsKeyDown(KEY_LEFT_SHIFT);
     bool camera_modifier = IsKeyDown(KEY_RIGHT_SHIFT);
     bool no_modifier = !render_modifier && !camera_modifier;
     bool control_modifier = no_modifier && IsKeyDown(KEY_LEFT_CONTROL);
 
-    if (camera_modifier) {
-        handle_camera_settings_input(cfg.camera, world, dt);
-    } else if (render_modifier) {
-        handle_render_toggle_input(cfg.draw);
-    } else if (control_modifier) {
-        // reserved for future non-render shortcuts
-    } else {
-        handle_sim_input(cfg);
-        handle_camera_movement_input(cfg.camera, world, dt);
+    if (!ui_wants_keyboard && !ui_wants_mouse) {
+        if (camera_modifier) {
+            handle_camera_settings_input(cfg.camera, world, dt);
+        } else if (render_modifier) {
+            handle_render_toggle_input(cfg.draw);
+        } else if (control_modifier) {
+            // reserved for future non-render shortcuts
+        } else {
+            handle_sim_input(cfg);
+            handle_camera_movement_input(cfg.camera, world, dt);
+        }
     }
 
     sync_camera_tracking(cfg.camera, world);
@@ -567,24 +784,27 @@ static void shutdown_render_loop_state(RenderLoopState& state) {
 
 void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
     InitWindow(cfg.screen_width, cfg.screen_height, cfg.window_title.c_str());
+    if (!init_render_ui()) {
+        CloseWindow();
+        return;
+    }
 
     RenderLoopState state;
     init_render_loop_state(world, cfg, state);
 
-    f64 dt = dt0;
-    f32 dt_window;
-
+    state.dt = dt0;
     if (cfg.set_target_fps) SetTargetFPS(cfg.target_fps);
     render_single_frame(world, cfg, state);
     while (!WindowShouldClose()) {
-        dt_window = GetFrameTime();
+        state.frame_time = GetFrameTime();
+        state.fps = state.frame_time > 0.0 ? 1.0f / state.frame_time : 0.0f;
 
-        handle_input(cfg, world, dt_window);
+        handle_input(cfg, world, state.frame_time);
         update_camera(cfg.camera, state.camera);
 
-        dt = cfg.realtime ? dt_window : dt0;
-        if (!cfg.paused) {
-            state.stats += step_world(world, dt, cfg.stepper_cfg, state.wksp);
+        state.dt = cfg.realtime ? state.frame_time : dt0;
+        if (!cfg.stepper_cfg.paused) {
+            state.stats += step_world(world, state.dt, cfg.stepper_cfg, state.wksp);
             if (!state.stats.success) {
                 std::println("Simulation Failure");
                 break;
@@ -594,5 +814,6 @@ void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
     }
 
     shutdown_render_loop_state(state);
+    shutdown_render_ui();
     CloseWindow();
 }

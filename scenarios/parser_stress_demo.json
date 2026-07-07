@@ -491,11 +491,12 @@
     ],
     "world_stepper": {
         "delta_time": 1.0,
-        "translation_integrator": "rk4",
+        "translation_integrator": "rk2",
         "attitude_integrator": "rk4",
         "substeps": 1,
         "ticks": 5,
-        "dt_scale": 5
+        "dt_scale": 5,
+        "paused": true
     },
     "time": {
         "t0": 0.0,
