@@ -6,6 +6,16 @@
 enum struct StatusCode {
     ok,
     invalid_input,
+    validation_failed,
+    unsupported_type,
+    missing_reference,
+    duplicate_id,
+    inactive_entity,
+    invalid_state,
+    invalid_attitude_state,
+    invalid_mass_properties,
+    invalid_shape,
+    invalid_anchor,
     empty_measurements,
     empty_history,
     empty_events,
@@ -41,6 +51,16 @@ inline std::string status_string(StatusCode status) {
     switch (status) {
     case StatusCode::ok: return "Ok";
     case StatusCode::invalid_input: return "Invalid Input";
+    case StatusCode::validation_failed: return "Validation Failed";
+    case StatusCode::unsupported_type: return "Unsupported Type";
+    case StatusCode::missing_reference: return "Missing Reference";
+    case StatusCode::duplicate_id: return "Duplicate ID";
+    case StatusCode::inactive_entity: return "Inactive Entity";
+    case StatusCode::invalid_state: return "Invalid State";
+    case StatusCode::invalid_attitude_state: return "Invalid Attitude State";
+    case StatusCode::invalid_mass_properties: return "Invalid Mass Properties";
+    case StatusCode::invalid_shape: return "Invalid Shape";
+    case StatusCode::invalid_anchor: return "Invalid Anchor";
     case StatusCode::empty_measurements: return "Empty Measurements";
     case StatusCode::size_mismatch: return "Size Mismatch";
     case StatusCode::propagation_failed: return "Propagation Failed";

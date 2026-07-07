@@ -10,14 +10,14 @@
 
 StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input) {
     if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0) {
-        return StatusCode::invalid_input;
+        return StatusCode::validation_failed;
     }
     if (!std::isfinite(input.tol_time) || input.tol_time < 0.0) {
-        return StatusCode::invalid_input;
+        return StatusCode::validation_failed;
     }
     i32 dim = measurement_dim(input.measurement.type);
     if (dim <= 0) {
-        return StatusCode::invalid_input;
+        return StatusCode::unsupported_type;
     }
     if (input.measurement.R.size() != 0
         && (input.measurement.R.cols() != dim || input.measurement.R.rows() != dim
@@ -28,11 +28,11 @@ StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input) {
         return StatusCode::invalid_covariance;
     }
     if (input.measurement.z.size() != dim || !input.measurement.z.allFinite()) {
-        return StatusCode::invalid_input;
+        return StatusCode::invalid_state;
     }
 
     if (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6) {
-        return StatusCode::invalid_input;
+        return StatusCode::validation_failed;
     }
 
     return StatusCode::ok;
@@ -44,10 +44,10 @@ StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
         return StatusCode::size_mismatch;
     }
     if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0) {
-        return StatusCode::invalid_input;
+        return StatusCode::validation_failed;
     }
     if (!std::isfinite(input.tol_time) || input.tol_time < 0.0) {
-        return StatusCode::invalid_input;
+        return StatusCode::validation_failed;
     }
     if (!input.Q.allFinite() || !input.initial_filter.P.allFinite()) {
         return StatusCode::invalid_covariance;
@@ -56,10 +56,10 @@ StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
         const Measurement& meas = input.measurements[i];
         i32 dim = measurement_dim(meas.type);
         if (dim <= 0) {
-            return StatusCode::invalid_input;
+            return StatusCode::unsupported_type;
         }
         if (meas.z.size() != dim || !meas.z.allFinite()) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
         if (meas.R.size() != 0
             && (meas.R.cols() != dim || meas.R.rows() != dim || !meas.R.allFinite())) {
@@ -168,14 +168,14 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     MeasurementContext ctx = make_measurement_context(x_pred, x_tr_obsv);
     vecXd z_pred = predict_measurement(meas.type, ctx);
     if (z_pred.size() != dim) {
-        result.status = StatusCode::invalid_input;
+        result.status = StatusCode::size_mismatch;
         return result;
     }
 
     // residuals
     vecXd res = measurement_residual(meas.type, meas.z, z_pred);
     if (!res.allFinite()) {
-        result.status = StatusCode::invalid_input;
+        result.status = StatusCode::invalid_state;
         return result;
     }
     result.raw_residual_norm = res.norm();
@@ -183,7 +183,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // measurement jacobian
     matXd H = measurement_jacobian(meas.type, ctx);
     if (H.cols() != 6 || H.rows() != dim || !H.allFinite()) {
-        result.status = StatusCode::invalid_input;
+        result.status = StatusCode::size_mismatch;
         return result;
     }
 
@@ -198,7 +198,7 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // innovation covariance
     matXd S = H * P_pred * H.transpose() + R;
     if (!S.allFinite()) {
-        result.status = StatusCode::invalid_input;
+        result.status = StatusCode::invalid_covariance;
         return result;
     }
 

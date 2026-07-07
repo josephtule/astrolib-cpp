@@ -37,6 +37,8 @@ struct WorldStateSnapshot {
     f64 t_sim_ = 0.0;
 };
 
+enum struct BodyFilterMode { all = 0, active = 1, inactive = 2 };
+
 class World {
   private:
     // Entity storage
@@ -105,6 +107,9 @@ class World {
     bool is_celestial(EntityId id) const;
     bool is_satellite(EntityId id) const;
     bool is_station(EntityId id) const;
+    svec<EntityId> celestial_ids(BodyFilterMode mode = BodyFilterMode::all) const;
+    svec<EntityId> satellite_ids(BodyFilterMode mode = BodyFilterMode::all) const;
+    svec<EntityId> station_ids(BodyFilterMode mode = BodyFilterMode::all) const;
     svec<EntityId> active_celestial_ids() const;
     svec<EntityId> active_satellite_ids() const;
     svec<EntityId> active_station_ids() const;

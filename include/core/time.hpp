@@ -377,6 +377,35 @@ inline i32 get_jd_index(const JulianDate& jd, ecref<vecX<JulianDate>> jds) {
     return i;
 }
 
+struct DHMStime {
+    i32 day = 0;
+    i32 hour = 0;
+    i32 minute = 0;
+    f64 second = 0.0;
+};
+inline DHMStime sec_to_dhms(f64 s, f64 sec_in_day = 86400.0) {
+    DHMStime out;
+
+    if (!std::isfinite(s) || !std::isfinite(sec_in_day) || sec_in_day <= 0.0) {
+        return out;
+    }
+
+    f64 day_f = std::floor(s / sec_in_day);
+    out.day = static_cast<i32>(day_f);
+
+    f64 rem = s - day_f * sec_in_day;
+
+    out.hour = static_cast<i32>(std::floor(rem / 3600.0));
+    rem -= static_cast<f64>(out.hour) * 3600.0;
+
+    out.minute = static_cast<i32>(std::floor(rem / 60.0));
+    rem -= static_cast<f64>(out.minute) * 60.0;
+
+    out.second = rem;
+
+    return out;
+}
+
 inline string cal_str(
     const CalendarTime& cal,
     i32 precision = 4,

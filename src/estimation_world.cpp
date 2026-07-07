@@ -524,7 +524,7 @@ StatusCode make_world_measurement_event_history(
     );
     if (!od_status_success(status)) return status;
     i32 dim = measurement_dim(type);
-    if (z_pred.size() != dim) return StatusCode::invalid_input;
+    if (z_pred.size() != dim) return StatusCode::size_mismatch;
 
     const Station* observer = world.station(observer_id);
     if (observer == nullptr) {

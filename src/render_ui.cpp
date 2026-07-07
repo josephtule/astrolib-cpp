@@ -3,11 +3,13 @@
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
+#include "core/time.hpp"
 #include "graphics/render_loop.hpp"
 #include "graphics/ui.hpp"
 #include "imgui.h"
 #include "implot.h"
 #include "misc/cpp/imgui_stdlib.h"
+#include "raylib.h"
 #include "util/lightweight_tools.hpp"
 
 namespace im = ImGui;
@@ -60,23 +62,34 @@ static void render_performance_ui(
     RenderLoopState& state
 );
 
-static bool render_state_tr_ui(Body& body);
-static bool render_state_att_ui(Body& body);
-static bool render_state_ui(Body& body);
-static bool render_body_propagation_ui(Body& body);
-static bool render_stat_state_ui(Station& stat, World& world);
-static void render_celestial_stats_ui(Celestial& cel);
-static void render_satellite_stats_ui(Satellite& sat);
-static void render_mass_properties_ui(MassProperties& mp);
+static bool render_state_tr_ui(Body& body, ImGuiInputTextFlags flags = 0);
+static bool render_state_att_ui(Body& body, ImGuiInputTextFlags flags = 0);
+static bool render_state_ui(Body& body, ImGuiInputTextFlags flags = 0);
+static bool render_body_propagation_ui(Body& body, bool editable = true);
+static bool render_stat_state_ui(
+    Station& stat,
+    World& world,
+    ImGuiInputTextFlags flags = 0
+);
+static void render_celestial_stats_ui(Celestial& cel, ImGuiInputTextFlags flags = 0);
+static void render_satellite_stats_ui(Satellite& sat, ImGuiInputTextFlags flags = 0);
+static void render_mass_properties_ui(MassProperties& mp, ImGuiInputTextFlags flags = 0);
 static void render_station_stats_ui(
     Station& stat,
     RenderLoopConfig& cfg,
     RenderLoopState& state,
-    World& world
+    World& world,
+    ImGuiInputTextFlags flags = 0
 );
 static void render_station_draft_ui(Station& stat, RenderLoopState& state, World& world);
 static void sync_add_instrument_diag(RenderLoopState& state, i32 dim);
-static void render_station_instruments_ui(Station& stat, RenderLoopState& state);
+static void render_station_instruments_ui(
+    Station& stat,
+    RenderLoopState& state,
+    ImGuiInputTextFlags flags = 0
+);
+static bool body_edit_draft_changed(const BodyEditDraft& draft, const World& world);
+static void render_body_list_row(const Body& body, World& world, RenderLoopConfig& cfg);
 
 static Body* draft_body_ptr(BodyEditDraft& draft) {
     switch (draft.edit_body_type) {
@@ -89,16 +102,160 @@ static Body* draft_body_ptr(BodyEditDraft& draft) {
     return nullptr;
 }
 
-static bool render_state_tr_ui(Body& body) {
-    return im::InputDouble3("r", body.x_tr.r) || im::InputDouble3("v", body.x_tr.v);
+static bool fields_readonly(ImGuiInputTextFlags flags) {
+    return (flags & ImGuiInputTextFlags_ReadOnly) != 0;
 }
 
-static bool render_state_att_ui(Body& body) {
-    return im::InputDouble4("q", body.x_att.q) || im::InputDouble3("w", body.x_att.w);
+static void push_edit_field_style() {
+    im::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.31f, 0.25f, 0.36f, 1.0f));
+    im::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.38f, 0.30f, 0.46f, 1.0f));
+    im::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.44f, 0.34f, 0.54f, 1.0f));
+    im::PushStyleColor(ImGuiCol_Border, ImVec4(0.72f, 0.58f, 0.90f, 1.0f));
+    im::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.84f, 0.68f, 0.96f, 1.0f));
+    im::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 }
 
-static bool render_state_ui(Body& body) {
-    return render_state_tr_ui(body) || render_state_att_ui(body);
+static void pop_edit_field_style() {
+    im::PopStyleVar();
+    im::PopStyleColor(5);
+}
+
+static ImVec4 rl_to_im(const Vector4& v) { return ImVec4{v.x, v.y, v.z, v.w}; }
+static ImVec4 rl_to_im(const Color& c) {
+    f32 r = static_cast<f32>(c.r) / 255.0f;
+    f32 g = static_cast<f32>(c.g) / 255.0f;
+    f32 b = static_cast<f32>(c.b) / 255.0f;
+    f32 a = static_cast<f32>(c.a) / 255.0f;
+    return ImVec4{r, g, b, a};
+}
+
+// static void push_selected_field_style() {
+//     im::PushStyleColor(ImGuiCol_Border, rl_to_im(YELLOW));
+//     im::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+// }
+
+// static void pop_selected_field_style() {
+//     im::PopStyleVar();
+//     im::PopStyleColor(1);
+// }
+
+static bool render_state_tr_ui(Body& body, ImGuiInputTextFlags flags) {
+    return im::InputDouble3("r", body.x_tr.r, "%.3f", flags)
+           || im::InputDouble3("v", body.x_tr.v, "%.3f", flags);
+}
+
+static bool render_state_att_ui(Body& body, ImGuiInputTextFlags flags) {
+    return im::InputDouble4("q", body.x_att.q, "%.3f", flags)
+           || im::InputDouble3("w", body.x_att.w, "%.3f", flags);
+}
+
+static bool render_state_ui(Body& body, ImGuiInputTextFlags flags) {
+    return render_state_tr_ui(body, flags) || render_state_att_ui(body, flags);
+}
+
+static bool scalar_changed(f64 a, f64 b, f64 tol = tol12) {
+    return std::abs(a - b) > tol;
+}
+
+static bool vec3_changed(ecref<vec3d> a, ecref<vec3d> b, f64 tol = tol12) {
+    return !a.isApprox(b, tol);
+}
+
+static bool vec4_changed(ecref<vec4d> a, ecref<vec4d> b, f64 tol = tol12) {
+    return !a.isApprox(b, tol);
+}
+
+static bool vec7_changed(ecref<vec7d> a, ecref<vec7d> b, f64 tol = tol12) {
+    return !a.isApprox(b, tol);
+}
+
+static bool mat3_changed(ecref<mat3d> a, ecref<mat3d> b, f64 tol = tol12) {
+    return !a.isApprox(b, tol);
+}
+
+static bool matx_changed(ecref<matXd> a, ecref<matXd> b, f64 tol = tol12) {
+    if (a.rows() != b.rows() || a.cols() != b.cols()) return true;
+    return !a.isApprox(b, tol);
+}
+
+static bool state_tr_changed(const StateTr& a, const StateTr& b, f64 tol = tol12) {
+    return vec3_changed(a.r, b.r, tol) || vec3_changed(a.v, b.v, tol);
+}
+
+static bool state_att_changed(const StateAtt& a, const StateAtt& b, f64 tol = tol12) {
+    return vec4_changed(a.q, b.q, tol) || vec3_changed(a.w, b.w, tol);
+}
+
+static bool body_common_changed(const Body& a, const Body& b, f64 tol = tol12) {
+    return a.name != b.name || a.propagate_tr != b.propagate_tr
+           || a.propagate_att != b.propagate_att || state_tr_changed(a.x_tr, b.x_tr, tol)
+           || state_att_changed(a.x_att, b.x_att, tol);
+}
+
+static bool mass_properties_changed(
+    const MassProperties& a,
+    const MassProperties& b,
+    f64 tol = tol12
+) {
+    return scalar_changed(a.mass, b.mass, tol) || mat3_changed(a.I, b.I, tol)
+           || mat3_changed(a.I_inv, b.I_inv, tol) || a.principal_axes != b.principal_axes
+           || vec3_changed(a.offset_body, b.offset_body, tol) || a.active != b.active;
+}
+
+static bool station_instrument_changed(
+    const StationInstrument& a,
+    const StationInstrument& b,
+    f64 tol = tol12
+) {
+    return a.id != b.id || a.name != b.name || a.type != b.type || a.enabled != b.enabled
+           || matx_changed(a.R, b.R, tol);
+}
+
+static bool station_instruments_changed(
+    const umap<u32, StationInstrument>& a,
+    const umap<u32, StationInstrument>& b,
+    f64 tol = tol12
+) {
+    if (a.size() != b.size()) return true;
+
+    for (const auto& [id, instr_a] : a) {
+        auto it = b.find(id);
+        if (it == b.end()) return true;
+        if (station_instrument_changed(instr_a, it->second, tol)) return true;
+    }
+
+    return false;
+}
+
+static bool celestial_changed(const Celestial& a, const Celestial& b, f64 tol = tol12) {
+    return body_common_changed(a, b, tol) || a.gravity_model != b.gravity_model
+           || scalar_changed(a.mu, b.mu, tol) || a.degree != b.degree
+           || a.order != b.order || vec7_changed(a.J, b.J, tol)
+           || matx_changed(a.C, b.C, tol) || matx_changed(a.S, b.S, tol)
+           || a.attitude_model != b.attitude_model
+           || a.radiation_model != b.radiation_model
+           || scalar_changed(a.ref_radius, b.ref_radius, tol)
+           || scalar_changed(a.semimajor_axis, b.semimajor_axis, tol)
+           || scalar_changed(a.semiminor_axis, b.semiminor_axis, tol)
+           || scalar_changed(a.mean_radius, b.mean_radius, tol)
+           || scalar_changed(a.eccentricity, b.eccentricity, tol)
+           || scalar_changed(a.flattening, b.flattening, tol);
+}
+
+static bool satellite_changed(const Satellite& a, const Satellite& b, f64 tol = tol12) {
+    return body_common_changed(a, b, tol)
+           || mass_properties_changed(a.mass_properties, b.mass_properties, tol);
+}
+
+static bool station_changed(const Station& a, const Station& b, f64 tol = tol12) {
+    return body_common_changed(a, b, tol) || a.anchored != b.anchored
+           || a.anchor_id != b.anchor_id
+           || vec3_changed(a.r_body_BCBF, b.r_body_BCBF, tol)
+           || vec3_changed(a.llh_BCBF, b.llh_BCBF, tol)
+           || a.next_instrument_id != b.next_instrument_id
+           || a.enabled_instrument_ids != b.enabled_instrument_ids
+           || station_instruments_changed(a.instruments, b.instruments, tol)
+           || mass_properties_changed(a.mass_properties, b.mass_properties, tol);
 }
 
 static void init_add_body_draft_defaults(
@@ -151,11 +308,27 @@ static void render_simulation_ui(
     im::Begin("Simulation");
     WorldStepperConfig& stepper = cfg.stepper_cfg;
 
-    if (im::Button("Play/Pause")) toggle(stepper.paused);
+    if (im::Button("Play/Pause")) {
+        toggle(stepper.paused);
+    }
+    // TODO: hide single step while sim running
+    if (!stepper.paused && cfg.step_single) {
+        cfg.step_single = false;
+        stepper.paused = true;
+    } else {
+        im::SameLine();
+        if (im::Button("Step")) {
+            cfg.step_single = true;
+            stepper.paused = false;
+        }
+    }
 
     im::Checkbox("Realtime", &cfg.realtime);
 
-    im::Text("Time = %.3f", world.t_sim());
+    im::Text("Time = %10.4f", world.t_sim());
+    im::SameLine();
+    DHMStime dhms = sec_to_dhms(world.t_sim());
+    im::Text("T0+%04d-%02d:%02d:%05.4f", dhms.day, dhms.hour, dhms.minute, dhms.second);
     im::Text("dt = %.3f", state.dt);
     im::Text("Effective dt = %.3f", state.dt * stepper.ticks * stepper.dt_scale);
 
@@ -183,6 +356,7 @@ static void render_simulation_ui(
         im::SameLine();
         string path;
         im::InputText("##filepath", &path);
+        StatusCode status = StatusCode::file_not_found;
         if (im::Button("Save")) {
             // TODO:
             // TODO: if file already exists, pop up warning
@@ -191,6 +365,9 @@ static void render_simulation_ui(
         if (im::Button("Load")) {
             // TEMP: use raylib file explorer or imgui-filebrowser
             // TODO: if file doesn't exist, pop up warning
+        }
+        if (status != StatusCode::ok) {
+            im::Text("Scenario Loader Status: %s", status_string(status).c_str());
         }
         im::Unindent();
     }
@@ -410,25 +587,60 @@ static void render_body_stats_ui(
             anchored = stat->anchored;
         }
 
-        // TODO: add ability to select/copy text but not edit
-        bool editable = cfg.edit_body_stats && cfg.stepper_cfg.paused;
-        // im::Checkbox("Edit Body Stats", &cfg.edit_body_stats);
-        if (!editable && im::Button("Edit")) {
+        bool edit_locked = !cfg.stepper_cfg.paused;
+        bool editable = cfg.edit_body_stats && !edit_locked;
+        ImGuiInputTextFlags field_flags = editable ? 0 : ImGuiInputTextFlags_ReadOnly;
+        bool draft_loaded = state.draft.edit_body_id == body->id
+                            && state.draft.edit_body_type == body->body_type;
+        bool draft_dirty = draft_loaded && body_edit_draft_changed(state.draft, world);
+
+        if (!cfg.edit_body_stats && edit_locked) {
+            im::BeginDisabled();
+            im::Button("Edit");
+            im::EndDisabled();
+            im::SameLine();
+            im::Text("Pause simulation to edit");
+        } else if (!cfg.edit_body_stats && im::Button("Edit")) {
             state.draft.edit_body_status
                 = load_body_edit_draft(body->id, state.draft, world);
             if (state.draft.edit_body_status == StatusCode::ok) {
                 cfg.edit_body_stats = true;
-                editable = cfg.stepper_cfg.paused;
+                editable = !edit_locked;
+                field_flags = editable ? 0 : ImGuiInputTextFlags_ReadOnly;
+                draft_loaded = true;
+                draft_dirty = false;
             }
         }
-        if (editable) {
+
+        if (cfg.edit_body_stats) {
+            if (edit_locked) im::BeginDisabled();
             if (im::Button("Save")) {
+                EntityId edit_body_id = state.draft.edit_body_id;
                 state.draft.edit_body_status = apply_body_edit_draft(state.draft, world);
                 if (state.draft.edit_body_status == StatusCode::ok) {
+                    state.wksp.dirty = true;
+                    if (cfg.camera.target_id == edit_body_id) {
+                        sync_camera_tracking(cfg.camera, world);
+                    }
                     cfg.edit_body_stats = false;
                     cancel_body_edit_draft(state.draft);
                 }
             }
+            if (edit_locked) im::EndDisabled();
+            im::SameLine();
+            if (edit_locked) im::BeginDisabled();
+            if (im::Button("Reset")) {
+                state.draft.edit_body_status
+                    = load_body_edit_draft(body->id, state.draft, world);
+                if (state.draft.edit_body_status == StatusCode::ok) {
+                    cfg.edit_body_stats = true;
+                    editable = !edit_locked;
+                    field_flags = editable ? 0 : ImGuiInputTextFlags_ReadOnly;
+                    draft_loaded = true;
+                    draft_dirty = false;
+                }
+            }
+            if (edit_locked) im::EndDisabled();
             im::SameLine();
             if (im::Button("Cancel")) {
                 cancel_body_edit_draft(state.draft);
@@ -443,11 +655,26 @@ static void render_body_stats_ui(
             );
         }
 
-        if (!editable) im::BeginDisabled();
+        if (editable) {
+            im::TextColored(ImVec4(0.84f, 0.68f, 0.96f, 1.0f), "Mode: Editing Draft");
+            im::SameLine();
+            if (draft_dirty) {
+                im::TextColored(ImVec4(1.0f, 0.82f, 0.34f, 1.0f), "Draft: Modified");
+            } else {
+                im::Text("Draft: Clean");
+            }
+            push_edit_field_style();
+        } else {
+            im::Text("Mode: Read Only");
+            if (cfg.edit_body_stats && edit_locked) {
+                im::Text("Edit draft locked until simulation is paused");
+            }
+        }
+
         im::TextSL("Name:");
         Body* edit_body = editable ? draft_body_ptr(state.draft) : body;
         if (edit_body != nullptr) {
-            im::InputText("##Name", &edit_body->name);
+            im::InputText("##Name", &edit_body->name, field_flags);
         }
 
         switch (body->body_type) {
@@ -456,28 +683,28 @@ static void render_body_stats_ui(
             Celestial* cel = editable ? &state.draft.edit_celestial
                                       : world.celestial(cfg.body_stats_id);
             if (cel == nullptr) {
-                im::End();
-                return;
+                im::Text("Invalid Celestial");
+            } else {
+                render_celestial_stats_ui(*cel, field_flags);
             }
-            render_celestial_stats_ui(*cel);
         } break;
         case BodyType::satellite: {
             Satellite* sat = editable ? &state.draft.edit_satellite
                                       : world.satellite(cfg.body_stats_id);
             if (sat == nullptr) {
-                im::End();
-                return;
+                im::Text("Invalid Satellite");
+            } else {
+                render_satellite_stats_ui(*sat, field_flags);
             }
-            render_satellite_stats_ui(*sat);
         } break;
         case BodyType::station: {
             Station* stat
                 = editable ? &state.draft.edit_station : world.station(cfg.body_stats_id);
             if (stat == nullptr) {
-                im::End();
-                return;
+                im::Text("Invalid Station");
+            } else {
+                render_station_stats_ui(*stat, cfg, state, world, field_flags);
             }
-            render_station_stats_ui(*stat, cfg, state, world);
         } break;
         }
 
@@ -485,7 +712,7 @@ static void render_body_stats_ui(
         // im::Checkbox("Emits Radiation", &body->emits_radiation);
         // im::Checkbox("Has Atmosphere", &body->has_atmosphere);
 
-        if (!editable) im::EndDisabled();
+        if (editable) pop_edit_field_style();
 
         if (active && im::Button("Set as Camera Target")) {
             cfg.camera.target_id = cfg.body_stats_id;
@@ -658,58 +885,96 @@ static void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState
     im::End();
 }
 
-static bool render_body_propagation_ui(Body& body) {
-    return im::Checkbox("Propagate Translation", &body.propagate_tr)
-           || im::Checkbox("Propagate Attitude", &body.propagate_att);
+static bool render_body_propagation_ui(Body& body, bool editable) {
+    if (!editable) im::BeginDisabled();
+    bool changed = im::Checkbox("Propagate Translation", &body.propagate_tr)
+                   || im::Checkbox("Propagate Attitude", &body.propagate_att);
+    if (!editable) im::EndDisabled();
+
+    return changed;
 }
 
-static bool render_stat_state_ui(Station& stat, World& world) {
+static bool render_stat_state_ui(Station& stat, World& world, ImGuiInputTextFlags flags) {
+    flags |= ImGuiInputTextFlags_ReadOnly;
     vec3d r = world.stat_r_inertial(stat.id);
     vec4d q = world.stat_q_inertial(stat.id);
-    return im::InputDouble3("r", r) || im::InputDouble4("q", q);
+    return im::InputDouble3("r", r, "%.3f", flags)
+           || im::InputDouble4("q", q, "%.3f", flags);
 }
 
-static void render_celestial_stats_ui(Celestial& cel) {
-    render_state_ui(cel);
+static void render_celestial_stats_ui(Celestial& cel, ImGuiInputTextFlags flags) {
+    bool editable = !fields_readonly(flags);
+
+    render_state_ui(cel, flags);
 
     if (im::CollapsingHeader("Celestial Model", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool edit_a = im::InputDouble("Semimajor Axis", &cel.semimajor_axis);
-        bool edit_b = im::InputDouble("Semiminor Axis", &cel.semiminor_axis);
+        bool edit_a = im::InputDouble(
+            "Semimajor Axis",
+            &cel.semimajor_axis,
+            0.0,
+            0.0,
+            "%.3f",
+            flags
+        );
+        bool edit_b = im::InputDouble(
+            "Semiminor Axis",
+            &cel.semiminor_axis,
+            0.0,
+            0.0,
+            "%.3f",
+            flags
+        );
         if (edit_a || edit_b) {
             cel.mean_radius = mean_from_semiaxes(cel.semimajor_axis, cel.semiminor_axis);
             cel.eccentricity = ecc_from_semiaxes(cel.semimajor_axis, cel.semiminor_axis);
             cel.flattening = flat_from_semiaxes(cel.semimajor_axis, cel.semiminor_axis);
         }
-        // TODO: add recomputation of the below
-        im::BeginDisabled();
-        im::InputDouble("Mean Radius", &cel.mean_radius);
-        im::InputDouble("Eccentricity", &cel.eccentricity);
-        im::InputDouble("Flattening", &cel.flattening);
-        im::EndDisabled();
+
+        ImGuiInputTextFlags computed_flags = flags | ImGuiInputTextFlags_ReadOnly;
+        im::InputDouble(
+            "Mean Radius",
+            &cel.mean_radius,
+            0.0,
+            0.0,
+            "%.3f",
+            computed_flags
+        );
+        im::InputDouble(
+            "Eccentricity",
+            &cel.eccentricity,
+            0.0,
+            0.0,
+            "%.3f",
+            computed_flags
+        );
+        im::InputDouble("Flattening", &cel.flattening, 0.0, 0.0, "%.3f", computed_flags);
     }
 
     if (im::CollapsingHeader("Gravity Model", ImGuiTreeNodeFlags_DefaultOpen)) {
         im::Indent();
         i32 model_idx = static_cast<i32>(cel.gravity_model);
         const char* model_names[] = {"Pointmass", "Zonal", "Spherical Harmonics"};
+        if (!editable) im::BeginDisabled();
         if (im::Combo("##Gravity Model", &model_idx, model_names, 3)) {
             // TODO: update as new models are added
             cel.gravity_model = static_cast<GravityModel>(model_idx);
             // TODO: set to fall back to zonal or pointmass if coefs not available
             // (depending on J, C, S active bools?)
         }
-        im::InputDouble("Mu", &cel.mu);
+        if (!editable) im::EndDisabled();
+
+        im::InputDouble("Mu", &cel.mu, 0.0, 0.0, "%.3f", flags);
         switch (cel.gravity_model) {
         case GravityModel::pointmass: break;
         case GravityModel::zonal: {
-            im::InputDouble("Reference Radius", &cel.ref_radius);
-            im::InputInt("Degree", &cel.degree);
-            im::InputDouble7("Zonal Coefficients (J)", cel.J);
+            im::InputDouble("Reference Radius", &cel.ref_radius, 0.0, 0.0, "%.3f", flags);
+            im::InputInt("Degree", &cel.degree, 1, 100, flags);
+            im::InputDouble7("Zonal Coefficients (J)", cel.J, "%.3f", flags);
         } break;
         case GravityModel::spherical_harmonics: {
-            im::InputDouble("Reference Radius", &cel.ref_radius);
-            im::InputInt("Degree", &cel.degree);
-            im::InputInt("Order", &cel.order);
+            im::InputDouble("Reference Radius", &cel.ref_radius, 0.0, 0.0, "%.3f", flags);
+            im::InputInt("Degree", &cel.degree, 1, 100, flags);
+            im::InputInt("Order", &cel.order, 1, 100, flags);
             bool csactive = cel.C.cols() > 0 && cel.C.rows() > 0 && cel.S.cols() > 0
                             && cel.S.rows() > 0;
             im::Text("C/S Matrices Active: %s", bool_str(csactive).c_str());
@@ -721,6 +986,7 @@ static void render_celestial_stats_ui(Celestial& cel) {
     if (im::CollapsingHeader("Attitude Model")) {
         i32 att_idx = static_cast<i32>(cel.attitude_model);
         const char* att_name[] = {"Fixed", "Simple Spin", "Provider"};
+        if (!editable) im::BeginDisabled();
         if (im::Combo("##Attitude Model", &att_idx, att_name, 3)) {
             if (static_cast<CelestialAttitudeModel>(att_idx)
                 == CelestialAttitudeModel::provider) {
@@ -728,23 +994,26 @@ static void render_celestial_stats_ui(Celestial& cel) {
             } // TEMP: no attitude providers yet, fallback to fixed
             cel.attitude_model = static_cast<CelestialAttitudeModel>(att_idx);
         }
+        if (!editable) im::EndDisabled();
         if (cel.attitude_model == CelestialAttitudeModel::simple_spin) {
-            im::BeginDisabled();
+            ImGuiInputTextFlags spin_flags = flags | ImGuiInputTextFlags_ReadOnly;
             f64 w_mag = cel.x_att.w.norm();
-            im::InputDouble("Spin Rate", &w_mag);
-            im::InputDouble3("Spin Axis", cel.x_att.w);
-            im::EndDisabled();
+            im::InputDouble("Spin Rate", &w_mag, 0.0, 0.0, "%.3f", spin_flags);
+            im::InputDouble3("Spin Axis", cel.x_att.w, "%.3f", spin_flags);
         }
     }
 
-    render_body_propagation_ui(cel);
+    render_body_propagation_ui(cel, editable);
     // TODO: allow change of coefs (dropdown of providers)
 }
 
-static void render_mass_properties_ui(MassProperties& mp) {
-    if (im::CollapsingHeader("Mass Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
-        im::InputDouble("Mass", &mp.mass);
+static void render_mass_properties_ui(MassProperties& mp, ImGuiInputTextFlags flags) {
+    bool editable = !fields_readonly(flags);
 
+    if (im::CollapsingHeader("Mass Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+        im::InputDouble("Mass", &mp.mass, 0.0, 0.0, "%.3f", flags);
+
+        if (!editable) im::BeginDisabled();
         if (im::Checkbox("Principal Axes", &mp.principal_axes)) {
             if (mp.principal_axes) {
                 vec3d I_diag = mp.I.diagonal();
@@ -752,26 +1021,29 @@ static void render_mass_properties_ui(MassProperties& mp) {
                 mp.I_inv = mp.I.inverse();
             }
         }
+        if (!editable) im::EndDisabled();
         if (mp.principal_axes) {
             vec3d I_diag = mp.I.diagonal();
-            if (im::InputDouble3("Inertia Tensor", I_diag)) {
+            if (im::InputDouble3("Inertia Tensor", I_diag, "%.3f", flags)) {
                 mp.I = I_diag.asDiagonal();
                 mp.I_inv = mp.I.inverse();
             }
         } else {
-            if (im::InputDouble3x3("Inertia Tensor", mp.I)) {
+            if (im::InputDouble3x3("Inertia Tensor", mp.I, "%.3f", flags)) {
                 mp.I_inv = mp.I.inverse();
             }
         }
 
         im::Indent();
-        im::InputDouble3("Offset", mp.offset_body);
+        im::InputDouble3("Offset", mp.offset_body, "%.3f", flags);
+        if (!editable) im::BeginDisabled();
         if (im::Button("Recompute Inertia Tensor about COM")) {
             mp.I = inertia_PAT(mp.I, mp.mass, mp.offset_body);
             if (!mp.I.isDiagonal()) mp.principal_axes = false;
             mp.offset_body = vec3d0;
             mp.I_inv = mp.I.inverse();
         }
+        if (!editable) im::EndDisabled();
         im::Unindent();
 
         im::Text("Inertia Matrix Active: %s", bool_str(mp.active).c_str());
@@ -786,10 +1058,12 @@ static void render_mass_properties_ui(MassProperties& mp) {
     }
 }
 
-static void render_satellite_stats_ui(Satellite& sat) {
-    render_state_ui(sat);
-    render_mass_properties_ui(sat.mass_properties);
-    render_body_propagation_ui(sat);
+static void render_satellite_stats_ui(Satellite& sat, ImGuiInputTextFlags flags) {
+    bool editable = !fields_readonly(flags);
+
+    render_state_ui(sat, flags);
+    render_mass_properties_ui(sat.mass_properties, flags);
+    render_body_propagation_ui(sat, editable);
 }
 
 static void sync_add_instrument_diag(RenderLoopState& state, i32 dim) {
@@ -808,20 +1082,28 @@ static void sync_add_instrument_diag(RenderLoopState& state, i32 dim) {
     state.add_instrument_R_diag = diag;
 }
 
-static void render_station_instruments_ui(Station& stat, RenderLoopState& state) {
+static void render_station_instruments_ui(
+    Station& stat,
+    RenderLoopState& state,
+    ImGuiInputTextFlags flags
+) {
+    bool editable = !fields_readonly(flags);
+
     if (im::CollapsingHeader("Instruments")) {
         im::Indent();
         bool enabled_changed = false;
         for (auto& [id, instr] : stat.instruments) {
             im::PushID(&instr.name);
             im::TextSL("Name:");
-            im::InputText("##name", &instr.name);
+            im::InputText("##name", &instr.name, flags);
             im::Text("ID: %u", instr.id);
             im::Text("Observation Type: %s", observation_type_str(instr.type).c_str());
-            im::InputMatXd("Covariance", instr.R, "%.3E");
+            im::InputMatXd("Covariance", instr.R, "%.3E", flags);
+            if (!editable) im::BeginDisabled();
             if (im::Checkbox("Enabled", &instr.enabled)) {
                 enabled_changed = true;
             }
+            if (!editable) im::EndDisabled();
             im::PopID();
             im::Separator();
         }
@@ -841,9 +1123,10 @@ static void render_station_instruments_ui(Station& stat, RenderLoopState& state)
                    "Relative Position",
                    "Relative Position + Velocity"};
 
+            if (!editable) im::BeginDisabled();
             im::Combo("Type", &state.add_instrument_type, type_names, 8);
             im::TextSL("Name:");
-            im::InputText("##new instrument name", &state.add_instrument_name);
+            im::InputText("##new instrument name", &state.add_instrument_name, flags);
 
             ObservationType type
                 = static_cast<ObservationType>(state.add_instrument_type);
@@ -854,7 +1137,7 @@ static void render_station_instruments_ui(Station& stat, RenderLoopState& state)
                 im::PushID(i);
                 f64 variance = state.add_instrument_R_diag(i);
                 string label = "R(" + std::to_string(i) + "," + std::to_string(i) + ")";
-                im::InputDouble(label.c_str(), &variance, 0.0, 0.0, "%.3E");
+                im::InputDouble(label.c_str(), &variance, 0.0, 0.0, "%.3E", flags);
                 if (!finite_pos(variance)) variance = 1.0;
                 state.add_instrument_R_diag(i) = variance;
                 im::PopID();
@@ -876,6 +1159,7 @@ static void render_station_instruments_ui(Station& stat, RenderLoopState& state)
                     }
                 }
             }
+            if (!editable) im::EndDisabled();
             // im::SameLine();
             // if (im::Button("Reset")) {
             // }
@@ -894,9 +1178,14 @@ static void render_station_stats_ui(
     Station& stat,
     RenderLoopConfig& cfg,
     RenderLoopState& state,
-    World& world
+    World& world,
+    ImGuiInputTextFlags flags
 ) {
+    bool editable = !fields_readonly(flags);
+
+    if (!editable) im::BeginDisabled();
     im::Checkbox("Anchored", &stat.anchored);
+    if (!editable) im::EndDisabled();
 
     if (stat.anchored) {
         Celestial* cel = world.celestial(stat.anchor_id);
@@ -906,11 +1195,13 @@ static void render_station_stats_ui(
         } else {
             anchor_name = cel->name;
         }
-        render_stat_state_ui(stat, world);
+        render_stat_state_ui(stat, world, flags);
         im::Text("Anchor: %s (ID: %llu)", anchor_name.c_str(), stat.anchor_id);
         im::Indent();
+        if (!editable) im::BeginDisabled();
         bool prev_anchor = im::Button("Prev Anchor");
         bool next_anchor = im::Button("Next Anchor");
+        if (!editable) im::EndDisabled();
         if (prev_anchor || next_anchor) {
             svec<EntityId> cel_ids = world.active_celestial_ids();
             i32 step = next_anchor ? 1 : -1;
@@ -930,20 +1221,21 @@ static void render_station_stats_ui(
         if (cel == nullptr) {
             im::Text("Invalid Anchor, Cannot Convert Station Geometry");
         } else {
-            if (im::InputDouble3("r_body (BCBF)", stat.r_body_BCBF)) {
+            if (im::InputDouble3("r_body (BCBF)", stat.r_body_BCBF, "%.3f", flags)) {
                 stat.llh_BCBF = bcbf_to_detic(stat.r_body_BCBF, *cel);
             }
-            if (im::InputDouble3("Planetodetic LLH", stat.llh_BCBF)) {
+            if (im::InputDouble3("Planetodetic LLH", stat.llh_BCBF, "%.3f", flags)) {
                 stat.r_body_BCBF = detic_to_bcbf(stat.llh_BCBF, *cel);
             }
         }
 
     } else {
-        render_state_ui(stat);
-        render_mass_properties_ui(stat.mass_properties);
+        render_state_ui(stat, flags);
+        render_mass_properties_ui(stat.mass_properties, flags);
     }
 
-    render_station_instruments_ui(stat, state);
+    render_body_propagation_ui(stat, editable);
+    render_station_instruments_ui(stat, state, flags);
 }
 
 static void render_station_draft_ui(Station& stat, RenderLoopState& state, World& world) {
@@ -1004,54 +1296,55 @@ static StatusCode validate_add_body_draft(
     const World& world
 ) {
     switch (state.add_body_type) {
-    case BodyType::unknown: return StatusCode::invalid_input;
+    case BodyType::unknown: return StatusCode::unsupported_type;
     case BodyType::celestial: {
         const Celestial& cel = state.temp_celestial;
         if (!finite_state_tr(cel.x_tr) || !finite_state_att(cel.x_att)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
         if (!finite_nonneg(cel.mu)) return StatusCode::invalid_input;
         if (!finite_nonneg(cel.semimajor_axis) || !finite_nonneg(cel.semiminor_axis)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_shape;
         }
         if (cel.semimajor_axis == 0.0 && cel.semiminor_axis == 0.0) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_shape;
         }
         if (cel.semimajor_axis > 0.0 && cel.semiminor_axis > cel.semimajor_axis) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_shape;
         }
         if (cel.ref_radius < 0.0 || !std::isfinite(cel.ref_radius)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_shape;
         }
     } break;
     case BodyType::satellite: {
         const Satellite& sat = state.temp_satellite;
         if (!finite_state_tr(sat.x_tr) || !finite_state_att(sat.x_att)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
         if (sat.propagate_att) {
-            if (!finite_pos(sat.mass_properties.mass)) return StatusCode::invalid_input;
+            if (!finite_pos(sat.mass_properties.mass))
+                return StatusCode::invalid_mass_properties;
             if (!finite_mat(sat.mass_properties.I)
                 || !finite_mat(sat.mass_properties.I_inv)) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_mass_properties;
             }
-            if (!sat.mass_properties.active) return StatusCode::invalid_input;
+            if (!sat.mass_properties.active) return StatusCode::invalid_mass_properties;
         }
     } break;
     case BodyType::station: {
         const Station& stat = state.temp_station;
         if (stat.anchored) {
             if (world.celestial(stat.anchor_id) == nullptr)
-                return StatusCode::body_not_found;
+                return StatusCode::invalid_anchor;
             if (!finite_vec(stat.r_body_BCBF) || !finite_vec(stat.llh_BCBF)) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_anchor;
             }
         } else {
             if (!finite_state_tr(stat.x_tr) || !finite_state_att(stat.x_att)) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_state;
             }
             if (stat.propagate_att && !stat.mass_properties.active) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_mass_properties;
             }
         }
     } break;
@@ -1064,51 +1357,36 @@ void render_body_lists(World& world, RenderLoopConfig& cfg, RenderLoopState& sta
     im::Begin("Bodies");
     // TODO: default this to closed
 
+    const char* filter_names[] = {"all", "active", "inactive"};
+    i32 filter_idx = static_cast<i32>(state.list_filter);
+    if (im::Combo("Filter", &filter_idx, filter_names, 3)) {
+        state.list_filter = static_cast<BodyFilterMode>(filter_idx);
+    }
+
     if (ImGui::CollapsingHeader("Celestials")) {
-        svec<EntityId> ids = world.all_celestial_ids();
+        svec<EntityId> ids = world.celestial_ids(state.list_filter);
         for (const EntityId id : ids) {
             Celestial* cel = world.celestial(id);
             if (cel == nullptr) continue;
-            im::PushID(&cel->name);
-            im::Text(
-                "Name: %s (id: %llu, active: %s)",
-                cel->name.c_str(),
-                cel->id,
-                active_str(world.is_active(id)).c_str()
-            );
-            im::PopID();
+            render_body_list_row(*cel, world, cfg);
         }
     }
 
     if (ImGui::CollapsingHeader("Satellites")) {
-        svec<EntityId> ids = world.all_satellite_ids();
+        svec<EntityId> ids = world.satellite_ids(state.list_filter);
         for (const EntityId id : ids) {
             Satellite* sat = world.satellite(id);
             if (sat == nullptr) continue;
-            im::PushID(&sat->name);
-            im::Text(
-                "Name: %s (id: %llu, active: %s)",
-                sat->name.c_str(),
-                sat->id,
-                active_str(world.is_active(id)).c_str()
-            );
-            im::PopID();
+            render_body_list_row(*sat, world, cfg);
         }
     }
 
     if (ImGui::CollapsingHeader("Stations")) {
-        svec<EntityId> ids = world.all_station_ids();
+        svec<EntityId> ids = world.station_ids(state.list_filter);
         for (const EntityId id : ids) {
             Station* stat = world.station(id);
             if (stat == nullptr) continue;
-            im::PushID(&stat->name);
-            im::Text(
-                "Name: %s (id: %llu, active: %s)",
-                stat->name.c_str(),
-                stat->id,
-                active_str(world.is_active(id)).c_str()
-            );
-            im::PopID();
+            render_body_list_row(*stat, world, cfg);
         }
     }
 
@@ -1133,66 +1411,66 @@ void render_loop_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& state)
 
 static StatusCode validate_mass_properties(const MassProperties& mp, f64 tol) {
     if (mp.mass == 0.0) return StatusCode::ok;
-    if (!finite_pos(mp.mass)) return StatusCode::invalid_input;
-    if (!finite_mat(mp.I)) return StatusCode::invalid_input;
+    if (!finite_pos(mp.mass)) return StatusCode::invalid_mass_properties;
+    if (!finite_mat(mp.I)) return StatusCode::invalid_mass_properties;
 
     for (i32 i = 0; i < 3; ++i) {
-        if (!finite_pos(mp.I(i, i))) return StatusCode::invalid_input;
+        if (!finite_pos(mp.I(i, i))) return StatusCode::invalid_mass_properties;
     }
-    if (!finite_nonzero(mp.I.determinant(), tol)) return StatusCode::invalid_input;
+    if (!finite_nonzero(mp.I.determinant(), tol))
+        return StatusCode::invalid_mass_properties;
 
     return StatusCode::ok;
 }
 
 static StatusCode validate_body(const Body& body, const World& world) {
     switch (body.body_type) {
-    case BodyType::unknown: return StatusCode::invalid_input;
+    case BodyType::unknown: return StatusCode::unsupported_type;
     case BodyType::celestial: {
         const Celestial* cel = dynamic_cast<const Celestial*>(&body);
-        if (cel == nullptr) return StatusCode::invalid_input;
+        if (cel == nullptr) return StatusCode::unsupported_type;
         if (!finite_state_tr(cel->x_tr) || !finite_state_att(cel->x_att)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
         if (!finite_nonneg(cel->mu)) return StatusCode::invalid_input;
         if (!finite_nonneg(cel->semimajor_axis) || !finite_nonneg(cel->semiminor_axis)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_shape;
         }
         if (cel->ref_radius < 0.0 || !std::isfinite(cel->ref_radius)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_shape;
         }
     } break;
     case BodyType::satellite: {
         const Satellite* sat = dynamic_cast<const Satellite*>(&body);
-        if (sat == nullptr) return StatusCode::invalid_input;
+        if (sat == nullptr) return StatusCode::unsupported_type;
         if (!finite_state_tr(sat->x_tr) || !finite_state_att(sat->x_att)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
         if (sat->propagate_att) {
-            // TODO: use validate mass properties here
-            if (!finite_pos(sat->mass_properties.mass)) return StatusCode::invalid_input;
+            if (!finite_pos(sat->mass_properties.mass))
+                return StatusCode::invalid_mass_properties;
             if (!finite_mat(sat->mass_properties.I)
                 || !finite_mat(sat->mass_properties.I_inv)) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_mass_properties;
             }
-            if (!sat->mass_properties.active) return StatusCode::invalid_input;
+            if (!sat->mass_properties.active) return StatusCode::invalid_mass_properties;
         }
     } break;
     case BodyType::station: {
         const Station* stat = dynamic_cast<const Station*>(&body);
-        if (stat == nullptr) return StatusCode::invalid_input;
+        if (stat == nullptr) return StatusCode::unsupported_type;
         if (stat->anchored) {
             if (world.celestial(stat->anchor_id) == nullptr)
-                return StatusCode::body_not_found;
+                return StatusCode::invalid_anchor;
             if (!finite_vec(stat->r_body_BCBF) || !finite_vec(stat->llh_BCBF)) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_anchor;
             }
         } else {
-            // TODO: use validate mass properties here
             if (!finite_state_tr(stat->x_tr) || !finite_state_att(stat->x_att)) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_state;
             }
             if (stat->propagate_att && !stat->mass_properties.active) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_mass_properties;
             }
         }
     } break;
@@ -1212,7 +1490,7 @@ static StatusCode load_body_edit_draft(
     draft.edit_body_type = body->body_type;
 
     switch (draft.edit_body_type) {
-    case BodyType::unknown: return StatusCode::body_not_found;
+    case BodyType::unknown: return StatusCode::unsupported_type;
     case BodyType::celestial: {
         const Celestial* cel = world.celestial(draft.edit_body_id);
         if (cel == nullptr) return StatusCode::body_not_found;
@@ -1232,13 +1510,68 @@ static StatusCode load_body_edit_draft(
 
     return StatusCode::ok;
 }
+
+static bool body_edit_draft_changed(const BodyEditDraft& draft, const World& world) {
+    switch (draft.edit_body_type) {
+    case BodyType::unknown: return false;
+    case BodyType::celestial: {
+        const Celestial* cel = world.celestial(draft.edit_body_id);
+        if (cel == nullptr) return false;
+        return celestial_changed(*cel, draft.edit_celestial);
+    }
+    case BodyType::satellite: {
+        const Satellite* sat = world.satellite(draft.edit_body_id);
+        if (sat == nullptr) return false;
+        return satellite_changed(*sat, draft.edit_satellite);
+    }
+    case BodyType::station: {
+        const Station* stat = world.station(draft.edit_body_id);
+        if (stat == nullptr) return false;
+        return station_changed(*stat, draft.edit_station);
+    }
+    }
+
+    return false;
+}
+
+static void render_body_list_row(const Body& body, World& world, RenderLoopConfig& cfg) {
+    const bool active = world.is_active(body.id);
+    const bool selected = cfg.body_stats_id == body.id;
+
+    im::PushID(static_cast<int>(body.id));
+
+    float row_height = ImGui::GetTextLineHeightWithSpacing();
+    if (ImGui::Selectable(
+            "##row",
+            selected,
+            ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap,
+            ImVec2(0.0f, row_height)
+
+        )) {
+        cfg.body_stats_id = body.id;
+    }
+
+    im::SameLine();
+
+    if (active) {
+        im::TextColored(rl_to_im(DARKGREEN), "active");
+    } else {
+        im::TextColored(rl_to_im(RED), "inactive");
+    }
+    im::SameLine();
+
+    im::Text("%s (id: %llu)", body.name.c_str(), body.id);
+
+    im::PopID();
+}
+
 static StatusCode validate_body_edit_draft(
     const BodyEditDraft& draft,
     const World& world
 ) {
     StatusCode status = StatusCode::ok;
     switch (draft.edit_body_type) {
-    case BodyType::unknown: return StatusCode::invalid_input;
+    case BodyType::unknown: return StatusCode::unsupported_type;
     case BodyType::celestial: {
         status = validate_body(draft.edit_celestial, world);
     } break;
@@ -1256,7 +1589,7 @@ static StatusCode apply_body_edit_draft(BodyEditDraft& draft, World& world) {
     if (status != StatusCode::ok) return status;
 
     switch (draft.edit_body_type) {
-    case BodyType::unknown: return StatusCode::invalid_input;
+    case BodyType::unknown: return StatusCode::unsupported_type;
     case BodyType::celestial: {
         Celestial* cel = world.celestial(draft.edit_body_id);
         if (cel == nullptr) return StatusCode::body_not_found;

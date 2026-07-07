@@ -22,6 +22,7 @@ struct RenderLoopConfig {
 
     bool realtime = false;
     WorldStepperConfig stepper_cfg{};
+    bool step_single = false;
 
     bool display_body_stats = true;
     bool edit_body_stats = false;
@@ -68,6 +69,8 @@ struct RenderLoopState {
     string add_instrument_name = "New Instrument";
     vecXd add_instrument_R_diag = vecXd::Ones(2);
     StatusCode add_instrument_status = StatusCode::ok;
+
+    BodyFilterMode list_filter = BodyFilterMode::all;
 };
 
 void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0);

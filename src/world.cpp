@@ -255,6 +255,81 @@ bool World::is_station(EntityId id) const {
     return true;
 }
 
+svec<EntityId> World::celestial_ids(BodyFilterMode mode) const {
+    svec<EntityId> ids;
+    switch (mode) {
+    case BodyFilterMode::all: {
+        ids.reserve(num_celestials());
+        for (EntityId id : all_ids) {
+            if (is_celestial(id)) ids.push_back(id);
+        }
+    } break;
+    case BodyFilterMode::active: {
+        ids.reserve(num_active_celestials());
+        for (EntityId id : active_ids) {
+            if (is_celestial(id)) ids.push_back(id);
+        }
+    } break;
+    case BodyFilterMode::inactive: {
+        ids.reserve(num_inactive_celestials());
+        for (EntityId id : inactive_ids) {
+            if (is_celestial(id)) ids.push_back(id);
+        }
+    } break;
+    }
+    return ids;
+}
+
+svec<EntityId> World::satellite_ids(BodyFilterMode mode) const {
+    svec<EntityId> ids;
+    switch (mode) {
+    case BodyFilterMode::all: {
+        ids.reserve(num_satellites());
+        for (EntityId id : all_ids) {
+            if (is_satellite(id)) ids.push_back(id);
+        }
+    } break;
+    case BodyFilterMode::active: {
+        ids.reserve(num_active_satellites());
+        for (EntityId id : active_ids) {
+            if (is_satellite(id)) ids.push_back(id);
+        }
+    } break;
+    case BodyFilterMode::inactive: {
+        ids.reserve(num_inactive_satellites());
+        for (EntityId id : inactive_ids) {
+            if (is_satellite(id)) ids.push_back(id);
+        }
+    } break;
+    }
+    return ids;
+}
+
+svec<EntityId> World::station_ids(BodyFilterMode mode) const {
+    svec<EntityId> ids;
+    switch (mode) {
+    case BodyFilterMode::all: {
+        ids.reserve(num_stations());
+        for (EntityId id : all_ids) {
+            if (is_station(id)) ids.push_back(id);
+        }
+    } break;
+    case BodyFilterMode::active: {
+        ids.reserve(num_active_stations());
+        for (EntityId id : active_ids) {
+            if (is_station(id)) ids.push_back(id);
+        }
+    } break;
+    case BodyFilterMode::inactive: {
+        ids.reserve(num_inactive_stations());
+        for (EntityId id : inactive_ids) {
+            if (is_station(id)) ids.push_back(id);
+        }
+    } break;
+    }
+    return ids;
+}
+
 svec<EntityId> World::active_celestial_ids() const {
     svec<EntityId> ids;
     ids.reserve(num_active_celestials());

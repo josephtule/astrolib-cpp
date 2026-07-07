@@ -358,7 +358,7 @@ inline StatusCode apply_measurement_noise_diagonal(
 ) {
     i32 dim = measurement_dim(type);
     if (dim <= 0 || meas.z.size() != dim || !meas.z.allFinite()) {
-        return StatusCode::invalid_input;
+        return dim <= 0 ? StatusCode::unsupported_type : StatusCode::invalid_state;
     }
     if (meas.R.rows() != dim || meas.R.cols() != dim || !meas.R.allFinite()) {
         return StatusCode::invalid_covariance;
@@ -389,7 +389,7 @@ inline StatusCode apply_measurement_noise_cholesky(
 ) {
     i32 dim = measurement_dim(type);
     if (dim <= 0 || meas.z.size() != dim || !meas.z.allFinite()) {
-        return StatusCode::invalid_input;
+        return dim <= 0 ? StatusCode::unsupported_type : StatusCode::invalid_state;
     }
     if (meas.R.rows() != dim || meas.R.cols() != dim || !meas.R.allFinite()) {
         return StatusCode::invalid_covariance;
@@ -407,7 +407,7 @@ inline StatusCode apply_measurement_noise_cholesky(
 
     meas.z += R_llt.matrixL() * dz;
     if (!meas.z.allFinite()) {
-        return StatusCode::invalid_input;
+        return StatusCode::invalid_state;
     }
 
     if (type == ObservationType::radec || type == ObservationType::azel) {

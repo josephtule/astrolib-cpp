@@ -274,7 +274,7 @@ inline StatusCode world_predict_measurement_history(
 
     z_pred = predict_measurement(type, ctx, angle_in, angle_out, tol);
     i32 dim = measurement_dim(type);
-    if (z_pred.size() != dim) return StatusCode::invalid_input;
+    if (z_pred.size() != dim) return StatusCode::size_mismatch;
 
     return StatusCode::ok;
 }

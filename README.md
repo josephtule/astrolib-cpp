@@ -18,6 +18,9 @@ This project is currently diagnostics-driven and under active development. APIs,
 - Primitive history/snapshotting
 - Early Raylib-based 3D rendering diagnostics
 
+### Current Task
+Scenario exporting/importing and body profiles
+
 ## Repository Layout
 
 ```text

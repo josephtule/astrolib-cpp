@@ -2394,30 +2394,30 @@ static StatusCode validate_state_tr_config(
 ) {
     switch (x.input_type) {
     case StateTrInputType::pos_vel: {
-        if (!finite_vec(x.r) || !finite_vec(x.v)) return StatusCode::invalid_input;
+        if (!finite_vec(x.r) || !finite_vec(x.v)) return StatusCode::invalid_state;
     } break;
     case StateTrInputType::classical: {
-        if (string_empty(x.central)) return StatusCode::body_not_found;
+        if (string_empty(x.central)) return StatusCode::missing_reference;
 
         const auto* central = find_celestial_config(cfg, x.central);
-        if (!central) return StatusCode::body_not_found;
+        if (!central) return StatusCode::missing_reference;
         if (central->model.id == "custom"
             && !finite_pos(central->model.gravity_model.mu)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
 
         if (!finite_pos(x.coes.sma)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
         if (!finite_inrange(x.coes.ecc, 0.0, 1.0, true, false)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
         if (!std::isfinite(x.coes.inc) || !std::isfinite(x.coes.raan)
             || !std::isfinite(x.coes.aop) || !std::isfinite(x.coes.ta)) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_state;
         }
     } break;
-    default: return StatusCode::invalid_input;
+    default: return StatusCode::unsupported_type;
     }
 
     return StatusCode::ok;
@@ -2443,7 +2443,7 @@ static StatusCode validate_covariance_config(
     const i32 dim,
     f64 tol = tol12
 ) {
-    if (dim <= 0) return StatusCode::invalid_input;
+    if (dim <= 0) return StatusCode::unsupported_type;
 
     if (!validate_covariance(cov.covariance, dim, tol))
         return StatusCode::invalid_covariance;
@@ -2466,10 +2466,11 @@ static StatusCode validate_mass_properties(
     f64 tol = tol12
 ) {
     if (!required && mp.mass == 0.0) return StatusCode::ok;
-    if (!finite_pos(mp.mass)) return StatusCode::invalid_input;
-    if (!finite_mat(mp.inertia)) return StatusCode::invalid_input;
+    if (!finite_pos(mp.mass)) return StatusCode::invalid_mass_properties;
+    if (!finite_mat(mp.inertia)) return StatusCode::invalid_mass_properties;
 
-    if (!validate_inertia(mp.inertia, tol)) return StatusCode::invalid_input;
+    if (!validate_inertia(mp.inertia, tol))
+        return StatusCode::invalid_mass_properties;
 
     return StatusCode::ok;
 }
@@ -2502,7 +2503,7 @@ static StatusCode validate_gravity_config(
         if (gravity.coefficient_source == GravityCoefficientSource::none)
             return StatusCode::ok;
         if (gravity.coefficient_source != GravityCoefficientSource::provider) {
-            return StatusCode::invalid_input;
+            return StatusCode::validation_failed;
         }
 
         const auto* provider = find_gravity_provider_config(cfg, gravity.coefficients);
@@ -2517,7 +2518,7 @@ static StatusCode validate_gravity_config(
     if (gravity.model == GravityModel::zonal
         && gravity.coefficient_source == GravityCoefficientSource::direct_zonal) {
         if (!validate_direct_zonal_coefficients(gravity))
-            return StatusCode::invalid_input;
+            return StatusCode::validation_failed;
         return StatusCode::ok;
     }
 
@@ -2546,7 +2547,7 @@ static StatusCode validate_celestial_config(
     if (string_empty(cel.id)) return StatusCode::invalid_input;
     StatusCode status = validate_state_tr_config(cfg, cel.x_tr);
     if (status != StatusCode::ok) return status;
-    if (!finite_state_att(cel.x_att)) return StatusCode::invalid_input;
+    if (!finite_state_att(cel.x_att)) return StatusCode::invalid_attitude_state;
     if (string_empty(cel.model.id)) return StatusCode::invalid_input;
 
     status = validate_gravity_config(cfg, cel.model.gravity_model);
@@ -2557,17 +2558,17 @@ static StatusCode validate_celestial_config(
     if (cel.model.semimajor_axis != 0.0 || cel.model.semiminor_axis != 0.0) {
         if (!finite_pos(cel.model.semimajor_axis) || !finite_pos(cel.model.semiminor_axis)
             || cel.model.semimajor_axis < cel.model.semiminor_axis) {
-            return StatusCode::invalid_input;
+            return StatusCode::invalid_shape;
         }
     }
     if (!finite_nonneg(cel.model.mean_radius)) {
-        return StatusCode::invalid_input;
+        return StatusCode::invalid_shape;
     }
     if (!finite_inrange(cel.model.eccentricity, 0.0, 1.0, true, false)) {
-        return StatusCode::invalid_input;
+        return StatusCode::invalid_shape;
     }
     if (!finite_nonneg(cel.model.flattening)) {
-        return StatusCode::invalid_input;
+        return StatusCode::invalid_shape;
     }
 
     return StatusCode::ok;
@@ -2580,7 +2581,7 @@ static StatusCode validate_satellite_config(
     if (string_empty(sat.id)) return StatusCode::invalid_input;
     StatusCode status = validate_state_tr_config(cfg, sat.x_tr);
     if (status != StatusCode::ok) return status;
-    if (!finite_state_att(sat.x_att)) return StatusCode::invalid_input;
+    if (!finite_state_att(sat.x_att)) return StatusCode::invalid_attitude_state;
 
     return validate_mass_properties(sat.mass_properties, sat.propagation.attitude);
 }
@@ -2592,19 +2593,19 @@ static StatusCode validate_station_config(
     if (string_empty(stat.id)) return StatusCode::invalid_input;
 
     if (stat.anchored) {
-        if (string_empty(stat.anchor)) return StatusCode::invalid_input;
+        if (string_empty(stat.anchor)) return StatusCode::invalid_anchor;
 
         const auto* anchor = find_celestial_config(cfg, stat.anchor);
-        if (!anchor) return StatusCode::body_not_found;
+        if (!anchor) return StatusCode::invalid_anchor;
 
         if (stat.coordinate_type == "detic_llh") {
-            if (!finite_vec(stat.llh_BCBF)) return StatusCode::invalid_input;
+            if (!finite_vec(stat.llh_BCBF)) return StatusCode::invalid_anchor;
             if (!finite_inrange(stat.llh_BCBF(0), -90.0, 90.0, true, true)) {
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_anchor;
             }
         } else if (stat.coordinate_type == "body_fixed") {
             if (!finite_norm_nonzero(stat.r_body, tol12))
-                return StatusCode::invalid_input;
+                return StatusCode::invalid_anchor;
         } else {
             return StatusCode::unsupported_method;
         }
@@ -2614,7 +2615,7 @@ static StatusCode validate_station_config(
     } else {
         StatusCode status = validate_state_tr_config(cfg, stat.x_tr);
         if (status != StatusCode::ok) return status;
-        if (!finite_state_att(stat.x_att)) return StatusCode::invalid_input;
+        if (!finite_state_att(stat.x_att)) return StatusCode::invalid_attitude_state;
 
         status
             = validate_mass_properties(stat.mass_properties, stat.propagation.attitude);
@@ -2624,11 +2625,11 @@ static StatusCode validate_station_config(
     uset<string> instrument_ids;
     for (const ScenarioInstrumentConfig& instrument : stat.instruments) {
         if (!insert_unique_id(instrument_ids, instrument.id)) {
-            return StatusCode::invalid_input;
+            return StatusCode::duplicate_id;
         }
 
         i32 dim = measurement_dim(instrument.type);
-        if (dim <= 0) return StatusCode::invalid_input;
+        if (dim <= 0) return StatusCode::unsupported_type;
 
         StatusCode status = validate_covariance_config(instrument.covariance_cfg, dim);
         if (status != StatusCode::ok) return status;
@@ -2648,9 +2649,9 @@ StatusCode validate_scenario_config(const ScenarioConfig& cfg) {
     uset<string> global_ids;
     uset<string> gravity_provider_ids;
     for (const ScenarioGravityProviderConfig& provider : cfg.gravity_providers) {
-        if (!insert_unique_id(global_ids, provider.id)) return StatusCode::invalid_input;
+        if (!insert_unique_id(global_ids, provider.id)) return StatusCode::duplicate_id;
         if (!insert_unique_id(gravity_provider_ids, provider.id)) {
-            return StatusCode::invalid_input;
+            return StatusCode::duplicate_id;
         }
         if (string_empty(provider.format)) return StatusCode::invalid_input;
         if (string_empty(provider.filepath)) return StatusCode::file_not_found;
@@ -2660,22 +2661,22 @@ StatusCode validate_scenario_config(const ScenarioConfig& cfg) {
 
     uset<string> celestial_ids;
     for (const ScenarioCelestialConfig& cel : cfg.celestials) {
-        if (!insert_unique_id(global_ids, cel.id)) return StatusCode::invalid_input;
-        if (!insert_unique_id(celestial_ids, cel.id)) return StatusCode::invalid_input;
+        if (!insert_unique_id(global_ids, cel.id)) return StatusCode::duplicate_id;
+        if (!insert_unique_id(celestial_ids, cel.id)) return StatusCode::duplicate_id;
 
         StatusCode status = validate_celestial_config(cfg, cel);
         if (status != StatusCode::ok) return status;
     }
 
     for (const ScenarioSatelliteConfig& sat : cfg.satellites) {
-        if (!insert_unique_id(global_ids, sat.id)) return StatusCode::invalid_input;
+        if (!insert_unique_id(global_ids, sat.id)) return StatusCode::duplicate_id;
 
         StatusCode status = validate_satellite_config(cfg, sat);
         if (status != StatusCode::ok) return status;
     }
 
     for (const ScenarioStationConfig& stat : cfg.stations) {
-        if (!insert_unique_id(global_ids, stat.id)) return StatusCode::invalid_input;
+        if (!insert_unique_id(global_ids, stat.id)) return StatusCode::duplicate_id;
 
         StatusCode status = validate_station_config(cfg, stat);
         if (status != StatusCode::ok) return status;
@@ -2764,7 +2765,7 @@ static StatusCode apply_state_att_config(
         return StatusCode::attitude_type_not_found;
     }
     }
-    if (x_att.q.norm() <= tol12) return StatusCode::invalid_input;
+    if (x_att.q.norm() <= tol12) return StatusCode::invalid_attitude_state;
     x_att.q.normalize();
     x_att.w = cfg.w;
 
@@ -2815,8 +2816,8 @@ static StatusCode apply_state_tr_config(
         OEClassical coes = cfg.coes;
         coes.sma = convert_length(coes.sma, cfg.units_length, ULength::kilometer);
         x_tr = classical_to_rv(coes, mu, cfg.units_angle);
-        if (!finite_vec(x_tr.r) || !finite_vec(x_tr.v)) return StatusCode::invalid_input;
-        // TODO: make new error for this?
+        if (!finite_vec(x_tr.r) || !finite_vec(x_tr.v))
+            return StatusCode::invalid_state;
     } break;
     }
 
@@ -3011,19 +3012,19 @@ static StatusCode resolve_central_celestial(
 
     auto it = celestial_ids.find(central_name);
     if (it == celestial_ids.end()) {
-        return StatusCode::body_not_found;
+        return StatusCode::missing_reference;
     }
 
     central = world.celestial(it->second);
     if (central == nullptr) {
-        return StatusCode::body_not_found;
+        return StatusCode::missing_reference;
     }
 
     if (!finite_pos(central->mu)) {
-        return StatusCode::invalid_input;
+        return StatusCode::invalid_state;
     }
     if (!finite_vec(central->x_tr.r) || !finite_vec(central->x_tr.v))
-        return StatusCode::invalid_input;
+        return StatusCode::invalid_state;
 
     return StatusCode::ok;
 }
@@ -3096,7 +3097,7 @@ static StatusCode apply_station_config(
     temp.anchored = cfg.anchored;
     if (cfg.anchored) {
         auto it = cel_ids.find(cfg.anchor);
-        if (it == cel_ids.end()) return StatusCode::body_not_found;
+        if (it == cel_ids.end()) return StatusCode::invalid_anchor;
         temp.anchor_id = it->second;
 
         if (cfg.coordinate_type == "detic_llh") {
@@ -3197,7 +3198,7 @@ StatusCode build_world_from_scenario_config(
             auto* stat = world.station(id);
             if (stat == nullptr) return StatusCode::body_not_found;
             auto* cel = world.celestial(stat->anchor_id);
-            if (cel == nullptr) return StatusCode::body_not_found;
+            if (cel == nullptr) return StatusCode::invalid_anchor;
 
             if (stat_cfg.coordinate_type == "detic_llh") {
                 bool set_ok = world.set_stat_anchor_detic(
@@ -3206,11 +3207,11 @@ StatusCode build_world_from_scenario_config(
                     stat->llh_BCBF,
                     UAngle::radian
                 );
-                if (!set_ok) return StatusCode::invalid_input;
+                if (!set_ok) return StatusCode::invalid_anchor;
             } else if (stat_cfg.coordinate_type == "body_fixed") {
                 stat->llh_BCBF = bcbf_to_detic(stat->r_body_BCBF, *cel, UAngle::radian);
             } else {
-                return StatusCode::invalid_input;
+                return StatusCode::unsupported_method;
             }
         }
         result.station_ids.insert({stat_cfg.id, id});

@@ -12,10 +12,10 @@ StatusCode od_batch_validate_input(const ODBatchInput& input) {
         return StatusCode::size_mismatch;
     }
     if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0 || input.max_iters <= 0)
-        return StatusCode::invalid_input;
+        return StatusCode::validation_failed;
 
     if (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6) {
-        return StatusCode::invalid_input;
+        return StatusCode::validation_failed;
     }
 
     return StatusCode::ok;
@@ -39,7 +39,8 @@ ODBatchResidualEval od_batch_eval_residual_norm(
         const StateTr& x_obsv = input.observer_states[i];
         i32 dim = measurement_dim(meas.type);
         if (dim <= 0 || meas.z.size() != dim) {
-            eval.status = StatusCode::invalid_input;
+            eval.status = dim <= 0 ? StatusCode::unsupported_type
+                                    : StatusCode::size_mismatch;
             return eval;
         }
 
@@ -65,14 +66,14 @@ ODBatchResidualEval od_batch_eval_residual_norm(
         MeasurementContext ctx = make_measurement_context(x_pred_i, x_obsv);
         vecXd z_pred = predict_measurement(meas.type, ctx);
         if (z_pred.size() != dim) {
-            eval.status = StatusCode::invalid_input;
+            eval.status = StatusCode::size_mismatch;
             return eval;
         }
 
         // residuals
         vecXd res_i = measurement_residual(meas.type, meas.z, z_pred);
         if (!res_i.allFinite()) {
-            eval.status = StatusCode::invalid_input;
+            eval.status = StatusCode::invalid_state;
             return eval;
         }
 

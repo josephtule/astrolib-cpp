@@ -13,7 +13,7 @@ static StatusCode add_typed_station_instrument(
 ) {
     i32 dim = measurement_dim(type);
     if (R.rows() != dim || R.cols() != dim) {
-        return StatusCode::invalid_input;
+        return StatusCode::size_mismatch;
     }
 
     StationInstrument instrument;
@@ -57,7 +57,7 @@ StatusCode station_measurement_covariance(
         R_match = instrument.R;
 
         if (found_count > 1) {
-            return StatusCode::invalid_input;
+            return StatusCode::duplicate_id;
         }
     }
 
