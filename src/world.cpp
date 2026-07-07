@@ -88,6 +88,7 @@ bool World::is_active(EntityId id) const {
 }
 
 const svec<EntityId>& World::active_entity_ids() const { return this->active_ids; }
+const svec<EntityId>& World::all_entity_ids() const { return this->all_ids; }
 
 Body* World::body(EntityId id) {
     auto it = bodies.find(id);
@@ -135,6 +136,7 @@ const Station* World::station(EntityId id) const {
 
 EntityId World::allocate_id() {
     active_ids.push_back(next_id);
+    all_ids.push_back(next_id);
     return next_id++;
 }
 EntityId World::insert_body(uptr<Body> body) {
@@ -168,13 +170,35 @@ void World::insert_satellites(svec<uptr<Satellite>> sats) {
 
 i32 World::num_celestials() const {
     i32 count = 0;
+    for (EntityId id : all_ids) {
+        if (is_celestial(id)) count++;
+    }
+    return count;
+}
+i32 World::num_satellites() const {
+    i32 count = 0;
+    for (EntityId id : all_ids) {
+        if (is_satellite(id)) count++;
+    }
+    return count;
+}
+i32 World::num_stations() const {
+    i32 count = 0;
+    for (EntityId id : all_ids) {
+        if (is_station(id)) count++;
+    }
+    return count;
+}
+
+i32 World::num_active_celestials() const {
+    i32 count = 0;
     for (EntityId id : active_ids) {
         if (is_celestial(id)) count++;
     }
     return count;
 }
 
-i32 World::num_satellites() const {
+i32 World::num_active_satellites() const {
     i32 count = 0;
     for (EntityId id : active_ids) {
         if (is_satellite(id)) count++;
@@ -182,9 +206,31 @@ i32 World::num_satellites() const {
     return count;
 }
 
-i32 World::num_stations() const {
+i32 World::num_active_stations() const {
     i32 count = 0;
     for (EntityId id : active_ids) {
+        if (is_station(id)) count++;
+    }
+    return count;
+}
+
+i32 World::num_inactive_celestials() const {
+    i32 count = 0;
+    for (EntityId id : inactive_ids) {
+        if (is_celestial(id)) count++;
+    }
+    return count;
+}
+i32 World::num_inactive_satellites() const {
+    i32 count = 0;
+    for (EntityId id : inactive_ids) {
+        if (is_satellite(id)) count++;
+    }
+    return count;
+}
+i32 World::num_inactive_stations() const {
+    i32 count = 0;
+    for (EntityId id : inactive_ids) {
         if (is_station(id)) count++;
     }
     return count;
@@ -209,28 +255,77 @@ bool World::is_station(EntityId id) const {
     return true;
 }
 
-svec<EntityId> World::celestial_ids() const {
+svec<EntityId> World::active_celestial_ids() const {
     svec<EntityId> ids;
-    ids.reserve(num_celestials());
+    ids.reserve(num_active_celestials());
     for (EntityId id : active_ids) {
         if (is_celestial(id)) ids.push_back(id);
     }
     return ids;
 }
 
-svec<EntityId> World::satellite_ids() const {
+svec<EntityId> World::active_satellite_ids() const {
     svec<EntityId> ids;
-    ids.reserve(num_satellites());
+    ids.reserve(num_active_satellites());
     for (EntityId id : active_ids) {
         if (is_satellite(id)) ids.push_back(id);
     }
     return ids;
 }
 
-svec<EntityId> World::station_ids() const {
+svec<EntityId> World::active_station_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_active_stations());
+    for (EntityId id : active_ids) {
+        if (is_station(id)) ids.push_back(id);
+    }
+    return ids;
+}
+
+svec<EntityId> World::all_celestial_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_celestials());
+    for (EntityId id : all_ids) {
+        if (is_celestial(id)) ids.push_back(id);
+    }
+    return ids;
+}
+svec<EntityId> World::all_satellite_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_satellites());
+    for (EntityId id : all_ids) {
+        if (is_satellite(id)) ids.push_back(id);
+    }
+    return ids;
+}
+svec<EntityId> World::all_station_ids() const {
     svec<EntityId> ids;
     ids.reserve(num_stations());
-    for (EntityId id : active_ids) {
+    for (EntityId id : all_ids) {
+        if (is_station(id)) ids.push_back(id);
+    }
+    return ids;
+}
+svec<EntityId> World::inactive_celestial_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_inactive_celestials());
+    for (EntityId id : inactive_ids) {
+        if (is_celestial(id)) ids.push_back(id);
+    }
+    return ids;
+}
+svec<EntityId> World::inactive_satellite_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_inactive_satellites());
+    for (EntityId id : inactive_ids) {
+        if (is_satellite(id)) ids.push_back(id);
+    }
+    return ids;
+}
+svec<EntityId> World::inactive_station_ids() const {
+    svec<EntityId> ids;
+    ids.reserve(num_inactive_stations());
+    for (EntityId id : inactive_ids) {
         if (is_station(id)) ids.push_back(id);
     }
     return ids;
@@ -556,4 +651,28 @@ vec3d World::body_w_inertial(EntityId body_id) const {
     vec4d q_NB = ep_conj(body->x_att.q);
     w_inertial = ep_rotate_fast_passive(q_NB, body->x_att.w);
     return w_inertial;
+}
+
+bool World::make_inactive(EntityId body_id) {
+    for (i32 i = 0; i < active_ids.size(); ++i) {
+        if (body_id == active_ids[i]) {
+            active_ids.erase(active_ids.begin() + i);
+            inactive_ids.push_back(body_id);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool World::make_active(EntityId body_id) {
+    for (i32 i = 0; i < inactive_ids.size(); ++i) {
+        if (body_id == inactive_ids[i]) {
+            inactive_ids.erase(inactive_ids.begin() + i);
+            active_ids.push_back(body_id);
+            return true;
+        }
+    }
+
+    return false;
 }

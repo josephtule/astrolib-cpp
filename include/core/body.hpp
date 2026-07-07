@@ -7,7 +7,7 @@
 #include "util/vecdefs.hpp"
 #include <string>
 
-enum struct BodyType { unknown, celestial, satellite, station };
+enum struct BodyType { unknown = 0, celestial = 1, satellite = 2, station = 3 };
 
 inline std::string body_type_str(BodyType type) {
     switch (type) {
@@ -37,7 +37,7 @@ struct Body {
     bool has_atmosphere = false; // currently does nothing
 };
 
-enum struct GravityModel { pointmass, zonal, spherical_harmonics };
+enum struct GravityModel { pointmass = 0, zonal = 1, spherical_harmonics = 2 };
 inline std::string gravity_model_str(GravityModel model) {
     switch (model) {
     case GravityModel::pointmass: return "pointmass";
@@ -46,8 +46,12 @@ inline std::string gravity_model_str(GravityModel model) {
     }
     return "unknown";
 };
-enum struct RadiationModel { none, isotropic };
-enum struct CelestialAttitudeModel { fixed, simple_spin, provider };
+enum struct RadiationModel { none = 0, isotropic = 1 };
+enum struct CelestialAttitudeModel {
+    fixed = 0,
+    simple_spin = 1,
+    provider = 2
+}; // TODO: add normal attitude propagation
 struct Celestial : public Body {
     // Gravity
     GravityModel gravity_model = GravityModel::pointmass;
@@ -64,9 +68,9 @@ struct Celestial : public Body {
 
     // Shape
     f64 ref_radius = 0.0; // used for gravity computations
-    f64 mean_radius = 0.0;
     f64 semimajor_axis = 0.0;
     f64 semiminor_axis = 0.0;
+    f64 mean_radius = 0.0;
     f64 eccentricity = 0.0;
     f64 flattening = 0.0;
 
@@ -92,6 +96,9 @@ struct MassProperties {
     mat3d I = mat3d1;
     mat3d I_inv = mat3d1;
     bool principal_axes = true;
+
+    vec3d offset_body = vec3d0; // center for I (input)
+
     bool active = false;
 };
 struct Satellite : public Body {

@@ -7,14 +7,14 @@
 #include "util/vecdefs.hpp"
 
 enum struct RenderCameraMode {
-    locked, // camera+target locked
-    target, // track target
-    origin, // track origin
-    free,   // track desired direction
+    locked = 0, // camera+target locked
+    target = 1, // track target
+    origin = 2, // track origin
+    free = 3,   // track desired direction
     // track_axis
     // track_attitude
 };
-inline string camera_mode_str(const RenderCameraMode& mode){
+inline string camera_mode_str(const RenderCameraMode& mode) {
     switch (mode) {
     case RenderCameraMode::locked: return "locked";
     case RenderCameraMode::target: return "target";
@@ -23,7 +23,6 @@ inline string camera_mode_str(const RenderCameraMode& mode){
     }
     return "unknoown";
 }
-
 
 struct RenderCameraConfig {
     RenderCameraMode mode = RenderCameraMode::target;

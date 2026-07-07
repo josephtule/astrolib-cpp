@@ -1,5 +1,9 @@
 #pragma once
 
+#include "core/body.hpp"
+#include "core/entity.hpp"
+#include "core/estimation_common.hpp"
+#include "core/observation_type.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
 
@@ -9,8 +13,8 @@
 #include "util/typedefs.hpp"
 
 struct RenderLoopConfig {
-    i32 screen_width = 1280;
-    i32 screen_height = 720;
+    i32 screen_width = 1600;
+    i32 screen_height = 900;
     string window_title = "astrolib-cpp";
 
     bool set_target_fps = false;
@@ -19,9 +23,22 @@ struct RenderLoopConfig {
     bool realtime = false;
     WorldStepperConfig stepper_cfg{};
 
+    bool display_body_stats = true;
+    bool edit_body_stats = false;
+    EntityId body_stats_id = kInvalidEntityId; // TODO: figure out where to put this
+
     RenderCameraConfig camera{};
     RenderDrawOptions draw{};
     RenderAssetConfig assets{};
+};
+
+struct BodyEditDraft {
+    BodyType edit_body_type = BodyType::unknown;
+    EntityId edit_body_id = kInvalidEntityId;
+    Celestial edit_celestial = Celestial{};
+    Satellite edit_satellite = Satellite{};
+    Station edit_station = Station{};
+    StatusCode edit_body_status = StatusCode::invalid_input;
 };
 
 struct RenderLoopState {
@@ -37,6 +54,83 @@ struct RenderLoopState {
     svec<f32> frame_time_ms;
     svec<f32> fps_history;
     i32 frame_history_max = 240;
+
+    bool add_body = false;
+    BodyType add_body_type = BodyType::unknown;
+    Celestial temp_celestial;
+    Satellite temp_satellite;
+    Station temp_station;
+    StatusCode add_body_status = StatusCode::ok;
+
+    BodyEditDraft draft;
+
+    i32 add_instrument_type = static_cast<i32>(ObservationType::radec);
+    string add_instrument_name = "New Instrument";
+    vecXd add_instrument_R_diag = vecXd::Ones(2);
+    StatusCode add_instrument_status = StatusCode::ok;
 };
 
 void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0);
+inline vec3f camera_pivot_from_mode(const RenderCameraConfig& cfg, const World& world) {
+    switch (cfg.mode) {
+    case RenderCameraMode::locked: return cfg.target;
+    case RenderCameraMode::target: {
+        if (cfg.target_id == kInvalidEntityId) return vec3f0;
+        const Body* body = world.body(cfg.target_id);
+        if (body == nullptr) {
+            return vec3f0;
+        }
+        switch (body->body_type) {
+        case BodyType::unknown: return vec3f0;
+        case BodyType::celestial: return body->x_tr.r.cast<f32>();
+        case BodyType::satellite: return body->x_tr.r.cast<f32>();
+        case BodyType::station: return world.stat_r_inertial(cfg.target_id).cast<f32>();
+        }
+    }
+    case RenderCameraMode::origin: return vec3f0;
+    case RenderCameraMode::free: return cfg.position;
+    }
+
+    return vec3f0;
+}
+inline void sync_camera_tracking(RenderCameraConfig& cfg, const World& world) {
+    switch (cfg.mode) {
+    case RenderCameraMode::locked:
+    case RenderCameraMode::free: break;
+    case RenderCameraMode::target:
+    case RenderCameraMode::origin: cfg.target = camera_pivot_from_mode(cfg, world); break;
+    }
+}
+inline void cycle_id(EntityId& id, const svec<EntityId>& ids, i32 step) {
+    i32 n = static_cast<i32>(ids.size());
+    if (n == 0) {
+        id = kInvalidEntityId;
+        return;
+    }
+
+    i32 idx = -1;
+    for (i32 i = 0; i < n; ++i) {
+        if (id == ids[i]) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0) {
+        id = ids[0];
+        return;
+    }
+
+    i32 next_idx = (idx + step) % n;
+    if (next_idx < 0) next_idx += n;
+    id = ids[next_idx];
+}
+inline void cycle_active_id(EntityId& id, const World& world, i32 step) {
+    svec<EntityId> ids = world.active_entity_ids();
+    cycle_id(id, ids, step);
+}
+inline EntityId first_celestial_id(const World& world) {
+    svec<EntityId> ids = world.active_celestial_ids();
+    if (ids.empty()) return kInvalidEntityId;
+    return ids[0];
+}

@@ -41,7 +41,9 @@ class World {
   private:
     // Entity storage
     EntityId next_id = 1;
+    svec<EntityId> all_ids;
     svec<EntityId> active_ids;
+    svec<EntityId> inactive_ids;
     umap<EntityId, uptr<Body>> bodies;
 
     // Simulation state
@@ -63,7 +65,10 @@ class World {
 
     // Entity lifecycle and roles
     bool is_active(EntityId id) const;
+    bool make_inactive(EntityId id);
+    bool make_active(EntityId id);
     const svec<EntityId>& active_entity_ids() const;
+    const svec<EntityId>& all_entity_ids() const;
 
     // Entity getters
     Body* body(EntityId id);
@@ -85,18 +90,30 @@ class World {
     // void insert_celestials(svec<uptr<Celestial>> cels);
     void insert_satellites(svec<uptr<Satellite>> sats);
     // void insert_stations(svec<uptr<Station>>stats);
+    i32 num_active_celestials() const;
+    i32 num_active_satellites() const;
+    i32 num_active_stations() const;
     i32 num_celestials() const;
     i32 num_satellites() const;
     i32 num_stations() const;
+    i32 num_inactive_celestials() const;
+    i32 num_inactive_satellites() const;
+    i32 num_inactive_stations() const;
     // TODO: add duplicate helpers
 
     // Type and emission queries
     bool is_celestial(EntityId id) const;
     bool is_satellite(EntityId id) const;
     bool is_station(EntityId id) const;
-    svec<EntityId> celestial_ids() const;
-    svec<EntityId> satellite_ids() const;
-    svec<EntityId> station_ids() const;
+    svec<EntityId> active_celestial_ids() const;
+    svec<EntityId> active_satellite_ids() const;
+    svec<EntityId> active_station_ids() const;
+    svec<EntityId> all_celestial_ids() const;
+    svec<EntityId> all_satellite_ids() const;
+    svec<EntityId> all_station_ids() const;
+    svec<EntityId> inactive_celestial_ids() const;
+    svec<EntityId> inactive_satellite_ids() const;
+    svec<EntityId> inactive_station_ids() const;
     bool emits_gravity(EntityId id) const;
     bool emits_radiation(EntityId id) const;
 

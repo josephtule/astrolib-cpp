@@ -282,3 +282,33 @@ inline i32 count_digits(i32 n) {
 
     return count;
 }
+
+template <class T>
+inline T ecc_from_semiaxes(T a, T b) {
+    // a : semimajor axis, b : semiminor axis
+    static_assert(std::is_floating_point_v<T>, "T must be a floating-point type");
+    if (a <= T(0) || b < T(0) || b > a) return T(0);
+    return std::sqrt(T(1.0) - b * b / (a * a));
+}
+
+template <class T>
+inline T flat_from_semiaxes(T a, T b) {
+    static_assert(std::is_floating_point_v<T>, "T must be a floating-point type");
+    if (a <= T(0) || b < T(0) || b > a) return T(0);
+    return (a - b) / a;
+}
+
+template <class T>
+inline T mean_from_semiaxes(T a, T b) {
+    static_assert(std::is_floating_point_v<T>, "T must be a floating-point type");
+    if (a <= T(0) || b < T(0) || b > a) return T(0);
+    return std::pow(a * a * b, T(1) / T(3));
+}
+
+template <class T>
+inline mat3<T> inertia_PAT(const mat3<T>& I_o, T mass, const vec3<T>& offset) {
+    static_assert(std::is_floating_point_v<T>, "T must be a floating-point type");
+    const T d2 = offset.dot(offset);
+    mat3<T> D = d2 * eig::Matrix<T, 3, 3>::Identity() - offset * offset.transpose();
+    return I_o - mass * D;
+}

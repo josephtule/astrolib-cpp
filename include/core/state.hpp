@@ -1,5 +1,6 @@
 #pragma once
 
+#include "util/math.hpp"
 #include "util/vecdefs.hpp"
 
 struct StateTr {
@@ -161,4 +162,13 @@ inline DerivTr operator*(const mat3d& R, const DerivTr& dx) {
     // the new frame
 
     return DerivTr{.dr = R * dx.dr, .dv = R * dx.dv};
+}
+
+
+inline bool finite_state_tr(const StateTr& x) {
+    return finite_vec(x.r) && finite_vec(x.v);
+}
+
+inline bool finite_state_att(const StateAtt& x) {
+    return finite_vec(x.q) && finite_vec(x.w) && finite_norm_nonzero(x.q, tol12);
 }

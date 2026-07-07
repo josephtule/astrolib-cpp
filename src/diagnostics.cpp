@@ -2506,7 +2506,7 @@ void run_render_pipeline_diag() {
                 break;
             }
         }
-        svec<EntityId> stat_ids = world.station_ids();
+        svec<EntityId> stat_ids = world.active_station_ids();
         for (EntityId stat_id : stat_ids) {
             draw_axes(
                 world.stat_x_tr_inertial(stat_id),
@@ -4650,9 +4650,9 @@ void run_build_world_from_scenario() {
 
     std::println();
     std::println("World Counts");
-    std::println("    Celestials: {}", world.num_celestials());
-    std::println("    Satellites: {}", world.num_satellites());
-    std::println("    Stations: {}", world.num_stations());
+    std::println("    Celestials: {}", world.num_active_celestials());
+    std::println("    Satellites: {}", world.num_active_satellites());
+    std::println("    Stations: {}", world.num_active_stations());
     std::println();
 
     std::println("Build Result Maps");
@@ -4663,7 +4663,7 @@ void run_build_world_from_scenario() {
     std::println();
 
     std::println("Built Celestials");
-    for (EntityId id : world.celestial_ids()) {
+    for (EntityId id : world.active_celestial_ids()) {
         const Celestial* cel = world.celestial(id);
         if (cel == nullptr) continue;
         print_celestial(*cel);
@@ -4671,7 +4671,7 @@ void run_build_world_from_scenario() {
     std::println();
 
     std::println("Built Satellites");
-    for (EntityId id : world.satellite_ids()) {
+    for (EntityId id : world.active_satellite_ids()) {
         const Satellite* sat = world.satellite(id);
         if (sat == nullptr) continue;
         print_satellite(*sat);
@@ -4679,7 +4679,7 @@ void run_build_world_from_scenario() {
     std::println();
 
     std::println("Built Stations");
-    for (EntityId id : world.station_ids()) {
+    for (EntityId id : world.active_station_ids()) {
         const Station* stat = world.station(id);
         if (stat == nullptr) continue;
         print_station(*stat);
@@ -4721,9 +4721,9 @@ void run_scenario_render_diag() {
 
     std::println(
         "World Build: celestials = {}, satellites = {}, stations = {}",
-        world.num_celestials(),
-        world.num_satellites(),
-        world.num_stations()
+        world.num_active_celestials(),
+        world.num_active_satellites(),
+        world.num_active_stations()
     );
 
     // integrator

@@ -1,5 +1,7 @@
 #include "core/body.hpp"
 #include "core/entity.hpp"
+#include "core/measurement.hpp"
+#include "core/observation_type.hpp"
 #include "core/transform.hpp"
 
 #include "core/world.hpp"
@@ -9,10 +11,12 @@
 #include "graphics/rdraw.hpp"
 #include "graphics/render_assets.hpp"
 #include "graphics/render_loop.hpp"
+#include "graphics/render_ui.hpp"
 #include "graphics/renderer.hpp"
 #include "graphics/ui.hpp"
 #include "imgui.h"
 #include "implot.h"
+#include "misc/cpp/imgui_stdlib.h"
 #include "raylib.h"
 #include "raymath.h"
 
@@ -21,7 +25,11 @@
 #include "util/vecdefs.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <print>
+#include <string>
+
+// TODO: put units as possibly unit inputs in all ui sections
 
 static void render_grids(const RenderDrawOptions& cfg) {
     if (cfg.draw_inertial_axes) {
@@ -55,405 +63,12 @@ static void render_grids(const RenderDrawOptions& cfg) {
     }
 }
 
-static void draw_selected_body_marker(
-    const World& world,
-    EntityId selected_id,
-    const RenderDrawOptions& draw
-) {
-    if (!draw.draw_selected_body) return;
-
-    const Body* body = world.body(selected_id);
-    if (body == nullptr) return;
-
-    f32 radius = 1.0f;
-    switch (body->body_type) {
-    case BodyType::unknown: return;
-    case BodyType::celestial: {
-        const Celestial* cel = world.celestial(selected_id);
-        if (cel == nullptr) return;
-        radius = std::max(cel->semimajor_axis, cel->semiminor_axis)
-                 * draw.selected_marker_scale;
-        DrawSphereWires(
-            eig_to_rl(cel->x_tr.r),
-            radius,
-            draw.selected_segments,
-            draw.selected_segments,
-            draw.selected_color
-        );
-    } break;
-    case BodyType::satellite: {
-        radius = 400.0f * draw.selected_marker_scale;
-        DrawSphereWires(
-            eig_to_rl(body->x_tr.r),
-            radius,
-            draw.selected_segments,
-            draw.selected_segments,
-            draw.selected_color
-        );
-    } break;
-    case BodyType::station: {
-        radius = 250.0f * draw.selected_marker_scale;
-        DrawSphereWires(
-            eig_to_rl(world.stat_r_inertial(selected_id)),
-            radius,
-            draw.selected_segments,
-            draw.selected_segments,
-            draw.selected_color
-        );
-        // TODO: center of cylinder model is at the bottom, which is negligible for
-        // anchored stations but is wrong for free stations, fix later
-    } break;
-    }
-}
-
-namespace im = ImGui;
-
-static void render_simulation_ui(
-    World& world,
-    RenderLoopConfig& cfg,
-    RenderLoopState& state
-) {
-    im::Begin("Simulation");
-    WorldStepperConfig& stepper = cfg.stepper_cfg;
-
-    im::Checkbox("Realtime", &cfg.realtime);
-
-    im::Text("t = %.3f", world.t_sim());
-    im::Text("dt = %.3f", state.dt);
-    im::Text("effective dt = %.3f", state.dt * stepper.ticks * stepper.dt_scale);
-
-    im::Checkbox("Paused", &stepper.paused);
-
-    im::InputInt("Ticks", &stepper.ticks);
-    stepper.ticks = std::max(1, stepper.ticks);
-
-    im::InputInt("Substeps", &stepper.substeps);
-    stepper.substeps = std::max(1, stepper.substeps);
-
-    im::InputDouble("dt_scale", &stepper.dt_scale);
-    if (!finite_pos(stepper.dt_scale)) {
-        stepper.dt_scale = 1.0;
-    }
-
-    im::End();
-}
-
-static void render_renderer_ui(
-    World& world,
-    RenderLoopConfig& cfg,
-    RenderLoopState& state
-) {
-    // render
-    // grids, axes, selected marker, FPS toggle
-
-    im::Begin("Renderer");
-
-    im::Checkbox("Show FPS", &cfg.draw.draw_fps);
-
-    bool changed_lock = im::Checkbox("Lock FPS", &cfg.set_target_fps);
-    bool changed_target_fps = false;
-    if (cfg.set_target_fps) {
-        changed_target_fps = im::InputInt("Target FPS", &cfg.target_fps);
-        if (!finite_pos(cfg.target_fps)) {
-            cfg.target_fps = 60;
-        }
-    }
-    if (changed_lock || changed_target_fps) {
-        SetTargetFPS(cfg.set_target_fps ? cfg.target_fps : 0);
-    }
-
-    im::Checkbox("Draw Grids", &cfg.draw.draw_grids);
-    if (cfg.draw.draw_grids) {
-        if (im::CollapsingHeader("Grids")) {
-            im::Indent();
-            im::Checkbox("Show XY Grid", &cfg.draw.draw_grid_xy);
-            im::Checkbox("Show ZY Grid", &cfg.draw.draw_grid_zy);
-            im::Checkbox("Show XZ Grid", &cfg.draw.draw_grid_xz);
-            im::Unindent();
-        };
-    }
-
-    if (im::CollapsingHeader("Axes")) {
-        im::Indent();
-        im::Checkbox("Show Inertial Axes", &cfg.draw.draw_inertial_axes);
-        im::Checkbox("Show Body Axes", &cfg.draw.draw_body_axes);
-        im::Checkbox("Color Axes", &cfg.draw.color_axes);
-        im::Unindent();
-    }
-
-    im::Checkbox("Highlight Selected Body", &cfg.draw.draw_selected_body);
-    // im::Checkbox("Draw Labels", &cfg.draw.draw_labels);
-
-    im::End();
-}
-
-static void render_camera_ui(
-    World& world,
-    RenderLoopConfig& cfg,
-    RenderLoopState& state
-) {
-    // camera
-    im::Begin("Camera");
-    RenderCameraConfig& camera = cfg.camera;
-
-    im::Text(
-        "Position: [%.3f, %.3f, %.3f]",
-        camera.position(0),
-        camera.position(1),
-        camera.position(2)
-    );
-    im::Text(
-        "Target Position: [%.3f, %.3f, %.3f]",
-        camera.target(0),
-        camera.target(1),
-        camera.target(2)
-    );
-
-    // TODO: replace with dropdown for camera mode
-    im::Text("Camera Mode %s", camera_mode_str(camera.mode).c_str());
-
-    // TODO: add dropdown or +- or separate submenu
-    im::Text("Target ID: %llu", camera.target_id);
-
-    im::Checkbox("Invert Mousewheel", &camera.invert_mousewheel);
-
-    im::SliderFloat("FOV", &camera.fovy, 1.0f, 179.0f);
-    camera.fovy = std::clamp(camera.fovy, 1.0f, 179.0f); // TODO: might not be needed
-
-    im::InputFloat("Zoom Rate", &camera.zoom_rate);
-    if (!finite_pos(camera.zoom_rate)) {
-        RenderCameraConfig default_cfg{};
-        camera.zoom_rate = default_cfg.zoom_rate;
-    }
-    im::InputFloat("Fly Speed", &camera.fly_speed);
-    if (!finite_pos(camera.fly_speed)) {
-        RenderCameraConfig default_cfg{};
-        camera.fly_speed = default_cfg.fly_speed;
-    }
-    im::InputFloat("Orbit Speed", &camera.orbit_speed);
-    if (!finite_pos(camera.orbit_speed)) {
-        RenderCameraConfig default_cfg{};
-        camera.orbit_speed = default_cfg.orbit_speed;
-    }
-    im::InputFloat("Pan Speed", &camera.pan_speed);
-    if (!finite_pos(camera.pan_speed)) {
-        RenderCameraConfig default_cfg{};
-        camera.pan_speed = default_cfg.pan_speed;
-    }
-    if (im::Button("Reset Camera")) {
-        RenderCameraConfig default_cfg{};
-        camera.invert_mousewheel = default_cfg.invert_mousewheel;
-        camera.fovy = default_cfg.fovy;
-        camera.zoom_rate = default_cfg.zoom_rate;
-        camera.fly_speed = default_cfg.fly_speed;
-        camera.orbit_speed = default_cfg.orbit_speed;
-        camera.pan_speed = default_cfg.pan_speed;
-    }
-
-    im::End();
-}
-
-namespace imp = ImPlot;
-static void render_performance_ui(
-    World& world,
-    RenderLoopConfig& cfg,
-    RenderLoopState& state
-) {
-    im::Begin("Performance");
-
-    im::Checkbox("Plot Performance", &cfg.draw.plot_performance);
-    if (cfg.draw.plot_performance) {
-        if (state.frame_time_ms.size() >= state.frame_history_max) {
-            state.frame_time_ms.erase(state.frame_time_ms.begin());
-        }
-        state.frame_time_ms.push_back(state.frame_time * 1000.0f);
-
-        if (state.fps_history.size() >= state.frame_history_max) {
-            state.fps_history.erase(state.fps_history.begin());
-        }
-        state.fps_history.push_back(state.fps);
-
-        // TODO: maybe add input field for plot limits
-        if (imp::BeginPlot("Frame Time")) {
-            imp::SetupAxes("sample", "ms");
-            imp::SetupAxisLimits(
-                ImAxis_X1,
-                0.0,
-                static_cast<f64>(state.frame_time_ms.size()),
-                ImGuiCond_Always
-            );
-            imp::SetupAxisLimits(ImAxis_Y1, 0.0, 30.0, ImGuiCond_Once);
-            // TODO: decide between bars and line
-            imp::PlotLine(
-                "frame ms",
-                state.frame_time_ms.data(),
-                state.frame_time_ms.size()
-            );
-
-            imp::EndPlot();
-        }
-
-        if (imp::BeginPlot("FPS")) {
-            imp::SetupAxes("sample", "fps");
-            imp::SetupAxisLimits(
-                ImAxis_X1,
-                0.0,
-                static_cast<f64>(state.fps_history.size()),
-                ImGuiCond_Always
-            );
-            imp::SetupAxisLimits(ImAxis_Y1, 0.0, 500.0, ImGuiCond_Once);
-
-            imp::PlotLine("fps", state.fps_history.data(), state.fps_history.size());
-            imp::EndPlot();
-        }
-    } else {
-        if (!state.frame_time_ms.empty()) state.frame_time_ms.clear();
-        if (!state.fps_history.empty()) state.fps_history.clear();
-    }
-
-    im::End();
-}
-
-static void render_ui_frame(World& world, RenderLoopConfig& cfg, RenderLoopState& state) {
-    begin_render_ui_frame();
-
-    render_performance_ui(world, cfg, state);
-    render_simulation_ui(world, cfg, state);
-    render_camera_ui(world, cfg, state);
-    render_renderer_ui(world, cfg, state);
-
-    end_render_ui_frame();
-}
-
-static void render_single_frame(
-    World& world,
-    RenderLoopConfig& cfg,
-    RenderLoopState& state
-) {
-    BeginDrawing();
-    ClearBackground(cfg.draw.background);
-    BeginMode3D(state.camera);
-
-    render_grids(cfg.draw);
-    if (cfg.draw.draw_body_axes) {
-        svec<EntityId> ids = world.active_entity_ids();
-        for (const EntityId id : ids) {
-            const Body* body = world.body(id);
-            if (body != nullptr) {
-                f32 scale = 1.0f;
-                switch (body->body_type) {
-                case BodyType::unknown: break;
-                case BodyType::station: {
-                    scale = 1000.0f;
-                    draw_axes(
-                        world.stat_x_tr_inertial(id),
-                        world.stat_x_att_inertial(id),
-                        scale
-                    );
-                } break;
-                case BodyType::celestial: {
-                    const Celestial* cel = world.celestial(id);
-                    scale = 1.5f
-                            * static_cast<f32>(
-                                std::max(cel->semimajor_axis, cel->semiminor_axis)
-                            );
-                    draw_axes(body->x_tr.r, body->x_att.q, scale);
-                } break;
-                case BodyType::satellite: {
-                    scale = 1000.0f;
-                    draw_axes(body->x_tr.r, body->x_att.q, scale);
-                } break;
-                }
-            }
-        }
-    }
-    RenderSceneSnapshot scene = build_render_scene_snapshot(world, state.assets.builtin);
-    draw_render_scene(scene, state.assets);
-
-    draw_selected_body_marker(world, cfg.camera.target_id, cfg.draw);
-
-    EndMode3D();
-    if (cfg.draw.draw_fps) DrawFPS(0, 0);
-    render_ui_frame(world, cfg, state);
-    EndDrawing();
-}
-
 static void update_camera(RenderCameraConfig& cfg, Camera3D& camera) {
     camera.fovy = cfg.fovy;
     camera.position = eig_to_rl(cfg.position);
     camera.target = eig_to_rl(cfg.target);
     camera.up = eig_to_rl(cfg.up);
     camera.projection = cfg.projection;
-}
-
-static vec3f camera_pivot_from_mode(const RenderCameraConfig& cfg, const World& world) {
-    switch (cfg.mode) {
-    case RenderCameraMode::locked: return cfg.target;
-    case RenderCameraMode::target: {
-        if (cfg.target_id == kInvalidEntityId) return vec3f0;
-        const Body* body = world.body(cfg.target_id);
-        if (body == nullptr) {
-            return vec3f0;
-        }
-        switch (body->body_type) {
-        case BodyType::unknown: return vec3f0;
-        case BodyType::celestial: return body->x_tr.r.cast<f32>();
-        case BodyType::satellite: return body->x_tr.r.cast<f32>();
-        case BodyType::station: return world.stat_r_inertial(cfg.target_id).cast<f32>();
-        }
-    }
-    case RenderCameraMode::origin: return vec3f0;
-    case RenderCameraMode::free: return cfg.position;
-    }
-
-    return vec3f0;
-}
-
-static void sync_camera_tracking(RenderCameraConfig& cfg, const World& world) {
-    switch (cfg.mode) {
-    case RenderCameraMode::locked:
-    case RenderCameraMode::free: break;
-    case RenderCameraMode::target:
-    case RenderCameraMode::origin: cfg.target = camera_pivot_from_mode(cfg, world); break;
-    }
-}
-
-static void cycle_camera_target(
-    RenderCameraConfig& camera,
-    const World& world,
-    i32 step
-) {
-    svec<EntityId> ids = world.active_entity_ids();
-    i32 n = static_cast<i32>(ids.size());
-    if (n == 0) {
-        camera.target_id = kInvalidEntityId;
-        return;
-    }
-
-    i32 idx = -1;
-    for (i32 i = 0; i < n; ++i) {
-        if (camera.target_id == ids[i]) {
-            idx = i;
-            break;
-        }
-    }
-
-    if (idx < 0) {
-        camera.target_id = ids[0];
-        return;
-    }
-
-    i32 next_idx = (idx + step) % n;
-    if (next_idx < 0) next_idx += n;
-    camera.target_id = ids[next_idx];
-}
-
-static void init_camera(RenderCameraConfig& camera, const World& world) {
-    if (camera.mode != RenderCameraMode::target) return;
-    if (camera.target_id == kInvalidEntityId) {
-        cycle_camera_target(camera, world, 1);
-    }
-    sync_camera_tracking(camera, world);
 }
 
 static void orbit_camera_about_pivot(
@@ -545,6 +160,118 @@ static void move_free_camera(
     cfg.target += delta;
 }
 
+static void init_camera(RenderCameraConfig& camera, const World& world) {
+    if (camera.mode != RenderCameraMode::target) return;
+    if (camera.target_id == kInvalidEntityId) {
+        cycle_active_id(camera.target_id, world, 1);
+    }
+    sync_camera_tracking(camera, world);
+}
+
+static void draw_selected_body_marker(
+    const World& world,
+    EntityId selected_id,
+    const RenderDrawOptions& draw
+) {
+    if (!draw.draw_selected_body) return;
+
+    const Body* body = world.body(selected_id);
+    if (body == nullptr) return;
+
+    f32 radius = 1.0f;
+    switch (body->body_type) {
+    case BodyType::unknown: return;
+    case BodyType::celestial: {
+        const Celestial* cel = world.celestial(selected_id);
+        if (cel == nullptr) return;
+        radius = std::max(cel->semimajor_axis, cel->semiminor_axis)
+                 * draw.selected_marker_scale;
+        DrawSphereWires(
+            eig_to_rl(cel->x_tr.r),
+            radius,
+            draw.selected_segments,
+            draw.selected_segments,
+            draw.selected_color
+        );
+    } break;
+    case BodyType::satellite: {
+        radius = 400.0f * draw.selected_marker_scale;
+        DrawSphereWires(
+            eig_to_rl(body->x_tr.r),
+            radius,
+            draw.selected_segments,
+            draw.selected_segments,
+            draw.selected_color
+        );
+    } break;
+    case BodyType::station: {
+        radius = 250.0f * draw.selected_marker_scale;
+        DrawSphereWires(
+            eig_to_rl(world.stat_r_inertial(selected_id)),
+            radius,
+            draw.selected_segments,
+            draw.selected_segments,
+            draw.selected_color
+        );
+        // TODO: center of cylinder model is at the bottom, which is negligible for
+        // anchored stations but is wrong for free stations, fix later
+    } break;
+    }
+}
+
+static void render_single_frame(
+    World& world,
+    RenderLoopConfig& cfg,
+    RenderLoopState& state
+) {
+    BeginDrawing();
+    ClearBackground(cfg.draw.background);
+    BeginMode3D(state.camera);
+
+    render_grids(cfg.draw);
+    if (cfg.draw.draw_body_axes) {
+        svec<EntityId> ids = world.active_entity_ids();
+        for (const EntityId id : ids) {
+            const Body* body = world.body(id);
+            if (body != nullptr) {
+                f32 scale = 1.0f;
+                switch (body->body_type) {
+                case BodyType::unknown: break;
+                case BodyType::station: {
+                    scale = 1000.0f;
+                    draw_axes(
+                        world.stat_x_tr_inertial(id),
+                        world.stat_x_att_inertial(id),
+                        scale
+                    );
+                } break;
+                case BodyType::celestial: {
+                    const Celestial* cel = world.celestial(id);
+                    scale = 1.5f
+                            * static_cast<f32>(
+                                std::max(cel->semimajor_axis, cel->semiminor_axis)
+                            );
+                    draw_axes(body->x_tr.r, body->x_att.q, scale);
+                } break;
+                case BodyType::satellite: {
+                    scale = 1000.0f;
+                    draw_axes(body->x_tr.r, body->x_att.q, scale);
+                } break;
+                }
+            }
+        }
+    }
+    RenderSceneSnapshot scene = build_render_scene_snapshot(world, state.assets.builtin);
+    draw_render_scene(scene, state.assets);
+
+    draw_selected_body_marker(world, cfg.camera.target_id, cfg.draw);
+
+    EndMode3D();
+    if (cfg.draw.draw_fps) DrawFPS(0, 0);
+    render_loop_ui(world, cfg, state);
+    EndDrawing();
+}
+
 static void handle_sim_input(RenderLoopConfig& cfg) {
     if (IsKeyPressed(KEY_SPACE)) {
         toggle(cfg.stepper_cfg.paused);
@@ -608,7 +335,8 @@ static void handle_camera_settings_input(
         camera.mode = RenderCameraMode::locked;
     } else if (IsKeyPressed(KEY_TWO)) {
         camera.mode = RenderCameraMode::target;
-        if (camera.target_id == kInvalidEntityId) cycle_camera_target(camera, world, 1);
+        if (camera.target_id == kInvalidEntityId)
+            cycle_active_id(camera.target_id, world, 1);
     } else if (IsKeyPressed(KEY_THREE)) {
         camera.mode = RenderCameraMode::origin;
     } else if (IsKeyPressed(KEY_FOUR)) {
@@ -646,9 +374,9 @@ static void handle_camera_settings_input(
 
     if (camera.mode == RenderCameraMode::target) {
         if (IsKeyPressed(KEY_RIGHT_BRACKET)) {
-            cycle_camera_target(camera, world, 1);
+            cycle_active_id(camera.target_id, world, 1);
         } else if (IsKeyPressed(KEY_LEFT_BRACKET)) {
-            cycle_camera_target(camera, world, -1);
+            cycle_active_id(camera.target_id, world, -1);
         }
     }
 
@@ -791,6 +519,8 @@ void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
 
     RenderLoopState state;
     init_render_loop_state(world, cfg, state);
+
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     state.dt = dt0;
     if (cfg.set_target_fps) SetTargetFPS(cfg.target_fps);

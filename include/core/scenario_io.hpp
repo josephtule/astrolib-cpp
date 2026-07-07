@@ -187,6 +187,8 @@ struct ScenarioMassPropertiesConfig {
     string type = "diag";
     bool principle_axes = true;
     mat3d inertia = mat3d1;
+    bool offset = false;
+    vec3d offset_body = vec3d0;
 };
 
 struct ScenarioSatelliteConfig {

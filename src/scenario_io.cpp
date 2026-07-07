@@ -1626,21 +1626,13 @@ static StatusCode parse_celestial_model_config(
         );
         if (status != StatusCode::ok) return status;
         if (!found_eccentricity) {
-            out.eccentricity = std::sqrt(
-                1.0
-                - out.semiminor_axis * out.semiminor_axis
-                      / (out.semimajor_axis * out.semimajor_axis)
-            );
+            out.eccentricity
+                = ecc_from_semiaxes<f64>(out.semimajor_axis, out.semiminor_axis);
         }
 
         bool found_flattening = false;
-        status = parse_opt_f64(
-            *model,
-            "flattening",
-            found_flattening,
-            out.flattening,
-            path
-        );
+        status
+            = parse_opt_f64(*model, "flattening", found_flattening, out.flattening, path);
         if (status != StatusCode::ok) return status;
         if (!found_flattening) {
             out.flattening
@@ -1807,6 +1799,10 @@ static StatusCode parse_opt_mass_properties_config(
         f64 length = 1.0 / 1000;
         out.inertia = 1.0 / 6.0 * out.mass * length * length * mat3d1;
     }
+
+    status
+        = parse_opt_vec3d(*mass_properties, "offset", out.offset, out.offset_body, path);
+    if (status != StatusCode::ok) return status;
 
     return StatusCode::ok;
 }
@@ -2027,7 +2023,7 @@ static StatusCode parse_opt_world_stepper_config(
 
     bool found_paused;
     status = parse_opt_bool(*child, "paused", found_paused, out.paused, path);
-    if (status!=StatusCode::ok) return status;
+    if (status != StatusCode::ok) return status;
     if (!found_paused) {
         out.paused = false;
     }
@@ -2982,12 +2978,20 @@ static StatusCode apply_mass_properties_config(
     const ScenarioMassPropertiesConfig& cfg,
     MassProperties& mp
 ) {
+    mp.mass = cfg.mass;
     mp.I = cfg.inertia;
+
+    mp.principal_axes = cfg.principle_axes;
+
+    if (cfg.offset) {
+        mp.I = inertia_PAT(mp.I, mp.mass, mp.offset_body);
+        if (!mp.I.isDiagonal()) mp.principal_axes = false;
+        mp.offset_body = vec3d0;
+    }
+
     mp.I_inv = mp.I.inverse();
     if (!finite_mat(mp.I_inv)) return StatusCode::matrix_invert_failed;
 
-    mp.mass = cfg.mass;
-    mp.principal_axes = cfg.principle_axes;
     mp.active = true;
 
     return StatusCode::ok;
