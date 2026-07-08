@@ -7,12 +7,6 @@
         "name": "earth_station_leo_demo",
         "rng_seed": 12345
     },
-    // "units": {
-    //     "length": "km",
-    //     "time": "s",
-    //     "angle": "rad",
-    //     "mass": "kg"
-    // },
     "frames": {
         "simulation_inertial": "I",
         "attitude_quaternion": "passive_N_to_B",
@@ -22,9 +16,10 @@
         "gravity": [
             {
                 "id": "EGM2008_gfc",
-                "type": "gfc",
-                "path": "assets/earth/EGM2008.gfc.txt",
-                "normalized": true
+                "path": "/assets/earth/EGM2008.gfc.txt",
+                "normalized": true,
+                "format": "gfc",
+                "lineskips": 0
             }
         ]
     },
@@ -33,13 +28,16 @@
             "id": "earth",
             "state_tr": {
                 "r": [0.0, 0.0, 0.0],
-                "v": [0.0, 0.0, 0.0]
+                "v": [0.0, 0.0, 0.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
             },
             "state_att": {
                 "input_type": "axis_angle",
                 "axis": [1.0, 0.0, 0.0],
                 "angle": 0.4014257279586958,
-                "w": [0.0, 0.0, 7.2921159e-5]
+                "w": [0.0, 0.0, 7.2921159e-05],
+                "units_angle": "radian"
             },
             "model": {
                 "id": "wgs84",
@@ -47,13 +45,16 @@
                     "model": "spherical_harmonics",
                     "degree": 6,
                     "order": 6,
-                    "coefficients": "EGM2008_gfc"
-                }
+                    "coefficients": "EGM2008_gfc",
+                    "units_length": "kilometer"
+                },
+                "units_length": "kilometer"
             },
             "propagation": {
                 "translation": true,
                 "attitude": true
-            }
+            },
+            "name": "earth"
         }
     ],
     "satellites": [
@@ -61,7 +62,9 @@
             "id": "sat1",
             "state_tr": {
                 "r": [7000.0, 0.0, 0.0],
-                "v": [0.0, 7.5, 1.0]
+                "v": [0.0, 7.5, 1.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
             },
             "mass_properties": {
                 "mass": 100.0,
@@ -74,7 +77,8 @@
             "propagation": {
                 "translation": true,
                 "attitude": false
-            }
+            },
+            "name": "sat1"
         },
         {
             "id": "sat2",
@@ -107,7 +111,8 @@
             "propagation": {
                 "translation": true,
                 "attitude": false
-            }
+            },
+            "name": "sat2"
         }
     ],
     "stations": [
@@ -126,10 +131,12 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [1.0e-10, 1.0e-10]
+                        "values": [1e-10, 1e-10]
                     }
                 }
-            ]
+            ],
+            "name": "stat1",
+            "anchored": true
         }
     ],
     "world_stepper": {
@@ -137,6 +144,7 @@
         "attitude_integrator": "rk4",
         "substeps": 1,
         "ticks": 10,
-        "time_scale": 0.1
+        "dt_scale": 0.1,
+        "paused": false
     }
 }

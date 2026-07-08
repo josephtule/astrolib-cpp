@@ -3,7 +3,9 @@
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
+#include "core/ingest.hpp"
 #include "core/observation_type.hpp"
+#include "core/scenario_io.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
 
@@ -69,6 +71,14 @@ struct RenderLoopState {
     string add_instrument_name = "New Instrument";
     vecXd add_instrument_R_diag = vecXd::Ones(2);
     StatusCode add_instrument_status = StatusCode::ok;
+
+    string filepath;
+    StatusCode file_status = StatusCode::file_not_found;
+    bool relative_path = true;
+    bool load_attempt = false;
+    string load_filepath;
+    ScenarioConfig scenario;
+    ScenarioBuildResult scenario_result;
 
     BodyFilterMode list_filter = BodyFilterMode::all;
 };

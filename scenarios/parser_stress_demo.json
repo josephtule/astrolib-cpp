@@ -12,21 +12,21 @@
             {
                 "id": "EGM2008_gfc",
                 "format": "gfc",
-                "path": "/assets/earth/EGM2008.gfc.txt",
+                "path": "assets/earth/EGM2008.gfc.txt",
                 "lineskips": 0,
                 "normalized": true
             },
             {
                 "id": "EGM2008_120",
                 "format": "egm",
-                "path": "/assets/egm2008_120.txt",
+                "path": "assets/egm2008_120.txt",
                 "lineskips": 0,
                 "normalized": true
             },
             {
                 "id": "JGL165P1_gfc",
-                "format": "JGL165P1",
-                "path": "/assets/moon/JGL165P1.gfc.txt",
+                "format": "gfc",
+                "path": "assets/moon/JGL165P1.gfc.txt",
                 "lineskips": 0,
                 "normalized": true
             },
@@ -63,8 +63,10 @@
                     "model": "spherical_harmonics",
                     "degree": 6,
                     "order": 6,
-                    "coefficients": "EGM2008_gfc"
-                }
+                    "coefficients": "EGM2008_gfc",
+                    "units_length": "kilometer"
+                },
+                "units_length": "kilometer"
             },
             "propagation": {
                 "translation": true,
@@ -85,7 +87,8 @@
                 "units_length": "kilometer",
                 "gravity": {
                     "model": "pointmass",
-                    "mu": 4902.800066
+                    "mu": 4902.800066,
+                    "units_length": "kilometer"
                 },
                 "semimajor_axis": 1738.1,
                 "semiminor_axis": 1736.0
@@ -107,7 +110,8 @@
             "state_att": {
                 "input_type": "quaternion",
                 "q": [0.0, 0.0, 0.0, 1.0],
-                "w": [0.0, 0.0, 0.000070882]
+                "w": [0.0, 0.0, 7.0882e-05],
+                "units_angle": "radian"
             },
             "attitude_model": "simple_spin",
             "model": {
@@ -119,11 +123,11 @@
                     "radius": 3396.19,
                     "degree": 3,
                     "order": 0,
-                    "J": [0.0, 0.0, 0.00196045, -0.00003145]
-                    // TODO: add units to gravity parser?
+                    "J": [0.0, 0.0, 0.00196045, -3.145e-05]
                 },
                 "semimajor_axis": 3396.2,
-                "semiminor_axis": 3376.2
+                "semiminor_axis": 3376.2,
+                "units_length": "kilometer"
             },
             "propagation": {
                 "translation": true,
@@ -144,7 +148,8 @@
             "state_att": {
                 "input_type": "quaternion",
                 "q": [0.0, 0.0, 0.0, 1.0],
-                "w": [0.001, 0.0, 0.0]
+                "w": [0.001, 0.0, 0.0],
+                "units_angle": "radian"
             },
             "mass_properties": {
                 "mass": 120.0,
@@ -171,7 +176,8 @@
             "state_att": {
                 "input_type": "dcm",
                 "dcm": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-                "w": [0.0, 0.001, 0.0]
+                "w": [0.0, 0.001, 0.0],
+                "units_angle": "radian"
             },
             "mass_properties": {
                 "mass": 130.0,
@@ -226,7 +232,6 @@
             "name": "Euler Classical Radians Meter",
             "state_tr": {
                 "input_type": "classical",
-                "central": "earth",
                 "sma": 7300000.0,
                 "ecc": 0.002,
                 "inc": 0.7853981633974483,
@@ -234,7 +239,8 @@
                 "aop": 0.3490658503988659,
                 "ta": 0.5235987755982988,
                 "units_length": "meter",
-                "units_angle": "radian"
+                "units_angle": "radian",
+                "center": "earth"
             },
             "state_att": {
                 "input_type": "euler_angles",
@@ -268,7 +274,8 @@
             "state_att": {
                 "input_type": "crp",
                 "axis": [0.01, 0.02, 0.03],
-                "w": [0.001, 0.002, 0.003]
+                "w": [0.001, 0.002, 0.003],
+                "units_angle": "radian"
             },
             "mass_properties": {
                 "mass": 160.0,
@@ -301,7 +308,8 @@
             "state_att": {
                 "input_type": "mrp",
                 "axis": [0.02, -0.01, 0.03],
-                "w": [0.0, 0.0, 0.001]
+                "w": [0.0, 0.0, 0.001],
+                "units_angle": "radian"
             },
             "mass_properties": {
                 "mass": 170.0,
@@ -326,7 +334,8 @@
             "llh": [45.0, -120.0, 0.5],
             "units_angle": "degree",
             "units_length": "kilometer",
-            "local_frame": "ENU"
+            "local_frame": "ENU",
+            "anchored": true
         },
         {
             "id": "stat_all_instruments",
@@ -344,7 +353,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [1.0e-10, 1.0e-10]
+                        "values": [1e-10, 1e-10]
                     }
                 },
                 {
@@ -354,8 +363,8 @@
                     "covariance": {
                         "type": "matrix",
                         "values": [
-                            [1.0e-8, 0.0],
-                            [0.0, 1.0e-8]
+                            [1e-08, 0.0],
+                            [0.0, 1e-08]
                         ]
                     }
                 },
@@ -365,7 +374,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "flattened",
-                        "values": [1.0e-4]
+                        "values": [0.0001]
                     }
                 },
                 {
@@ -374,7 +383,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [1.0e-8]
+                        "values": [1e-08]
                     }
                 },
                 {
@@ -383,9 +392,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "flattened",
-                        "values": [
-                            1.0e-4, 0.0, 0.0, 0.0, 1.0e-4, 0.0, 0.0, 0.0, 1.0e-4
-                        ]
+                        "values": [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
                     }
                 },
                 {
@@ -394,9 +401,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [
-                            1.0e-4, 1.0e-4, 1.0e-4, 1.0e-8, 1.0e-8, 1.0e-8
-                        ]
+                        "values": [0.0001, 0.0001, 0.0001, 1e-08, 1e-08, 1e-08]
                     }
                 },
                 {
@@ -406,9 +411,9 @@
                     "covariance": {
                         "type": "matrix",
                         "values": [
-                            [1.0e-4, 0.0, 0.0],
-                            [0.0, 1.0e-4, 0.0],
-                            [0.0, 0.0, 1.0e-4]
+                            [0.0001, 0.0, 0.0],
+                            [0.0, 0.0001, 0.0],
+                            [0.0, 0.0, 0.0001]
                         ]
                     }
                 },
@@ -418,12 +423,11 @@
                     "enabled": false,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [
-                            1.0e-4, 1.0e-4, 1.0e-4, 1.0e-8, 1.0e-8, 1.0e-8
-                        ]
+                        "values": [0.0001, 0.0001, 0.0001, 1e-08, 1e-08, 1e-08]
                     }
                 }
-            ]
+            ],
+            "anchored": true
         },
         {
             "id": "stat_body_fixed_meter",
@@ -440,10 +444,12 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [1.0e-4]
+                        "values": [0.0001]
                     }
                 }
-            ]
+            ],
+            "anchored": true,
+            "units_angle": "degree"
         },
         {
             "id": "stat_free_tracking",
@@ -481,16 +487,15 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [
-                            1.0e-3, 1.0e-3, 1.0e-3, 1.0e-6, 1.0e-6, 1.0e-6
-                        ]
+                        "values": [0.001, 0.001, 0.001, 1e-06, 1e-06, 1e-06]
                     }
                 }
-            ]
+            ],
+            "units_angle": "degree",
+            "units_length": "kilometer"
         }
     ],
     "world_stepper": {
-        "delta_time": 1.0,
         "translation_integrator": "rk2",
         "attitude_integrator": "rk4",
         "substeps": 1,
@@ -501,11 +506,9 @@
     "time": {
         "t0": 0.0,
         "date": {
-            "input_type": "calendar", // "jd", "mjd"
+            "input_type": "calendar",
             "cal": {
-                "input_type": "separate", // "vector", "string"
-                // "string": "2000-01-01T00:00:00.0000",
-                // "vector": [2000,1,1,0,0,0.0],
+                "input_type": "separate",
                 "year": 2000,
                 "month": 1,
                 "day": 1,
@@ -513,8 +516,6 @@
                 "minute": 0,
                 "second": 1.0
             },
-            // "jd": { "day": 2451545.0, "frac": 0.0 },
-            // "mjd": { "day": 51544.0, "frac": 0.0 }
             "time_scale": "utc"
         }
     },

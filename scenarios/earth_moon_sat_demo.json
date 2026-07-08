@@ -7,30 +7,21 @@
         "name": "earth_moon_sat_demo",
         "rng_seed": 12345
     },
-    // "units": {
-    //     "length": "km",
-    //     "time": "s",
-    //     "angle": "rad",
-    //     "mass": "kg"
-    // },
-    // "frames": {
-    //     "simulation_inertial": "I",
-    //     "attitude_quaternion": "passive_N_to_B",
-    //     "station_local": "ENU"
-    // },
     "providers": {
         "gravity": [
             {
                 "id": "EGM2008_gfc",
-                "type": "gfc",
-                "path": "assets/earth/EGM2008.gfc.txt",
-                "normalized": true
+                "path": "/assets/earth/EGM2008.gfc.txt",
+                "normalized": true,
+                "format": "gfc",
+                "lineskips": 0
             },
             {
                 "id": "JGL165P1_gfc",
-                "type": "gfc",
                 "path": "assets/moon/JGL165P1.gfc.txt",
-                "normalized": true
+                "normalized": true,
+                "format": "gfc",
+                "lineskips": 0
             }
         ]
     },
@@ -39,13 +30,16 @@
             "id": "earth",
             "state_tr": {
                 "r": [0.0, 0.0, 0.0],
-                "v": [0.0, 0.0, 0.0]
+                "v": [0.0, 0.0, 0.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
             },
             "state_att": {
-                "type": "axis_angle",
                 "axis": [1.0, 0.0, 0.0],
                 "angle": 0.4014257279586958,
-                "w": [0.0, 0.0, 7.2921159e-5]
+                "w": [0.0, 0.0, 7.2921159e-05],
+                "input_type": "axis_angle",
+                "units_angle": "radian"
             },
             "model": {
                 "id": "wgs84",
@@ -53,24 +47,31 @@
                     "model": "spherical_harmonics",
                     "degree": 4,
                     "order": 4,
-                    "coefficients": "EGM2008_gfc"
-                }
+                    "coefficients": "EGM2008_gfc",
+                    "units_length": "kilometer"
+                },
+                "units_length": "kilometer"
             },
             "propagation": {
                 "translation": true,
                 "attitude": true
-            }
+            },
+            "name": "earth",
+            "attitude_model": "simple_spin"
         },
         {
             "id": "moon",
             "state_tr": {
                 "r": [384400.0, 0.0, 0.0],
-                "v": [0.0, 1.022, 0.0]
+                "v": [0.0, 1.022, 0.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
             },
             "state_att": {
-                "type": "quaternion",
                 "q": [0.0, 0.0, 0.0, 1.0],
-                "w": [0.0, 0.0, 2.6617e-6]
+                "w": [0.0, 0.0, 2.6617e-06],
+                "input_type": "quaternion",
+                "units_angle": "radian"
             },
             "model": {
                 "id": "custom",
@@ -78,13 +79,21 @@
                     "model": "spherical_harmonics",
                     "degree": 4,
                     "order": 4,
-                    "coefficients": "JGL165P1_gfc"
-                }
+                    "coefficients": "JGL165P1_gfc",
+                    "units_length": "kilometer",
+                    "mu": 4902.800066,
+                    "radius": 1738.1
+                },
+                "units_length": "kilometer",
+                "semimajor_axis": 1738.1,
+                "semiminor_axis": 1736.0
             },
             "propagation": {
                 "translation": true,
                 "attitude": true
-            }
+            },
+            "name": "moon",
+            "attitude_model": "simple_spin"
         }
     ],
     "satellites": [
@@ -92,7 +101,9 @@
             "id": "sat1",
             "state_tr": {
                 "r": [7000.0, 0.0, 0.0],
-                "v": [0.0, 7.5, 1.0]
+                "v": [0.0, 7.5, 1.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
             },
             "mass_properties": {
                 "mass": 100.0,
@@ -105,7 +116,8 @@
             "propagation": {
                 "translation": true,
                 "attitude": true
-            }
+            },
+            "name": "sat1"
         }
     ],
     "world_stepper": {
@@ -113,7 +125,8 @@
         "attitude_integrator": "rk4",
         "substeps": 1,
         "ticks": 10,
-        "time_scale": 0.1
+        "dt_scale": 0.1,
+        "paused": false
     },
     "raylib_settings": {
         "target_fps": 60,

@@ -23,6 +23,7 @@ enum struct TLEStatus {
     invalid_mu,
     count_too_large,
 }; // TODO: use these instead of boolean returns
+// TODO: remove and use StatusCode
 
 struct TLEReadOptions {
     i32 millennium = 2000;

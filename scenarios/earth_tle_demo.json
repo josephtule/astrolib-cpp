@@ -1,0 +1,79 @@
+{
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "metadata": {
+        "name": "earth_tle_demo",
+        "rng_seed": 12345
+    },
+    "celestials": [
+        {
+            "id": "earth",
+            "name": "Earth",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [0.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 0.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "axis_angle",
+                "axis": [1.0, 0.0, 0.0],
+                "angle": 0.4014257279586958,
+                "w": [0.0, 0.0, 7.2921159e-5],
+                "units_angle": "radian"
+            },
+            "attitude_model": "simple_spin",
+            "model": {
+                "id": "wgs84",
+                "units_length": "kilometer",
+                "gravity": {
+                    "model": "pointmass",
+                    "units_length": "kilometer"
+                }
+            },
+            "propagation": {
+                "translation": false,
+                "attitude": true
+            }
+        }
+    ],
+    "satellites": [
+        {
+            // TODO: add tle filename, probably not as a direct satellite, add tle section instead or something else
+            "id": "iss_like_placeholder",
+            "name": "ISS-like Placeholder",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 6785.0,
+                "ecc": 0.0006,
+                "inc": 51.6,
+                "raan": 0.0,
+                "aop": 0.0,
+                "ta": 0.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        }
+    ],
+    "world_stepper": {
+        "translation_integrator": "rk4",
+        "attitude_integrator": "rk4",
+        "substeps": 1,
+        "ticks": 1,
+        "dt_scale": 1.0,
+        "paused": true
+    }
+}

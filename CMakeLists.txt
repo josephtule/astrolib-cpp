@@ -59,6 +59,22 @@ target_include_directories(render_ui_deps PRIVATE
 )
 target_link_libraries(${TARGET_NAME} PRIVATE render_ui_deps)
 
+# Add ImGuiFD
+add_library(imguifd STATIC
+    external/imguifd/ImGuiFD.cpp
+    external/imguifd/ImGuiFDNative.cpp
+)
+target_include_directories(imguifd PUBLIC
+    external/imguifd
+)
+target_include_directories(imguifd PRIVATE
+    external/imgui
+)
+target_compile_definitions(imguifd PUBLIC
+    IMGUIFD_ENABLE_STL=1
+)
+target_link_libraries(${TARGET_NAME} PRIVATE imguifd)
+
 
 include(FetchContent)
 FetchContent_Declare(

@@ -3,17 +3,83 @@
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
+#include "core/scenario_io.hpp"
 #include "core/time.hpp"
 #include "graphics/render_loop.hpp"
 #include "graphics/ui.hpp"
+
+#include "ImGuiFD.h"
 #include "imgui.h"
 #include "implot.h"
 #include "misc/cpp/imgui_stdlib.h"
+
 #include "raylib.h"
 #include "util/lightweight_tools.hpp"
 
+#include <algorithm>
+#include <filesystem>
+
 namespace im = ImGui;
 namespace imp = ImPlot;
+namespace imfd = ImGuiFD;
+
+static Color status_color(const StatusCode code) {
+    switch (code) {
+    // Success
+    case StatusCode::ok: return DARKGREEN;
+
+    // Informational non-failure states
+    case StatusCode::prediction_only: return SKYBLUE;
+
+    // Warning states that may still produce a usable result
+    case StatusCode::max_iters_reached:
+    case StatusCode::correction_rejected: return GOLD;
+
+    // Input/configuration errors
+    case StatusCode::invalid_input:
+    case StatusCode::validation_failed:
+    case StatusCode::unsupported_type:
+    case StatusCode::missing_reference:
+    case StatusCode::duplicate_id:
+    case StatusCode::inactive_entity:
+    case StatusCode::invalid_state:
+    case StatusCode::invalid_attitude_state:
+    case StatusCode::invalid_mass_properties:
+    case StatusCode::invalid_shape:
+    case StatusCode::invalid_anchor:
+    case StatusCode::size_mismatch:
+    case StatusCode::time_mismatch:
+    case StatusCode::invalid_covariance:
+    case StatusCode::unsupported_method:
+    case StatusCode::parse_failed: return ORANGE;
+
+    // Missing data/reference lookups
+    case StatusCode::observer_not_found:
+    case StatusCode::target_not_found:
+    case StatusCode::instrument_not_found:
+    case StatusCode::body_not_found:
+    case StatusCode::gravity_model_not_found:
+    case StatusCode::attitude_type_not_found:
+    case StatusCode::celestial_model_not_found:
+    case StatusCode::sample_not_found:
+    case StatusCode::empty_measurements:
+    case StatusCode::empty_history:
+    case StatusCode::empty_events: return YELLOW;
+
+    // Runtime/solver/IO failures
+    case StatusCode::propagation_failed:
+    case StatusCode::singular_normal_matrix:
+    case StatusCode::singular_innovation:
+    case StatusCode::interp_failed:
+    case StatusCode::file_not_found:
+    case StatusCode::file_write_failed:
+    case StatusCode::file_close_failed:
+    case StatusCode::file_open_failed:
+    case StatusCode::matrix_invert_failed: return RED;
+    }
+
+    return RAYWHITE;
+}
 
 static void init_add_body_draft_defaults(
     RenderLoopState& state,
@@ -38,6 +104,8 @@ static StatusCode validate_body_edit_draft(
 );
 static StatusCode apply_body_edit_draft(BodyEditDraft& draft, World& world);
 static void cancel_body_edit_draft(BodyEditDraft& draft);
+static void open_scenario_file_dialog(RenderLoopState& state);
+static void render_scenario_file_dialog(RenderLoopState& state);
 
 static void render_simulation_ui(
     World& world,
@@ -129,6 +197,70 @@ static ImVec4 rl_to_im(const Color& c) {
     return ImVec4{r, g, b, a};
 }
 
+static void status_text(const char* label, const StatusCode code) {
+    im::TextColored(
+        rl_to_im(status_color(code)),
+        "%s: %s",
+        label,
+        status_string(code).c_str()
+    );
+}
+
+static string normalize_file_dialog_path(const char* path_in) {
+    string path = path_in;
+    std::replace(path.begin(), path.end(), '\\', '/');
+    return path;
+}
+
+static string scenario_dialog_start_path(const RenderLoopState& state) {
+    std::filesystem::path path;
+
+    if (state.filepath.empty()) {
+        path = std::filesystem::path(PROJECT_ROOT) / "scenarios";
+    } else if (state.relative_path) {
+        path = std::filesystem::path(pwd) / state.filepath;
+    } else {
+        path = state.filepath;
+    }
+
+    if (std::filesystem::is_regular_file(path)) {
+        path = path.parent_path();
+    }
+
+    if (path.empty()) {
+        path = std::filesystem::current_path();
+    }
+
+    return normalize_file_dialog_path(path.string().c_str());
+}
+
+static void open_scenario_file_dialog(RenderLoopState& state) {
+    const string path = scenario_dialog_start_path(state);
+    imfd::settings.displayMode = imfd::GlobalSettings::DisplayMode_List;
+    imfd::OpenDialog(
+        "Open Scenario",
+        ImGuiFDMode_LoadFile,
+        path.c_str(),
+        "*.json",
+        0,
+        1
+    );
+}
+
+static void render_scenario_file_dialog(RenderLoopState& state) {
+    if (imfd::BeginDialog("Open Scenario")) {
+        if (imfd::ActionDone()) {
+            if (imfd::SelectionMade()) {
+                state.filepath
+                    = normalize_file_dialog_path(imfd::GetSelectionPathString(0));
+                state.relative_path = false;
+                state.load_attempt = false;
+            }
+            imfd::CloseCurrentDialog();
+        }
+        imfd::EndDialog();
+    }
+}
 // static void push_selected_field_style() {
 //     im::PushStyleColor(ImGuiCol_Border, rl_to_im(YELLOW));
 //     im::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
@@ -349,14 +481,22 @@ static void render_simulation_ui(
     // only allow while paused
     // if using history make vector and dropdown based on time or name?, resetting clears
     // history
-
+    
     if (im::CollapsingHeader("Scenario")) {
         im::Indent();
         im::Text("Filepath:");
         im::SameLine();
-        string path;
-        im::InputText("##filepath", &path);
-        StatusCode status = StatusCode::file_not_found;
+        im::InputText("##filepath", &state.filepath);
+        im::SameLine();
+        if (im::Button("/")) {
+            open_scenario_file_dialog(state);
+        }
+        render_scenario_file_dialog(state);
+        const string filename = std::filesystem::path(state.filepath).filename().string();
+        im::Text("File: %s", filename.c_str());
+
+        im::Checkbox("Relative filepath", &state.relative_path);
+
         if (im::Button("Save")) {
             // TODO:
             // TODO: if file already exists, pop up warning
@@ -365,9 +505,32 @@ static void render_simulation_ui(
         if (im::Button("Load")) {
             // TEMP: use raylib file explorer or imgui-filebrowser
             // TODO: if file doesn't exist, pop up warning
+            state.load_attempt = true;
+            string path = state.filepath;
+            if (state.relative_path) path = pwd + path;
+            state.load_filepath = path;
+            state.file_status = load_scenario_json(path, state.scenario);
+            if (state.file_status == StatusCode::ok) {
+                world = World{};
+                build_world_from_scenario_config(
+                    state.scenario,
+                    world,
+                    state.scenario_result,
+                    cfg.stepper_cfg
+                );
+                state.scenario = ScenarioConfig{};
+                state.scenario_result = ScenarioBuildResult{};
+            }
         }
-        if (status != StatusCode::ok) {
-            im::Text("Scenario Loader Status: %s", status_string(status).c_str());
+        if (state.load_attempt) {
+            const string load_filename
+                = std::filesystem::path(state.load_filepath).filename().string();
+            if (load_filename.empty()) {
+                status_text("Scenario Loader Status", state.file_status);
+            } else {
+                const string label = "Scenario Loader Status (" + load_filename + ")";
+                status_text(label.c_str(), state.file_status);
+            }
         }
         im::Unindent();
     }
@@ -649,10 +812,7 @@ static void render_body_stats_ui(
         }
         if (state.draft.edit_body_id != kInvalidEntityId
             && state.draft.edit_body_status != StatusCode::ok) {
-            im::Text(
-                "Edit Body Status: %s",
-                status_string(state.draft.edit_body_status).c_str()
-            );
+            status_text("Edit Body Status", state.draft.edit_body_status);
         }
 
         if (editable) {
@@ -873,10 +1033,7 @@ static void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState
             }
 
             if (state.add_body_status != StatusCode::ok) {
-                im::Text(
-                    "Add Body Status: %s",
-                    status_string(state.add_body_status).c_str()
-                );
+                status_text("Add Body Status", state.add_body_status);
             }
         }
     } else {
@@ -1164,10 +1321,7 @@ static void render_station_instruments_ui(
             // if (im::Button("Reset")) {
             // }
             if (state.add_instrument_status != StatusCode::ok) {
-                im::Text(
-                    "Add Instrument Status: %s",
-                    status_string(state.add_instrument_status).c_str()
-                );
+                status_text("Add Instrument Status", state.add_instrument_status);
             }
         }
         im::Unindent();
