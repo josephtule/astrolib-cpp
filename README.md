@@ -19,7 +19,7 @@ This project is currently diagnostics-driven and under active development. APIs,
 - Early Raylib-based 3D rendering diagnostics
 
 ### Current Task
-Scenario exporting/importing and body profiles
+Persistent scenario config and updating
 
 ## Repository Layout
 

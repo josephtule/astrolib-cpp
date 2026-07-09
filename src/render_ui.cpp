@@ -6,6 +6,7 @@
 #include "core/scenario_io.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
+#include "core/world.hpp"
 #include "graphics/camera.hpp"
 #include "graphics/render_loop.hpp"
 #include "graphics/ui.hpp"
@@ -167,7 +168,12 @@ static void render_station_instruments_ui(
 );
 static bool body_edit_draft_changed(const BodyEditDraft& draft, const World& world);
 static void render_body_list_row(const Body& body, World& world, RenderLoopConfig& cfg);
-static void request_scenario_save(RenderLoopState& state);
+static void request_scenario_save(
+    RenderLoopState& state,
+    const RenderLoopConfig& cfg,
+    const World& world,
+    bool overwrite = false
+);
 
 static Body* draft_body_ptr(BodyEditDraft& draft) {
     switch (draft.edit_body_type) {
@@ -320,7 +326,11 @@ static void render_open_scenario_file_dialog(RenderLoopState& state) {
     }
 }
 
-static void render_save_scenario_file_dialog(RenderLoopState& state) {
+static void render_save_scenario_file_dialog(
+    RenderLoopState& state,
+    const RenderLoopConfig& cfg,
+    const World& world
+) {
     set_scenario_dialog_style();
     if (imfd::BeginDialog("Save Scenario")) {
         if (imfd::ActionDone()) {
@@ -337,7 +347,7 @@ static void render_save_scenario_file_dialog(RenderLoopState& state) {
                     state.file_status = StatusCode::file_already_exists;
                     im::OpenPopup("File Warning");
                 } else {
-                    request_scenario_save(state);
+                    request_scenario_save(state, cfg, world);
                 }
             }
             imfd::CloseCurrentDialog();
@@ -362,7 +372,12 @@ static void render_open_folder_dialog(RenderLoopState& state) {
     }
 }
 
-static void request_scenario_save(RenderLoopState& state) {
+static void request_scenario_save(
+    RenderLoopState& state,
+    const RenderLoopConfig& cfg,
+    const World& world,
+    bool overwrite
+) {
     state.file_attempt = true;
     state.save_filepath = scenario_file_path(state);
 
@@ -376,22 +391,30 @@ static void request_scenario_save(RenderLoopState& state) {
         return;
     }
 
-    if (is_existing_regular_file(state.save_filepath)) {
+    if (!overwrite && is_existing_regular_file(state.save_filepath)) {
         state.file_status = StatusCode::file_already_exists;
         im::OpenPopup("File Warning");
         return;
     }
 
-    state.file_status = StatusCode::unsupported_method;
+    state.file_status = build_scenario_config_from_world(state.scenario, world, cfg.stepper_cfg);
+    if (state.file_status != StatusCode::ok) return;
+
+    state.file_status = save_scenario_json(state.save_filepath, state.scenario);
+    if (state.file_status != StatusCode::ok) return;
 }
 
-static void render_scenario_overwrite_popup(RenderLoopState& state) {
+static void render_scenario_overwrite_popup(
+    RenderLoopState& state,
+    const RenderLoopConfig& cfg,
+    const World& world
+) {
     if (im::BeginPopupModal("File Warning")) {
         im::Text("File already exists, overwrite?");
         if (im::Button("Yes")) {
             state.file_status = StatusCode::file_overwritten;
             im::CloseCurrentPopup();
-            request_scenario_save(state);
+            request_scenario_save(state, cfg, world, true);
         }
 
         im::SameLine();
@@ -681,7 +704,7 @@ static void render_simulation_ui(
             open_scenario_file_dialog(state);
         }
         render_open_scenario_file_dialog(state);
-        render_save_scenario_file_dialog(state);
+        render_save_scenario_file_dialog(state, cfg, world);
         render_open_folder_dialog(state);
 
         const std::filesystem::path path(state.filepath);
@@ -691,15 +714,9 @@ static void render_simulation_ui(
         im::Checkbox("Relative filepath", &state.relative_path);
 
         if (im::Button("Save As")) {
-            build_scenario_config_from_world(
-                state.scenario,
-                world,
-                state.scenario_result,
-                cfg.stepper_cfg
-            );
             open_scenario_save_dialog(state);
         }
-        render_scenario_overwrite_popup(state);
+        render_scenario_overwrite_popup(state, cfg, world);
 
         im::SameLine();
         if (im::Button("Load")) {
@@ -717,14 +734,12 @@ static void render_simulation_ui(
 
             if (state.file_status == StatusCode::ok) {
                 world = World{};
-                build_world_from_scenario_config(
+                state.file_status = build_world_from_scenario_config(
                     state.scenario,
                     world,
                     state.scenario_result,
                     cfg.stepper_cfg
                 );
-                state.scenario = ScenarioConfig{};
-                state.scenario_result = ScenarioBuildResult{};
             }
         }
         im::SameLine();

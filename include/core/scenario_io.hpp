@@ -24,7 +24,6 @@ struct ScenarioMetadataConfig {
     string name = "earth_moon_sat_demo";
     u32 rng_seed = 12345;
 };
-
 struct ScenarioUnitConfig {
     string length = "km";
     string time = "s";
@@ -32,15 +31,6 @@ struct ScenarioUnitConfig {
     string mass = "kg";
 };
 
-inline string date_type_str(const DateType& type) {
-    switch (type) {
-    case DateType::cal: return "calendar";
-    case DateType::jd: return "julian date";
-    case DateType::mjd: return "modified julian date";
-    }
-
-    return "unknown";
-}
 struct ScenarioTimeConfig {
     f64 t0 = 0.0;
 
@@ -109,8 +99,8 @@ struct ScenarioPropagationConfig {
 enum struct StateTrInputType { pos_vel, classical };
 inline string state_tr_type_str(const StateTrInputType& type) {
     switch (type) {
-    case StateTrInputType::pos_vel: return "position + velocity";
-    case StateTrInputType::classical: return "classical orbital elements";
+    case StateTrInputType::pos_vel: return "pos_vel";
+    case StateTrInputType::classical: return "classical";
     }
 
     return "Invalid StateTr input type";
@@ -119,7 +109,6 @@ struct ScenarioStateTrConfig {
     vec3d r = vec3d0;
     vec3d v = vec3d0;
 
-    // TODO: add state input type (orbital elements)
     StateTrInputType input_type = StateTrInputType::pos_vel;
     OEClassical coes;
     string central; // central body for orbital elements
@@ -132,10 +121,10 @@ inline string state_att_type_str(const AttitudeType& type) {
     switch (type) {
     case AttitudeType::quaternion: return "quaternion";
     case AttitudeType::dcm: return "dcm";
-    case AttitudeType::axis_angle: return "axis-angle";
-    case AttitudeType::euler_angles: return "euler angles";
-    case AttitudeType::crp: return "classical rodriguez parameters";
-    case AttitudeType::mrp: return "modified rodriguez parameters";
+    case AttitudeType::axis_angle: return "axis_angle";
+    case AttitudeType::euler_angles: return "euler_angles";
+    case AttitudeType::crp: return "crp";
+    case AttitudeType::mrp: return "mrp";
     }
 
     return "unknown";
@@ -160,6 +149,7 @@ struct ScenarioStateAttConfig {
 struct ScenarioCelestialModelConfig {
     string id;
 
+    // TODO: possibly make this a vector so user can switch between gravity models
     ScenarioGravityConfig gravity_model;
     ULength units_length = ULength::kilometer;
 
@@ -172,6 +162,7 @@ struct ScenarioCelestialModelConfig {
 struct ScenarioCelestialConfig {
     string id;
     string name;
+    bool active = true;
     ScenarioCelestialModelConfig model;
     ScenarioStateTrConfig x_tr;
     ScenarioStateAttConfig x_att;
@@ -194,6 +185,7 @@ struct ScenarioMassPropertiesConfig {
 struct ScenarioSatelliteConfig {
     string id;
     string name;
+    bool active = true;
     ScenarioStateTrConfig x_tr;
     ScenarioStateAttConfig x_att;
     ScenarioPropagationConfig propagation;
@@ -215,6 +207,7 @@ struct ScenarioInstrumentConfig {
 struct ScenarioStationConfig {
     string id;
     string name;
+    bool active = true;
 
     ScenarioPropagationConfig propagation;
     bool anchored = true;
@@ -223,7 +216,7 @@ struct ScenarioStationConfig {
     // optional dependent in anchoring
     // anchored
     string coordinate_type = "detic_llh";
-    vec3d llh_BCBF = vec3d0;
+    vec3d llh = vec3d0;
     vec3d r_body = vec3d0;
     string local_frame;
     // unanchored
@@ -250,6 +243,8 @@ struct ScenarioGraphicsConfig {
     i32 target_fps = 60;
     MyColor background_color = {30, 30, 30, 255};
     bool draw_inertial_axes = true;
+    i32 window_width = 1600;
+    i32 window_height = 900;
 };
 
 struct ScenarioConfig {
@@ -288,6 +283,6 @@ StatusCode build_world_from_scenario_config(
 StatusCode build_scenario_config_from_world(
     ScenarioConfig& cfg,
     const World& world,
-    ScenarioBuildResult& result,
     const WorldStepperConfig& stepper
 );
+StatusCode save_scenario_json(const std::string& filepath, const ScenarioConfig& cfg);

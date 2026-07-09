@@ -4551,7 +4551,7 @@ void run_scenario_loader_diag() {
             std::println("Name: {}", stat.name);
             if (stat.anchored) {
                 std::println("{}Anchor name: {}", indent, stat.anchor);
-                std::println("{}LLH (BCBF): {}", indent, stat.llh_BCBF);
+                std::println("{}LLH (BCBF): {}", indent, stat.llh);
                 std::println("{}Local Frame: {}", indent, stat.local_frame);
             } else {
                 print_mass_properties_config(stat.mass_properties, indent);

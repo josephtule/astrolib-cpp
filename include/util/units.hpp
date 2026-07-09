@@ -5,6 +5,15 @@
 #include "util/typedefs.hpp"
 
 enum struct UAngle : i32 { radian, degree, arcminute, arcsecond, milliarcsecond };
+inline string uangle_str(UAngle type){
+    switch (type) {
+    case UAngle::radian: return "radian";
+    case UAngle::degree: return "degree";
+    case UAngle::arcminute: return "arcminute";
+    case UAngle::arcsecond: return "arcseconds";
+    case UAngle::milliarcsecond: return "milliarcsecond";
+    }
+}
 
 enum struct ULength : i32 {
     nanometer,
@@ -17,6 +26,19 @@ enum struct ULength : i32 {
     mile,
     au,
 };
+inline string ulength_str(ULength type) {
+    switch (type) {
+    case ULength::nanometer: return "nanometer";
+    case ULength::millimeter: return "millimeter";
+    case ULength::centimeter: return "centimeter";
+    case ULength::meter: return "meter";
+    case ULength::kilometer: return "kilometer";
+    case ULength::inch: return "inch";
+    case ULength::foot: return "foot";
+    case ULength::mile: return "mile";
+    case ULength::au: return "au";
+    }
+}
 inline constexpr ULength length_default = ULength::kilometer;
 
 enum struct UTime : i32 {

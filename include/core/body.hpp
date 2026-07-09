@@ -59,6 +59,11 @@ struct Celestial : public Body {
     i32 degree = 0, order = 0; // spherical harmonics degree (n) and order (m)
     vec7d J = vec7d0;          // zonal coefs
     matXd C, S;                // sph harmonic coefs
+    std::string gravity_provider;
+    std::string gravity_provider_format;
+    std::string gravity_provider_filepath;
+    i32 gravity_provider_lineskips = 0;
+    bool gravity_provider_normalized = true;
 
     // Attitude/Orientation
     CelestialAttitudeModel attitude_model = CelestialAttitudeModel::fixed;

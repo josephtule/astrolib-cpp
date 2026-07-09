@@ -519,11 +519,11 @@
             "time_scale": "utc"
         }
     },
-    "raylib_settings": {
+    "graphics_settings": {
         "target_fps": 60,
         "background_color": [10, 15, 20, 255],
         "draw_inertial_axes": true,
-        "window_height": 1600,
-        "window_width": 900
+        "window_width": 1600,
+        "window_height": 900
     }
 }

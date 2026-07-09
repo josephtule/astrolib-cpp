@@ -1,4 +1,5 @@
 #include "core/scenario_io.hpp"
+#include "Eigen/Core"
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
@@ -16,6 +17,7 @@
 #include "raylib.h"
 #include "util/constants.hpp"
 #include "util/math.hpp"
+#include "util/printing.hpp"
 #include "util/tools.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
@@ -556,6 +558,23 @@ static StatusCode parse_req_nested_matXd(
     return parse_nested_matXd(*child, out, path + "." + key);
 }
 
+static StatusCode parse_opt_nested_matXd(
+    const json& object,
+    const string& key,
+    bool& found,
+    matXd& out,
+    const string& path
+) {
+    found = false;
+    const json* child = nullptr;
+
+    StatusCode status = get_opt_child(object, key, child, found, path);
+    if (status != StatusCode::ok) return status;
+    if (!found) return StatusCode::ok;
+
+    return parse_nested_matXd(*child, out, path + "." + key);
+}
+
 static StatusCode parse_req_nested_mat3d(
     const json& object,
     const string& key,
@@ -661,10 +680,11 @@ static StatusCode parse_units_angle(const string& str, UAngle& out) {
     return StatusCode::ok;
 }
 
+// TODO: allow different spellings
 static StatusCode parse_state_tr_type(const string& str, StateTrInputType& out) {
-    if (str == "pos_vel")
+    if (str == state_tr_type_str(StateTrInputType::pos_vel))
         out = StateTrInputType::pos_vel;
-    else if (str == "classical")
+    else if (str == state_tr_type_str(StateTrInputType::classical))
         out = StateTrInputType::classical;
     else
         return StatusCode::invalid_input;
@@ -783,11 +803,14 @@ static StatusCode parse_observation_type(string str, ObservationType& out) {
 
 static StatusCode parse_gravity_model(string str, GravityModel& out) {
     // NOTE: update if adding more types
-    if (str == "pointmass")
+    string str_ = space_to_underscore(str);
+    if (str == space_to_underscore(gravity_model_str(GravityModel::pointmass)))
         out = GravityModel::pointmass;
-    else if (str == "zonal")
+    else if (str == space_to_underscore(gravity_model_str(GravityModel::zonal)))
         out = GravityModel::zonal;
-    else if (str == "spherical_harmonics")
+    else if (
+        str == space_to_underscore(gravity_model_str(GravityModel::spherical_harmonics))
+    )
         out = GravityModel::spherical_harmonics;
     else
         return StatusCode::invalid_input;
@@ -909,18 +932,19 @@ static StatusCode parse_opt_integrator_type(
     return parse_integrator_type(integrator_type_str, out);
 }
 
+// TODO: allow different spellings
 static StatusCode parse_attitude_type(string str, AttitudeType& out) {
-    if (str == "quaternion")
+    if (str == state_att_type_str(AttitudeType::quaternion))
         out = AttitudeType::quaternion;
-    else if (str == "dcm")
+    else if (str == state_att_type_str(AttitudeType::dcm))
         out = AttitudeType::dcm;
-    else if (str == "axis_angle")
+    else if (str == state_att_type_str(AttitudeType::axis_angle))
         out = AttitudeType::axis_angle;
-    else if (str == "euler_angles")
+    else if (str == state_att_type_str(AttitudeType::euler_angles))
         out = AttitudeType::euler_angles;
-    else if (str == "crp")
+    else if (str == state_att_type_str(AttitudeType::crp))
         out = AttitudeType::crp;
-    else if (str == "mrp")
+    else if (str == state_att_type_str(AttitudeType::mrp))
         out = AttitudeType::mrp;
     else
         return StatusCode::invalid_input;
@@ -1475,12 +1499,25 @@ static StatusCode parse_gravity_config(
         found_J = found_zonal_coefficients;
     }
 
-    if (found_provider && found_J) return StatusCode::invalid_input;
+    bool found_C = false;
+    status = parse_opt_nested_matXd(*gravity, "C", found_C, out.C, path);
+    if (status != StatusCode::ok) return status;
+
+    bool found_S = false;
+    status = parse_opt_nested_matXd(*gravity, "S", found_S, out.S, path);
+    if (status != StatusCode::ok) return status;
+
+    bool found_sphh = found_C || found_S;
+    if (found_C != found_S) return StatusCode::invalid_input;
+    if ((found_provider && (found_J || found_sphh)) || (found_J && found_sphh))
+        return StatusCode::invalid_input;
 
     if (found_provider) {
         out.coefficient_source = GravityCoefficientSource::provider;
     } else if (found_J) {
         out.coefficient_source = GravityCoefficientSource::direct_zonal;
+    } else if (found_sphh) {
+        out.coefficient_source = GravityCoefficientSource::direct_spherical_harmonics;
     } else {
         out.coefficient_source = GravityCoefficientSource::none;
     }
@@ -1691,6 +1728,11 @@ static StatusCode parse_celestial_config(
     status = parse_opt_string(object, "name", _, out.name, path);
     if (status != StatusCode::ok) return status;
 
+    bool found_active;
+    status = parse_opt_bool(object, "active", found_active, out.active, path);
+    if (status != StatusCode::ok) return status;
+    if (!found_active) out.active = true;
+
     status = parse_celestial_model_config(object, out.model, path);
     if (status != StatusCode::ok) return status;
 
@@ -1825,6 +1867,11 @@ static StatusCode parse_satellite_config(
     status = parse_opt_string(object, "name", _, out.name, path);
     if (status != StatusCode::ok) return status;
 
+    bool found_active;
+    status = parse_opt_bool(object, "active", found_active, out.active, path);
+    if (status != StatusCode::ok) return status;
+    if (!found_active) out.active = true;
+
     status = parse_state_tr_config(object, out.x_tr, path);
     if (status != StatusCode::ok) return status;
 
@@ -1856,6 +1903,19 @@ static StatusCode parse_station_config(
 
     StatusCode status;
 
+    status = parse_req_string(object, "id", out.id, path);
+    if (status != StatusCode::ok) return status;
+
+    bool _;
+
+    status = parse_opt_string(object, "name", _, out.name, path);
+    if (status != StatusCode::ok) return status;
+
+    bool found_active;
+    status = parse_opt_bool(object, "active", found_active, out.active, path);
+    if (status != StatusCode::ok) return status;
+    if (!found_active) out.active = true;
+
     bool found_ulength;
     status = parse_opt_units_length(
         object,
@@ -1878,14 +1938,6 @@ static StatusCode parse_station_config(
     if (status != StatusCode::ok) return status;
     if (!found_uangle) out.units_angle = UAngle::degree;
 
-    status = parse_req_string(object, "id", out.id, path);
-    if (status != StatusCode::ok) return status;
-
-    bool _;
-
-    status = parse_opt_string(object, "name", _, out.name, path);
-    if (status != StatusCode::ok) return status;
-
     bool found_anchored;
     status = parse_opt_bool(object, "anchored", found_anchored, out.anchored, path);
     if (status != StatusCode::ok) return status;
@@ -1907,7 +1959,7 @@ static StatusCode parse_station_config(
         if (!found_coord) out.coordinate_type = "detic_llh"; // default
         // TODO: create enum for this?
         if (out.coordinate_type == "detic_llh") {
-            status = parse_req_vec3d(object, "llh", out.llh_BCBF, path);
+            status = parse_req_vec3d(object, "llh", out.llh, path);
             if (status != StatusCode::ok) return status;
         } else if (out.coordinate_type == "body_fixed") {
             status = parse_req_vec3d(object, "r_body", out.r_body, path);
@@ -2325,6 +2377,17 @@ static const ScenarioGravityProviderConfig* find_gravity_provider_config(
 
     return nullptr;
 }
+
+static ScenarioGravityProviderConfig* find_gravity_provider_config(
+    ScenarioConfig& cfg,
+    const string& id
+) {
+    for (auto& provider : cfg.gravity_providers) {
+        if (provider.id == id) return &provider;
+    }
+
+    return nullptr;
+}
 static const ScenarioCelestialConfig* find_celestial_config(
     const ScenarioConfig& cfg,
     const string& id
@@ -2491,6 +2554,25 @@ static bool validate_direct_zonal_coefficients(const ScenarioGravityConfig& grav
     return true;
 }
 
+static bool validate_direct_sphh_coefficients(const ScenarioGravityConfig& gravity) {
+    if (!finite_nonempty_mat(gravity.C) || !finite_nonempty_mat(gravity.S)) {
+        return false;
+    }
+    if (gravity.degree < 0 || gravity.order < 0) return false;
+    if (gravity.order > gravity.degree) return false;
+    if (gravity.C.rows() <= gravity.degree || gravity.S.rows() <= gravity.degree) {
+        return false;
+    }
+    if (gravity.C.cols() <= gravity.order || gravity.S.cols() <= gravity.order) {
+        return false;
+    }
+    if (gravity.C.rows() != gravity.S.rows() || gravity.C.cols() != gravity.S.cols()) {
+        return false;
+    }
+
+    return true;
+}
+
 static StatusCode validate_gravity_config(
     const ScenarioConfig& cfg,
     const ScenarioGravityConfig& gravity
@@ -2519,6 +2601,15 @@ static StatusCode validate_gravity_config(
         && gravity.coefficient_source == GravityCoefficientSource::direct_zonal) {
         if (!validate_direct_zonal_coefficients(gravity))
             return StatusCode::validation_failed;
+        return StatusCode::ok;
+    }
+
+    if (gravity.model == GravityModel::spherical_harmonics
+        && gravity.coefficient_source
+               == GravityCoefficientSource::direct_spherical_harmonics) {
+        if (!validate_direct_sphh_coefficients(gravity)) {
+            return StatusCode::validation_failed;
+        }
         return StatusCode::ok;
     }
 
@@ -2599,8 +2690,8 @@ static StatusCode validate_station_config(
         if (!anchor) return StatusCode::invalid_anchor;
 
         if (stat.coordinate_type == "detic_llh") {
-            if (!finite_vec(stat.llh_BCBF)) return StatusCode::invalid_anchor;
-            if (!finite_inrange(stat.llh_BCBF(0), -90.0, 90.0, true, true)) {
+            if (!finite_vec(stat.llh)) return StatusCode::invalid_anchor;
+            if (!finite_inrange(stat.llh(0), -90.0, 90.0, true, true)) {
                 return StatusCode::invalid_anchor;
             }
         } else if (stat.coordinate_type == "body_fixed") {
@@ -2905,6 +2996,11 @@ static StatusCode apply_celestial_config(
     temp.gravity_model = gravity.model;
     temp.degree = gravity.degree;
     temp.order = gravity.order;
+    temp.gravity_provider = "";
+    temp.gravity_provider_format = "";
+    temp.gravity_provider_filepath = "";
+    temp.gravity_provider_lineskips = 0;
+    temp.gravity_provider_normalized = true;
     // gravity.coefficients);
     switch (gravity.coefficient_source) {
     case GravityCoefficientSource::none: break;
@@ -2912,6 +3008,11 @@ static StatusCode apply_celestial_config(
         const auto* gravity_provider
             = find_gravity_provider_config(scenario, gravity.coefficients);
         if (gravity_provider) {
+            temp.gravity_provider = gravity.coefficients;
+            temp.gravity_provider_format = gravity_provider->format;
+            temp.gravity_provider_filepath = gravity_provider->filepath;
+            temp.gravity_provider_lineskips = gravity_provider->lineskips;
+            temp.gravity_provider_normalized = gravity_provider->normalized;
             string filepath = resolve_project_path(gravity_provider->filepath);
             if (in_list<string>(gravity_provider->format, {"gfc", "icgem"})) {
                 bool read_ok = read_gfc(
@@ -2951,9 +3052,11 @@ static StatusCode apply_celestial_config(
             temp.J(i) = gravity.J(i);
         }
     } break;
-    case GravityCoefficientSource::direct_spherical_harmonics:
+    case GravityCoefficientSource::direct_spherical_harmonics: {
+        temp.C = gravity.C;
+        temp.S = gravity.S;
         break;
-        // TODO: do direct C an S loading
+    }
     }
 
     status = apply_state_att_config(cfg.x_att, temp.x_att);
@@ -3100,8 +3203,7 @@ static StatusCode apply_station_config(
         temp.anchor_id = it->second;
 
         if (cfg.coordinate_type == "detic_llh") {
-            temp.llh_BCBF
-                = convert_llh_units(cfg.llh_BCBF, cfg.units_angle, cfg.units_length);
+            temp.llh_BCBF = convert_llh_units(cfg.llh, cfg.units_angle, cfg.units_length);
         } else if (cfg.coordinate_type == "body_fixed") {
             temp.r_body_BCBF
                 = convert_vec3_length(cfg.r_body, cfg.units_length, ULength::kilometer);
@@ -3173,6 +3275,7 @@ StatusCode build_world_from_scenario_config(
         if (status != StatusCode::ok) return status;
 
         EntityId id = world.insert_celestial(std::move(cel));
+        if (!cel_cfg.active) world.make_inactive(id);
         result.celestial_ids.insert({cel_cfg.id, id});
         result.body_ids.insert({cel_cfg.id, id});
     }
@@ -3183,6 +3286,7 @@ StatusCode build_world_from_scenario_config(
         if (status != StatusCode::ok) return status;
 
         EntityId id = world.insert_satellite(std::move(sat));
+        if (!sat_cfg.active) world.make_inactive(id);
         result.satellite_ids.insert({sat_cfg.id, id});
         result.body_ids.insert({sat_cfg.id, id});
     }
@@ -3213,6 +3317,7 @@ StatusCode build_world_from_scenario_config(
                 return StatusCode::unsupported_method;
             }
         }
+        if (!stat_cfg.active) world.make_inactive(id);
         result.station_ids.insert({stat_cfg.id, id});
         result.body_ids.insert({stat_cfg.id, id});
     }
@@ -3220,13 +3325,32 @@ StatusCode build_world_from_scenario_config(
     return StatusCode::ok;
 }
 
+static bool ensure_gravity_provider_config(ScenarioConfig& cfg, const Celestial& cel) {
+    if (cel.gravity_provider.empty()) return false;
+    if (find_gravity_provider_config(cfg, cel.gravity_provider) != nullptr) return true;
+    if (cel.gravity_provider_format.empty() || cel.gravity_provider_filepath.empty()) {
+        return false;
+    }
+
+    ScenarioGravityProviderConfig provider;
+    provider.id = cel.gravity_provider;
+    provider.format = cel.gravity_provider_format;
+    provider.filepath = cel.gravity_provider_filepath;
+    provider.lineskips = cel.gravity_provider_lineskips;
+    provider.normalized = cel.gravity_provider_normalized;
+    cfg.gravity_providers.push_back(provider);
+
+    return true;
+}
+
 StatusCode build_scenario_config_from_world(
     ScenarioConfig& cfg,
     const World& world,
-    ScenarioBuildResult& result,
     const WorldStepperConfig& stepper
 ) {
-    cfg = ScenarioConfig{};
+    cfg.celestials.clear();
+    cfg.satellites.clear();
+    cfg.stations.clear();
     ScenarioWorldStepperConfig& cfg_stepper = cfg.world_stepper;
 
     // TODO: some field are not filled out in the cfg, fill out later
@@ -3249,16 +3373,20 @@ StatusCode build_scenario_config_from_world(
 
         ScenarioCelestialConfig out;
         out.id = cel->name;
+        out.active = world.is_active(id);
 
         out.attitude_model = cel->attitude_model;
 
         out.x_tr.input_type = StateTrInputType::pos_vel;
         out.x_tr.r = cel->x_tr.r;
         out.x_tr.v = cel->x_tr.v;
+        out.x_tr.units_length = ULength::kilometer;
+        out.x_tr.units_angle = UAngle::radian;
 
         out.x_att.input_type = AttitudeType::quaternion;
         out.x_att.q = cel->x_att.q;
         out.x_att.w = cel->x_att.w;
+        out.x_att.units_angle = UAngle::radian;
 
         out.propagation.translation = cel->propagate_tr;
         out.propagation.attitude = cel->propagate_att;
@@ -3279,18 +3407,31 @@ StatusCode build_scenario_config_from_world(
         gravity.J = cel->J;
         gravity.C = cel->C;
         gravity.S = cel->S;
+        gravity.coefficients = "";
         switch (gravity.model) {
-        case GravityModel::pointmass:
+        case GravityModel::pointmass: {
             gravity.coefficient_source = GravityCoefficientSource::none;
-        case GravityModel::zonal:
-            gravity.coefficient_source = GravityCoefficientSource::direct_zonal;
-        case GravityModel::spherical_harmonics:
-            gravity.coefficient_source
-                = GravityCoefficientSource::direct_spherical_harmonics;
+        } break;
+        case GravityModel::zonal: {
+            if (ensure_gravity_provider_config(cfg, *cel)) {
+                gravity.coefficient_source = GravityCoefficientSource::provider;
+                gravity.coefficients = cel->gravity_provider;
+            } else {
+                gravity.coefficient_source = GravityCoefficientSource::direct_zonal;
+            }
+        } break;
+        case GravityModel::spherical_harmonics: {
+            if (ensure_gravity_provider_config(cfg, *cel)) {
+                gravity.coefficient_source = GravityCoefficientSource::provider;
+                gravity.coefficients = cel->gravity_provider;
+            } else {
+                gravity.coefficient_source
+                    = GravityCoefficientSource::direct_spherical_harmonics;
+            }
+        } break;
         }
 
         celestials.push_back(out);
-        // TODO: figure out how i should do this, maybe create new json file with coefs?
     }
 
     svec<ScenarioSatelliteConfig>& satellites = cfg.satellites;
@@ -3300,6 +3441,7 @@ StatusCode build_scenario_config_from_world(
 
         ScenarioSatelliteConfig out;
         out.id = sat->name;
+        out.active = world.is_active(id);
 
         out.propagation.translation = sat->propagate_tr;
         out.propagation.attitude = sat->propagate_att;
@@ -3327,6 +3469,10 @@ StatusCode build_scenario_config_from_world(
 
         ScenarioStationConfig out;
         out.id = stat->name;
+        out.active = world.is_active(id);
+
+        out.propagation.translation = stat->propagate_tr;
+        out.propagation.attitude = stat->propagate_att;
 
         out.anchored = stat->anchored;
         if (out.anchored) {
@@ -3334,13 +3480,10 @@ StatusCode build_scenario_config_from_world(
             if (cel == nullptr) return StatusCode::invalid_anchor;
             out.anchor = cel->name;
             out.coordinate_type = "detic_llh";
-            out.llh_BCBF = stat->llh_BCBF;
+            out.llh = stat->llh_BCBF;
             out.local_frame = "ENU";
             out.units_angle = UAngle::radian;
         } else {
-            out.propagation.translation = stat->propagate_tr;
-            out.propagation.attitude = stat->propagate_att;
-
             out.x_tr.input_type = StateTrInputType::pos_vel;
             out.x_tr.r = stat->x_tr.r;
             out.x_tr.v = stat->x_tr.v;
@@ -3356,15 +3499,456 @@ StatusCode build_scenario_config_from_world(
         }
 
         for (const auto& [id, instr] : stat->instruments) {
-            ScenarioInstrumentConfig out;
+            ScenarioInstrumentConfig out_instr;
 
-            out.id = instr.name;
-            out.type = instr.type;
-            out.covariance_cfg.covariance = instr.R;
-            out.covariance_cfg.type = "matrix";
-            out.enabled = instr.enabled;
+            out_instr.id = instr.name;
+            out_instr.type = instr.type;
+            out_instr.covariance_cfg.covariance = instr.R;
+            out_instr.covariance_cfg.type = "matrix";
+            out_instr.enabled = instr.enabled;
+
+            out.instruments.push_back(out_instr);
+        }
+
+        stations.push_back(out);
+    }
+
+    return StatusCode::ok;
+}
+
+template <class T>
+static json json_from_vec3(const vec3<T>& v) {
+    return json::array({v(0), v(1), v(2)});
+}
+
+template <class T>
+static json json_from_vec4(const vec4<T>& v) {
+    return json::array({v(0), v(1), v(2), v(3)});
+}
+
+template <class Derived>
+static json json_from_vec(const eig::MatrixBase<Derived>& v) {
+    json vec = json::array();
+    for (i32 i = 0; i < v.size(); ++i) {
+        vec.push_back(v(i));
+    }
+    return vec;
+}
+
+template <class Derived>
+static json json_from_mat(const eig::MatrixBase<Derived>& m) {
+    json mat = json::array();
+    for (i32 i = 0; i < m.rows(); ++i) {
+        json row = json::array();
+        for (i32 j = 0; j < m.cols(); ++j) {
+            row.push_back(m(i, j));
+        }
+        mat.push_back(row);
+    }
+    return mat;
+}
+
+static json json_from_state_tr_config(const ScenarioStateTrConfig& x_tr) {
+    json state_tr;
+
+    state_tr["input_type"] = state_tr_type_str(x_tr.input_type);
+    state_tr["units_length"] = ulength_str(x_tr.units_length);
+
+    switch (x_tr.input_type) {
+    case StateTrInputType::pos_vel: {
+        state_tr["r"] = json_from_vec3(x_tr.r);
+        state_tr["v"] = json_from_vec3(x_tr.v);
+    } break;
+    case StateTrInputType::classical: {
+        state_tr["units_angle"] = uangle_str(x_tr.units_angle);
+        state_tr["central"] = x_tr.central;
+        state_tr["sma"] = x_tr.coes.sma;
+        state_tr["ecc"] = x_tr.coes.ecc;
+        state_tr["inc"] = x_tr.coes.inc;
+        state_tr["raan"] = x_tr.coes.raan;
+        state_tr["aop"] = x_tr.coes.aop;
+        state_tr["ta"] = x_tr.coes.ta;
+    } break;
+    }
+
+    return state_tr;
+}
+
+static json json_from_state_att_config(const ScenarioStateAttConfig& x_att) {
+    json state_att;
+
+    state_att["input_type"] = state_att_type_str(x_att.input_type);
+    state_att["units_angle"] = uangle_str(x_att.units_angle);
+
+    switch (x_att.input_type) {
+    case AttitudeType::quaternion: state_att["q"] = json_from_vec4(x_att.q); break;
+    case AttitudeType::dcm: state_att["dcm"] = json_from_mat(x_att.dcm); break;
+    case AttitudeType::axis_angle: {
+        state_att["axis"] = json_from_vec3(x_att.axis);
+        state_att["angle"] = x_att.angle;
+    } break;
+    case AttitudeType::euler_angles: {
+        state_att["angles"] = json_from_vec3(x_att.angles);
+        state_att["sequence"]
+            = json::array({x_att.sequence[0], x_att.sequence[1], x_att.sequence[2]});
+    } break;
+    case AttitudeType::crp: [[fallthrough]];
+    case AttitudeType::mrp: state_att["axis"] = json_from_vec3(x_att.axis); break;
+    }
+
+    state_att["w"] = json_from_vec3(x_att.w);
+
+    return state_att;
+}
+
+static json json_from_gravity_config(const ScenarioGravityConfig& grav) {
+    json gravity;
+
+    gravity["model"] = space_to_underscore(gravity_model_str(grav.model));
+    gravity["units_length"] = ulength_str(grav.units_length);
+    gravity["mu"] = grav.mu;
+    if (grav.model != GravityModel::pointmass) {
+        gravity["radius"] = grav.radius;
+        gravity["degree"] = grav.degree;
+        gravity["order"] = grav.order;
+        if (grav.coefficients.empty()) {
+            // direct
+            if (grav.model == GravityModel::zonal) {
+                gravity["J"] = json_from_vec(grav.J);
+            } else if (grav.model == GravityModel::spherical_harmonics) {
+                gravity["C"] = json_from_mat(grav.C);
+                gravity["S"] = json_from_mat(grav.S);
+            }
+        } else {
+            // provider
+            gravity["coefficients"] = grav.coefficients;
         }
     }
+
+    return gravity;
+}
+
+static json json_from_celestial_model_config(const ScenarioCelestialModelConfig& model) {
+    json celestial_model;
+
+    celestial_model["id"] = model.id;
+    celestial_model["gravity"] = json_from_gravity_config(model.gravity_model);
+    celestial_model["units_length"] = ulength_str(model.units_length);
+
+    if (model.id == "custom") {
+        if (finite_nonzero(model.semimajor_axis))
+            celestial_model["semimajor_axis"] = model.semimajor_axis;
+        if (finite_nonzero(model.semiminor_axis))
+            celestial_model["semiminor_axis"] = model.semiminor_axis;
+        if (finite_nonzero(model.mean_radius))
+            celestial_model["mean_radius"] = model.mean_radius;
+        if (finite_nonzero(model.eccentricity))
+            celestial_model["eccentricity"] = model.eccentricity;
+        if (finite_nonzero(model.flattening))
+            celestial_model["flattening"] = model.flattening;
+    }
+
+    return celestial_model;
+}
+
+static json json_from_instrument_config(const ScenarioInstrumentConfig& instr) {
+    json instrument;
+
+    instrument["id"] = instr.id;
+    instrument["type"] = observation_type_str_simple(instr.type);
+    instrument["enabled"] = instr.enabled;
+
+    json covariance;
+    covariance["type"] = "matrix";
+    covariance["values"] = json_from_mat(instr.covariance_cfg.covariance);
+    instrument["covariance"] = covariance;
+
+    return instrument;
+}
+
+static json json_from_propagation_config(const ScenarioPropagationConfig& prop) {
+    json propagation;
+
+    propagation["translation"] = prop.translation;
+    propagation["attitude"] = prop.attitude;
+
+    return propagation;
+}
+
+static json json_from_mass_properties_config(const ScenarioMassPropertiesConfig& mp) {
+    json mass_properties;
+
+    mass_properties["mass"] = mp.mass;
+
+    json inertia_tensor;
+    inertia_tensor["type"] = "matrix";
+    inertia_tensor["values"] = json_from_mat(mp.inertia);
+    if (mp.offset) {
+        inertia_tensor["offset"] = json_from_vec3(mp.offset_body);
+    }
+
+    mass_properties["inertia_tensor"] = inertia_tensor;
+
+    return mass_properties;
+}
+
+static json json_from_celestial_config(const ScenarioCelestialConfig& cel) {
+    json celestial;
+
+    celestial["id"] = cel.id;
+    if (!cel.name.empty()) celestial["name"] = cel.name;
+    celestial["active"] = cel.active;
+
+    celestial["model"] = json_from_celestial_model_config(cel.model);
+
+    celestial["propagation"] = json_from_propagation_config(cel.propagation);
+
+    celestial["state_tr"] = json_from_state_tr_config(cel.x_tr);
+    celestial["state_att"] = json_from_state_att_config(cel.x_att);
+
+    celestial["attitude_model"]
+        = space_to_underscore(celestial_attitude_model_str(cel.attitude_model));
+
+    return celestial;
+}
+
+// struct ScenarioCelestialConfig {
+//     string id;
+//     string name;
+//     bool active = true;
+//     ScenarioCelestialModelConfig model;
+//     ScenarioStateTrConfig x_tr;
+//     ScenarioStateAttConfig x_att;
+//     bool has_attitude_model = false;
+//     CelestialAttitudeModel attitude_model = CelestialAttitudeModel::fixed;
+//     // RadiationModel radition_model = RadiationModel::none;
+//     ScenarioPropagationConfig propagation;
+// };
+
+static json json_from_satellite_config(const ScenarioSatelliteConfig& sat) {
+    json satellite;
+
+    satellite["id"] = sat.id;
+    if (!sat.name.empty()) satellite["name"] = sat.name;
+    satellite["active"] = sat.active;
+
+    satellite["state_tr"] = json_from_state_tr_config(sat.x_tr);
+    satellite["state_att"] = json_from_state_att_config(sat.x_att);
+    satellite["propagation"] = json_from_propagation_config(sat.propagation);
+    satellite["mass_properties"] = json_from_mass_properties_config(sat.mass_properties);
+
+    return satellite;
+}
+
+static json json_from_station_config(const ScenarioStationConfig& stat) {
+    json station;
+
+    station["id"] = stat.id;
+    if (!stat.name.empty()) station["name"] = stat.name;
+    station["active"] = stat.active;
+
+    station["propagation"] = json_from_propagation_config(stat.propagation);
+
+    station["anchored"] = stat.anchored;
+    if (stat.anchored) {
+        station["anchor"] = stat.anchor;
+        station["coordinate_type"] = stat.coordinate_type;
+        station["local_frame"] = stat.local_frame;
+        if (stat.coordinate_type == "detic_llh") {
+            station["llh"] = json_from_vec3(stat.llh);
+            station["units_angle"] = uangle_str(stat.units_angle);
+        } else if (stat.coordinate_type == "body_fixed") {
+            station["r_body"] = json_from_vec3(stat.r_body);
+            station["units_length"] = ulength_str(stat.units_length);
+        }
+    } else {
+        station["state_tr"] = json_from_state_tr_config(stat.x_tr);
+        station["state_att"] = json_from_state_att_config(stat.x_att);
+        station["mass_properties"]
+            = json_from_mass_properties_config(stat.mass_properties);
+    }
+
+    if (stat.instruments.size() > 0) {
+        json instruments = json::array();
+        for (const auto& instr : stat.instruments) {
+            instruments.push_back(json_from_instrument_config(instr));
+        }
+        station["instruments"] = instruments;
+    }
+
+    return station;
+};
+
+static json json_from_gravity_provider_config(const ScenarioGravityProviderConfig& prov) {
+    json provider;
+    provider["id"] = prov.id;
+    provider["format"] = prov.format;
+    provider["path"] = prov.filepath;
+    provider["lineskips"] = prov.lineskips;
+    provider["normalized"] = prov.normalized;
+    return provider;
+}
+
+json json_from_scenario_config(const ScenarioConfig& cfg) {
+    json scenario;
+
+    json schema;
+    schema["name"] = cfg.schema.name;
+    schema["version"] = cfg.schema.version;
+    scenario["schema"] = schema;
+
+    json metadata;
+    metadata["name"] = cfg.metadata.name;
+    metadata["rng_seed"] = cfg.metadata.rng_seed;
+    scenario["metadata"] = metadata;
+
+    if (cfg.gravity_providers.size() > 0) {
+        json providers;
+        json gravity_providers = json::array();
+        for (const auto& provider : cfg.gravity_providers) {
+            gravity_providers.push_back(json_from_gravity_provider_config(provider));
+        }
+        providers["gravity"] = gravity_providers;
+        // for (const auto & provider: cfg.ephemeris_providers) {
+        //     providers.push_back((json_from_ephemeris_provider_config(provider)));
+        // }
+        scenario["providers"] = providers;
+    }
+
+    if (cfg.celestials.size() > 0) {
+        json celestials;
+        for (const auto& cel : cfg.celestials) {
+            celestials.push_back(json_from_celestial_config(cel));
+        }
+        scenario["celestials"] = celestials;
+    }
+
+    if (cfg.satellites.size() > 0) {
+        json satellites;
+        for (const auto& sat : cfg.satellites) {
+            satellites.push_back(json_from_satellite_config(sat));
+        }
+        scenario["satellites"] = satellites;
+    }
+
+    if (cfg.stations.size() > 0) {
+        json stations;
+        for (const auto& stat : cfg.stations) {
+            stations.push_back(json_from_station_config(stat));
+        }
+        scenario["stations"] = stations;
+    }
+
+    json time;
+    time["t0"] = cfg.time.t0;
+    time["time_scale"] = time_scale_str(cfg.time.time_scale);
+    time["input_type"] = date_type_str(cfg.time.date_type);
+
+    json date;
+    switch (cfg.time.date_type) {
+    case DateType::cal: {
+        json cal;
+        cal["input_type"] = calendar_print_style_str(cfg.time.cal_style);
+        switch (cfg.time.cal_style) {
+        case CalendarPrintStyle::separate_vertical: [[fallthrough]];
+        case CalendarPrintStyle::separate: {
+            cal["year"] = cfg.time.cal.year;
+            cal["month"] = cfg.time.cal.month;
+            cal["day"] = cfg.time.cal.day;
+            cal["hour"] = cfg.time.cal.hour;
+            cal["minute"] = cfg.time.cal.minute;
+            cal["second"] = cfg.time.cal.second;
+        } break;
+        case CalendarPrintStyle::string: {
+            cal["string"] = cal_str(cfg.time.cal);
+        } break;
+        case CalendarPrintStyle::vector: {
+            cal["vector"] = json::array(
+                {cfg.time.cal.year,
+                 cfg.time.cal.month,
+                 cfg.time.cal.day,
+                 cfg.time.cal.hour,
+                 cfg.time.cal.minute,
+                 cfg.time.cal.second}
+            );
+        } break;
+        }
+        date["cal"] = cal;
+    } break;
+    case DateType::jd: {
+        json jd;
+        jd["day"] = cfg.time.jd.day;
+        jd["frac"] = cfg.time.jd.frac;
+        date["jd"] = jd;
+    } break;
+    case DateType::mjd: {
+        json mjd;
+        mjd["day"] = cfg.time.mjd.day;
+        mjd["frac"] = cfg.time.mjd.frac;
+        date["mjd"] = mjd;
+    } break;
+    }
+    time["date"] = date;
+    scenario["time"] = time;
+
+    json world_stepper;
+    world_stepper["translation_integrator"]
+        = integrator_str(cfg.world_stepper.integrator_tr);
+    world_stepper["attitude_integrator"]
+        = integrator_str(cfg.world_stepper.integrator_att);
+    world_stepper["substeps"] = cfg.world_stepper.substeps;
+    world_stepper["ticks"] = cfg.world_stepper.ticks;
+    world_stepper["dt_scale"] = cfg.world_stepper.dt_scale;
+    world_stepper["paused"] = cfg.world_stepper.paused;
+    scenario["world_stepper"] = world_stepper;
+
+    json graphics_settings;
+    graphics_settings["target_fps"] = cfg.graphics_settings.target_fps;
+    graphics_settings["background_color"]
+        = json::array({cfg.graphics_settings.background_color});
+    graphics_settings["draw_inertial_axes"] = cfg.graphics_settings.draw_inertial_axes;
+    graphics_settings["window_width"] = cfg.graphics_settings.window_width;
+    graphics_settings["window_height"] = cfg.graphics_settings.window_height;
+    scenario["graphics_settings"] = graphics_settings;
+
+    return scenario;
+}
+
+// struct ScenarioConfig {
+//     ScenarioSchemaConfig schema;
+//     ScenarioMetadataConfig metadata;
+
+//     ScenarioTimeConfig time;
+
+//     svec<ScenarioGravityProviderConfig> gravity_providers;
+//     // svec<ScenarioEphemerisProviderConfig> ephemeris_providers;
+
+//     svec<ScenarioCelestialConfig> celestials;
+//     svec<ScenarioSatelliteConfig> satellites;
+//     svec<ScenarioStationConfig> stations;
+//     // svec<ScenarioInstrumentConfig> instrument_templates;
+
+//     ScenarioWorldStepperConfig world_stepper;
+//     ScenarioGraphicsConfig graphics_settings;
+// };
+
+StatusCode save_scenario_json(const std::string& filepath, const ScenarioConfig& cfg) {
+    StatusCode status = validate_scenario_config(cfg);
+    if (status != StatusCode::ok) return status;
+
+    json j = json_from_scenario_config(cfg);
+
+    std::ofstream file(filepath);
+    if (!file.is_open()) return StatusCode::file_open_failed;
+
+    // TODO: do precision for floats/doubles here
+
+    file << std::setprecision(std::numeric_limits<double>::max_digits10) << std::setw(4)
+         << j << '\n';
+    if (!file) return StatusCode::file_write_failed;
+
+    file.close();
+    if (!file) return StatusCode::file_close_failed;
 
     return StatusCode::ok;
 }

@@ -68,6 +68,16 @@ inline std::string make_upper(const std::string& s) {
     return str;
 }
 
+inline string space_to_underscore(const string str) {
+    string out = str;
+    for (char& c : out) {
+        if (c == ' ') {
+            c = '_';
+        }
+    }
+    return out;
+}
+
 template <class T>
 inline bool in_list(const T& x, std::initializer_list<T> options) {
     return std::find(options.begin(), options.end(), x) != options.end();
@@ -110,7 +120,7 @@ inline string decimal_digits(T value, i32 digits) {
     return (dot == std::string::npos) ? "" : s.substr(dot + 1);
 }
 
-template<class T>
+template <class T>
 inline string to_string_precision(T value, i32 precision = 4) {
     std::ostringstream out;
     out << std::fixed << std::setprecision(precision) << value;

@@ -23,6 +23,17 @@ inline std::string integrator_name(IntegratorType integrator) {
     }
     return "Unknown";
 };
+inline string integrator_str(IntegratorType type){
+    switch (type) {
+    case IntegratorType::rk1: return "rk1";
+    case IntegratorType::rk2: return "rk2";
+    case IntegratorType::rk2_heun: return "rk2_heun";
+    case IntegratorType::rk2_ralston: return "rk2_ralston";
+    case IntegratorType::rk3: return "rk3";
+    case IntegratorType::rk4: return "rk4";
+    }
+    return "unknown";
+}
 
 template <typename State, typename Deriv, typename Func>
 inline std::pair<f64, State> step_rk1(Func&& f, f64 t, const State& x, f64 dt) {

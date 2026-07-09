@@ -128,7 +128,7 @@
         "dt_scale": 0.1,
         "paused": false
     },
-    "raylib_settings": {
+    "graphics_settings": {
         "target_fps": 60,
         "background_color": [30, 30, 30, 255],
         "draw_inertial_axes": true

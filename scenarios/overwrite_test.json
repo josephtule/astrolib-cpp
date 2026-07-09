@@ -519,7 +519,7 @@
             "time_scale": "utc"
         }
     },
-    "raylib_settings": {
+    "graphics_settings": {
         "target_fps": 60,
         "background_color": [10, 15, 20, 255],
         "draw_inertial_axes": true,

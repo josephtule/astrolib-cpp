@@ -1,0 +1,1130 @@
+{
+    "celestials": [
+        {
+            "active": true,
+            "attitude_model": "simple_spin",
+            "id": "Earth",
+            "model": {
+                "eccentricity": 0.081819190842621,
+                "flattening": 0.003352810664747,
+                "gravity": {
+                    "C": [
+                        [
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            -0.000484165143790815,
+                            -2.06615509074176e-10,
+                            2.43938357328313e-06,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            9.57161207093473e-07,
+                            2.03046201047864e-06,
+                            9.04787894809528e-07,
+                            7.21321757121568e-07,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            5.39965866638991e-07,
+                            -5.36157389388867e-07,
+                            3.50501623962649e-07,
+                            9.90856766672321e-07,
+                            -1.88519633023033e-07,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            6.86702913736681e-08,
+                            -6.29211923042529e-08,
+                            6.52078043176164e-07,
+                            -4.51847152328843e-07,
+                            -2.95328761175629e-07,
+                            1.74811795496002e-07,
+                            0.0
+                        ],
+                        [
+                            -1.49953927978527e-07,
+                            -7.59210081892527e-08,
+                            4.8648892460469e-08,
+                            5.72451611175653e-08,
+                            -8.60237937191611e-08,
+                            -2.67166423703038e-07,
+                            9.47068749756882e-09
+                        ]
+                    ],
+                    "S": [
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            1.38441389137979e-09,
+                            -1.40027370385934e-06,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            2.48200415856872e-07,
+                            -6.19005475177618e-07,
+                            1.4143492619294101e-06,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            -4.73567346518086e-07,
+                            6.62480026275829e-07,
+                            -2.00956723567452e-07,
+                            3.08803882149194e-07,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            -9.43698073395769e-08,
+                            -3.23353192540522e-07,
+                            -2.14955408306046e-07,
+                            4.98070550102351e-08,
+                            -6.69379935180165e-07,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            2.65122593213647e-08,
+                            -3.73789324523752e-07,
+                            8.9520113001073e-09,
+                            -4.71425573429095e-07,
+                            -5.36493151500206e-07,
+                            -2.37382353351005e-07
+                        ]
+                    ],
+                    "degree": 6,
+                    "model": "spherical_harmonics",
+                    "mu": 398600.4418,
+                    "order": 6,
+                    "radius": 6378.137,
+                    "units_length": "kilometer"
+                },
+                "id": "custom",
+                "mean_radius": 6371.008771415059,
+                "semimajor_axis": 6378.137,
+                "semiminor_axis": 6356.752314245179,
+                "units_length": "kilometer"
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.1993679344171972,
+                    0.0,
+                    0.0,
+                    0.9799247046208296
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.0,
+                    7.292114996089758e-05
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
+        },
+        {
+            "active": true,
+            "attitude_model": "fixed",
+            "id": "Moon",
+            "model": {
+                "eccentricity": 0.04914236410898444,
+                "flattening": 0.0012082158679016795,
+                "gravity": {
+                    "model": "pointmass",
+                    "mu": 4902.800066,
+                    "units_length": "kilometer"
+                },
+                "id": "custom",
+                "mean_radius": 1737.3997178935795,
+                "semimajor_axis": 1738.1,
+                "semiminor_axis": 1736.0,
+                "units_length": "kilometer"
+            },
+            "propagation": {
+                "attitude": false,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    384400.0,
+                    0.0,
+                    0.0
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    0.0,
+                    1.022,
+                    0.0
+                ]
+            }
+        },
+        {
+            "active": true,
+            "attitude_model": "simple_spin",
+            "id": "Mars",
+            "model": {
+                "eccentricity": 0.10836599942613576,
+                "flattening": 0.005888934691714269,
+                "gravity": {
+                    "J": [
+                        0.0,
+                        0.0,
+                        0.00196045,
+                        -3.145e-05,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "degree": 3,
+                    "model": "zonal",
+                    "mu": 42828.375214,
+                    "order": 0,
+                    "radius": 3396.19,
+                    "units_length": "kilometer"
+                },
+                "id": "custom",
+                "mean_radius": 3389.520203828717,
+                "semimajor_axis": 3396.2,
+                "semiminor_axis": 3376.2,
+                "units_length": "kilometer"
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.0,
+                    7.0882e-05
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    225000000.0,
+                    0.0,
+                    0.0
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    0.0,
+                    24.077,
+                    0.0
+                ]
+            }
+        }
+    ],
+    "graphics_settings": {
+        "background_color": [
+            [
+                30,
+                30,
+                30,
+                255
+            ]
+        ],
+        "draw_inertial_axes": true,
+        "target_fps": 60,
+        "window_height": 900,
+        "window_width": 1600
+    },
+    "metadata": {
+        "name": "earth_moon_sat_demo",
+        "rng_seed": 12345
+    },
+    "satellites": [
+        {
+            "active": true,
+            "id": "Quaternion PosVel KM",
+            "mass_properties": {
+                "inertia_tensor": {
+                    "type": "matrix",
+                    "values": [
+                        [
+                            100.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            120.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            140.0
+                        ]
+                    ]
+                },
+                "mass": 120.0
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.001,
+                    0.0,
+                    0.0
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    7000.0,
+                    0.0,
+                    0.0
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    0.0,
+                    7.5,
+                    1.0
+                ]
+            }
+        },
+        {
+            "active": true,
+            "id": "DCM PosVel Meter",
+            "mass_properties": {
+                "inertia_tensor": {
+                    "type": "matrix",
+                    "values": [
+                        [
+                            110.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            130.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            150.0
+                        ]
+                    ]
+                },
+                "mass": 130.0
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.001,
+                    0.0
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    7100.0,
+                    100.0,
+                    0.0
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    -0.1,
+                    7.5,
+                    0.9
+                ]
+            }
+        },
+        {
+            "active": true,
+            "id": "Axis Angle Classical Degrees",
+            "mass_properties": {
+                "inertia_tensor": {
+                    "type": "matrix",
+                    "values": [
+                        [
+                            120.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            140.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            160.0
+                        ]
+                    ]
+                },
+                "mass": 140.0
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.0,
+                    0.0,
+                    0.25881904510252074,
+                    0.9659258262890683
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.0,
+                    0.0008726646259971648
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    2472.8742838128765,
+                    4669.04100069832,
+                    4882.624290034134
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    -6.8263180948976,
+                    0.5675761463899084,
+                    2.920825278223419
+                ]
+            }
+        },
+        {
+            "active": true,
+            "id": "Euler Classical Radians Meter",
+            "mass_properties": {
+                "inertia_tensor": {
+                    "type": "matrix",
+                    "values": [
+                        [
+                            130.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            150.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            170.0
+                        ]
+                    ]
+                },
+                "mass": 150.0
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.2392983377447303,
+                    0.18930785741199999,
+                    0.038134576474850156,
+                    0.9515485246437886
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.00017453292519943296,
+                    0.00034906585039886593,
+                    0.0005235987755982988
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    3927.598999828195,
+                    4700.81255018244,
+                    3947.376235950131
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    -6.164501776872358,
+                    2.3334352274096735,
+                    3.36843960288329
+                ]
+            }
+        },
+        {
+            "active": true,
+            "id": "CRP PosVel Mile",
+            "mass_properties": {
+                "inertia_tensor": {
+                    "type": "matrix",
+                    "values": [
+                        [
+                            140.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            160.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            180.0
+                        ]
+                    ]
+                },
+                "mass": 160.0
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.009993007341435493,
+                    0.019986014682870985,
+                    0.029979022024306475,
+                    0.9993007341435491
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.001,
+                    0.002,
+                    0.003
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    7242.048,
+                    80.46719999999999,
+                    40.233599999999996
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    -0.0804672,
+                    7.483449600000001,
+                    0.804672
+                ]
+            }
+        },
+        {
+            "active": true,
+            "id": "MRP Classical KM",
+            "mass_properties": {
+                "inertia_tensor": {
+                    "type": "matrix",
+                    "values": [
+                        [
+                            150.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            170.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            190.0
+                        ]
+                    ]
+                },
+                "mass": 170.0
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.5547599009916148,
+                    0.5547599009916148,
+                    0.5547599009916148,
+                    0.2769916185651133
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.0,
+                    0.001
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    2678.449049168457,
+                    -2164.6450224259,
+                    -6749.4806781027755
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    5.361631524535282,
+                    4.867878577851058,
+                    0.5643811408837335
+                ]
+            }
+        }
+    ],
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "stations": [
+        {
+            "active": true,
+            "anchor": "Earth",
+            "anchored": true,
+            "coordinate_type": "detic_llh",
+            "id": "No Instruments Station",
+            "llh": [
+                0.7853981633974483,
+                -2.0943951023931953,
+                0.5
+            ],
+            "local_frame": "ENU",
+            "propagation": {
+                "attitude": false,
+                "translation": false
+            },
+            "units_angle": "radian"
+        },
+        {
+            "active": true,
+            "anchor": "Earth",
+            "anchored": true,
+            "coordinate_type": "detic_llh",
+            "id": "All Instruments Station",
+            "instruments": [
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                1e-10,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                1e-10
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "all_radec",
+                    "type": "radec"
+                },
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                1e-08,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                1e-08
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "all_azel",
+                    "type": "azel"
+                },
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                0.0001
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "all_range",
+                    "type": "range"
+                },
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                1e-08
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "all_range_rate",
+                    "type": "range_rate"
+                },
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                0.0001,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0001,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0001
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "all_pos",
+                    "type": "pos"
+                },
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                0.0001,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0001,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0001,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-08,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-08,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-08
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "all_pos_vel",
+                    "type": "pos_vel"
+                },
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                0.0001,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0001,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0001
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "all_rel_pos",
+                    "type": "rel_pos"
+                },
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                0.0001,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0001,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0001,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-08,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-08,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-08
+                            ]
+                        ]
+                    },
+                    "enabled": false,
+                    "id": "all_rel_pos_vel",
+                    "type": "rel_pos_vel"
+                }
+            ],
+            "llh": [
+                0.7853981633974483,
+                0.7853981633974483,
+                0.0
+            ],
+            "local_frame": "ENU",
+            "propagation": {
+                "attitude": false,
+                "translation": false
+            },
+            "units_angle": "radian"
+        },
+        {
+            "active": true,
+            "anchor": "Earth",
+            "anchored": true,
+            "coordinate_type": "detic_llh",
+            "id": "Body Fixed Meter Station",
+            "instruments": [
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                0.0001
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "body_fixed_range",
+                    "type": "range"
+                }
+            ],
+            "llh": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "local_frame": "ENU",
+            "propagation": {
+                "attitude": false,
+                "translation": false
+            },
+            "units_angle": "radian"
+        },
+        {
+            "active": true,
+            "anchored": false,
+            "id": "Free Tracking Station",
+            "instruments": [
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                0.001,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.001,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.001,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-06,
+                                0.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-06,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                1e-06
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "free_station_pos_vel",
+                    "type": "pos_vel"
+                }
+            ],
+            "mass_properties": {
+                "inertia_tensor": {
+                    "type": "matrix",
+                    "values": [
+                        [
+                            200.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            220.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            240.0
+                        ]
+                    ]
+                },
+                "mass": 250.0
+            },
+            "propagation": {
+                "attitude": true,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.0,
+                    0.13052619222005157,
+                    0.0,
+                    0.9914448613738104
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.0,
+                    0.0017453292519943296
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    6800.0,
+                    -1200.0,
+                    500.0
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    5.0,
+                    8.2,
+                    -0.5
+                ]
+            }
+        }
+    ],
+    "time": {
+        "date": {
+            "jd": {
+                "day": 2451545.0,
+                "frac": 0.0
+            }
+        },
+        "input_type": "jd",
+        "t0": 0.0,
+        "time_scale": "utc"
+    },
+    "world_stepper": {
+        "attitude_integrator": "rk4",
+        "dt_scale": 5.0,
+        "paused": true,
+        "substeps": 1,
+        "ticks": 5,
+        "translation_integrator": "rk2"
+    }
+}

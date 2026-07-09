@@ -34,6 +34,20 @@ inline string time_scale_str(const TimeScale& scale) {
 }
 
 enum struct DateType { cal, jd, mjd };
+inline string date_type_str(DateType type) {
+    switch (type) {
+    case DateType::cal: return "cal";
+    case DateType::jd: return "jd";
+    case DateType::mjd: return "mjd";
+    }
+}
+inline string date_type_str_rich(DateType type) {
+    switch (type) {
+    case DateType::cal: return "Calendar";
+    case DateType::jd: return "Julian Date";
+    case DateType::mjd: return "Modified Julian Date";
+    }
+}
 enum struct DateTimeType { sec, hms, cal, jd, mjd };
 struct CalendarTime {
     i32 year = 2000;
@@ -457,6 +471,14 @@ inline string cal_str(
 }
 
 enum struct CalendarPrintStyle { separate, separate_vertical, string, vector };
+inline string calendar_print_style_str(CalendarPrintStyle style) {
+    switch (style) {
+    case CalendarPrintStyle::separate: return "separate";
+    case CalendarPrintStyle::separate_vertical: return "separate_vertical";
+    case CalendarPrintStyle::string: return "string";
+    case CalendarPrintStyle::vector: return "vector";
+    }
+}
 inline void print_cal(
     const CalendarTime& cal,
     CalendarPrintStyle style = CalendarPrintStyle::separate
