@@ -4739,7 +4739,7 @@ void run_scenario_render_diag() {
     RenderLoopConfig render_cfg{};
     render_cfg.window_title = "Scenario Render Diag";
     render_cfg.stepper_cfg = stepper_cfg;
-    render_cfg.camera.position = vec3f{1.0f, 1.0f, 1.0f} * 50000.0f;
+    render_cfg.camera.position = vec3f{1.0f, 1.0f, 1.0f} * 75000.0f;
     render_cfg.camera.fovy = 45.0f;
     render_cfg.camera.projection = CAMERA_PERSPECTIVE;
     render_cfg.camera.up = axis_zf;

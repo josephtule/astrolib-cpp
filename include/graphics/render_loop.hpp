@@ -25,6 +25,7 @@ struct RenderLoopConfig {
     bool realtime = false;
     WorldStepperConfig stepper_cfg{};
     bool step_single = false;
+    bool display_ui = true;
 
     bool display_body_stats = true;
     bool edit_body_stats = false;
@@ -49,6 +50,10 @@ struct RenderLoopState {
     WorldStepperWorkspace wksp;
     Camera3D camera;
     RenderAssets assets;
+
+    bool relative_step = true;
+    f64 step_to_time = 0;
+    f64 step_by_delta = 0;
 
     f64 dt = 0.0; // dt used (either dt0 or frametime)
 
@@ -75,8 +80,9 @@ struct RenderLoopState {
     string filepath;
     StatusCode file_status = StatusCode::file_not_found;
     bool relative_path = true;
-    bool load_attempt = false;
+    bool file_attempt = false;
     string load_filepath;
+    string save_filepath;
     ScenarioConfig scenario;
     ScenarioBuildResult scenario_result;
 

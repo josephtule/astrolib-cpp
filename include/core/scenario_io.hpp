@@ -32,7 +32,6 @@ struct ScenarioUnitConfig {
     string mass = "kg";
 };
 
-enum struct DateType { cal, jd, mjd };
 inline string date_type_str(const DateType& type) {
     switch (type) {
     case DateType::cal: return "calendar";
@@ -98,6 +97,7 @@ struct ScenarioGravityConfig {
     i32 order = 0;
     string coefficients;
     vecXd J;
+    matXd C, S;
     GravityCoefficientSource coefficient_source = GravityCoefficientSource::none;
 };
 
@@ -284,4 +284,10 @@ StatusCode build_world_from_scenario_config(
     World& world,
     ScenarioBuildResult& result,
     WorldStepperConfig& stepper
+);
+StatusCode build_scenario_config_from_world(
+    ScenarioConfig& cfg,
+    const World& world,
+    ScenarioBuildResult& result,
+    const WorldStepperConfig& stepper
 );

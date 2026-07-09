@@ -33,14 +33,19 @@ enum struct StatusCode {
     instrument_not_found,
     sample_not_found,
     interp_failed,
+
     file_not_found,
     file_write_failed,
     file_close_failed,
+    file_open_failed,
+    file_already_exists,
+    file_overwritten,
+
     unsupported_method,
+
     body_not_found,
     gravity_model_not_found,
     attitude_type_not_found,
-    file_open_failed,
     parse_failed,
     celestial_model_not_found,
     matrix_invert_failed,
@@ -89,6 +94,8 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::parse_failed: return "Parse failed";
     case StatusCode::celestial_model_not_found: return "Celestial Model not found";
     case StatusCode::matrix_invert_failed: return "Matrix inversion failed";
+    case StatusCode::file_already_exists: return "File already exists";
+    case StatusCode::file_overwritten: return "File is overwritten";
     }
 
     return "Unknown Status";

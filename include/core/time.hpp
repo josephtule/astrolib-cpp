@@ -33,6 +33,8 @@ inline string time_scale_str(const TimeScale& scale) {
     return "unknown";
 }
 
+enum struct DateType { cal, jd, mjd };
+enum struct DateTimeType { sec, hms, cal, jd, mjd };
 struct CalendarTime {
     i32 year = 2000;
     i32 month = 1;
@@ -82,7 +84,6 @@ inline f64 seconds_of_day(i32 hour, i32 minute, f64 second) {
 }
 
 inline HMSTime frac_day_to_hms(f64 frac_day) {
-
     f64 sec_in_day = 24 * 3600; // assumes uniform 86400s day
     f64 total_sec = frac_day * sec_in_day;
     i32 hours = i32(total_sec / 3600);

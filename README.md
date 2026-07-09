@@ -26,7 +26,7 @@ Scenario exporting/importing and body profiles
 ```text
 include/
   core/        astrodynamics, estimation, world, scenario, time, EOP
-  graphics/   Raylib rendering helpers
+  graphics/    Raylib rendering helpers
   util/        math, units, typedefs, vector definitions
 
 src/

@@ -268,7 +268,7 @@ static void render_single_frame(
 
     EndMode3D();
     if (cfg.draw.draw_fps) DrawFPS(0, 0);
-    render_loop_ui(world, cfg, state);
+    if (cfg.display_ui) render_loop_ui(world, cfg, state);
     EndDrawing();
 }
 
@@ -468,6 +468,10 @@ static void handle_camera_movement_input(
 static void handle_input(RenderLoopConfig& cfg, const World& world, f32 dt) {
     // TODO: create a key map and key map settings page where users can change map
 
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        toggle(cfg.display_ui);
+    }
+
     const ImGuiIO& io = ImGui::GetIO();
     bool ui_wants_mouse = io.WantCaptureMouse;
     bool ui_wants_keyboard = io.WantCaptureKeyboard;
@@ -516,11 +520,10 @@ void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
         CloseWindow();
         return;
     }
+    SetExitKey(KEY_NULL);
 
     RenderLoopState state;
     init_render_loop_state(world, cfg, state);
-
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     state.dt = dt0;
     if (cfg.set_target_fps) SetTargetFPS(cfg.target_fps);

@@ -3,6 +3,7 @@
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/state.hpp"
+#include "core/time.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 
@@ -52,11 +53,24 @@ class World {
     f64 t_sim_ = 0.0;
     bool paused = false;
 
+    JulianDate jd{};
+    TimeScale time_scale = TimeScale::utc;
+    bool date_active = false;
+
     EntityId allocate_id();
     EntityId insert_body(uptr<Body> body);
 
   public:
     f64 t_sim() const;
+
+    bool is_date_active() const { return date_active; }
+    void set_date(const JulianDate jd);
+    void set_date(const ModifiedJulianDate mjd);
+    void set_date(const CalendarTime cal);
+    JulianDate get_date_jd() const;
+    ModifiedJulianDate get_date_mjd() const;
+    CalendarTime get_date_cal() const;
+
     void reset_time(f64 t0 = 0.0);
     void advance_time(f64 dt);
 

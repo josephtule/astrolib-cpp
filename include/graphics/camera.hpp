@@ -14,6 +14,14 @@ enum struct RenderCameraMode {
     // track_axis
     // track_attitude
 };
+inline bool is_orbit(RenderCameraMode mode) {
+    switch (mode) {
+    case RenderCameraMode::locked: return false;
+    case RenderCameraMode::target: return true;
+    case RenderCameraMode::origin: return true;
+    case RenderCameraMode::free: return false;
+    }
+}
 inline string camera_mode_str(const RenderCameraMode& mode) {
     switch (mode) {
     case RenderCameraMode::locked: return "locked";
@@ -23,7 +31,6 @@ inline string camera_mode_str(const RenderCameraMode& mode) {
     }
     return "unknoown";
 }
-
 struct RenderCameraConfig {
     RenderCameraMode mode = RenderCameraMode::target;
 

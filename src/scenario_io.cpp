@@ -13,6 +13,7 @@
 
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
+#include "raylib.h"
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/tools.hpp"
@@ -2469,8 +2470,7 @@ static StatusCode validate_mass_properties(
     if (!finite_pos(mp.mass)) return StatusCode::invalid_mass_properties;
     if (!finite_mat(mp.inertia)) return StatusCode::invalid_mass_properties;
 
-    if (!validate_inertia(mp.inertia, tol))
-        return StatusCode::invalid_mass_properties;
+    if (!validate_inertia(mp.inertia, tol)) return StatusCode::invalid_mass_properties;
 
     return StatusCode::ok;
 }
@@ -2816,8 +2816,7 @@ static StatusCode apply_state_tr_config(
         OEClassical coes = cfg.coes;
         coes.sma = convert_length(coes.sma, cfg.units_length, ULength::kilometer);
         x_tr = classical_to_rv(coes, mu, cfg.units_angle);
-        if (!finite_vec(x_tr.r) || !finite_vec(x_tr.v))
-            return StatusCode::invalid_state;
+        if (!finite_vec(x_tr.r) || !finite_vec(x_tr.v)) return StatusCode::invalid_state;
     } break;
     }
 
@@ -3216,6 +3215,155 @@ StatusCode build_world_from_scenario_config(
         }
         result.station_ids.insert({stat_cfg.id, id});
         result.body_ids.insert({stat_cfg.id, id});
+    }
+
+    return StatusCode::ok;
+}
+
+StatusCode build_scenario_config_from_world(
+    ScenarioConfig& cfg,
+    const World& world,
+    ScenarioBuildResult& result,
+    const WorldStepperConfig& stepper
+) {
+    cfg = ScenarioConfig{};
+    ScenarioWorldStepperConfig& cfg_stepper = cfg.world_stepper;
+
+    // TODO: some field are not filled out in the cfg, fill out later
+    // TODO: add options later
+
+    cfg_stepper.integrator_tr = stepper.integrator_tr;
+    cfg_stepper.integrator_att = stepper.integrator_att;
+    cfg_stepper.paused = stepper.paused;
+    cfg_stepper.substeps = stepper.substeps;
+    cfg_stepper.ticks = stepper.ticks;
+    cfg_stepper.dt_scale = stepper.dt_scale;
+
+    cfg.time.t0 = world.t_sim();
+    // world.
+
+    svec<ScenarioCelestialConfig>& celestials = cfg.celestials;
+    for (const EntityId id : world.celestial_ids()) {
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr) return StatusCode::body_not_found;
+
+        ScenarioCelestialConfig out;
+        out.id = cel->name;
+
+        out.attitude_model = cel->attitude_model;
+
+        out.x_tr.input_type = StateTrInputType::pos_vel;
+        out.x_tr.r = cel->x_tr.r;
+        out.x_tr.v = cel->x_tr.v;
+
+        out.x_att.input_type = AttitudeType::quaternion;
+        out.x_att.q = cel->x_att.q;
+        out.x_att.w = cel->x_att.w;
+
+        out.propagation.translation = cel->propagate_tr;
+        out.propagation.attitude = cel->propagate_att;
+
+        out.model.id = "custom";
+        out.model.semimajor_axis = cel->semimajor_axis;
+        out.model.semiminor_axis = cel->semiminor_axis;
+        out.model.mean_radius = cel->mean_radius;
+        out.model.eccentricity = cel->eccentricity;
+        out.model.flattening = cel->flattening;
+
+        ScenarioGravityConfig& gravity = out.model.gravity_model;
+        gravity.model = cel->gravity_model;
+        gravity.mu = cel->mu;
+        gravity.radius = cel->ref_radius;
+        gravity.degree = cel->degree;
+        gravity.order = cel->order;
+        gravity.J = cel->J;
+        gravity.C = cel->C;
+        gravity.S = cel->S;
+        switch (gravity.model) {
+        case GravityModel::pointmass:
+            gravity.coefficient_source = GravityCoefficientSource::none;
+        case GravityModel::zonal:
+            gravity.coefficient_source = GravityCoefficientSource::direct_zonal;
+        case GravityModel::spherical_harmonics:
+            gravity.coefficient_source
+                = GravityCoefficientSource::direct_spherical_harmonics;
+        }
+
+        celestials.push_back(out);
+        // TODO: figure out how i should do this, maybe create new json file with coefs?
+    }
+
+    svec<ScenarioSatelliteConfig>& satellites = cfg.satellites;
+    for (const EntityId id : world.satellite_ids()) {
+        const Satellite* sat = world.satellite(id);
+        if (sat == nullptr) return StatusCode::body_not_found;
+
+        ScenarioSatelliteConfig out;
+        out.id = sat->name;
+
+        out.propagation.translation = sat->propagate_tr;
+        out.propagation.attitude = sat->propagate_att;
+
+        out.x_tr.input_type = StateTrInputType::pos_vel;
+        out.x_tr.r = sat->x_tr.r;
+        out.x_tr.v = sat->x_tr.v;
+
+        out.x_att.input_type = AttitudeType::quaternion;
+        out.x_att.q = sat->x_att.q;
+        out.x_att.w = sat->x_att.w;
+
+        out.mass_properties.mass = sat->mass_properties.mass;
+        out.mass_properties.inertia = sat->mass_properties.I;
+        out.mass_properties.principle_axes = sat->mass_properties.principal_axes;
+        out.mass_properties.offset_body = sat->mass_properties.offset_body;
+
+        satellites.push_back(out);
+    }
+
+    svec<ScenarioStationConfig>& stations = cfg.stations;
+    for (const EntityId id : world.station_ids()) {
+        const Station* stat = world.station(id);
+        if (stat == nullptr) return StatusCode::body_not_found;
+
+        ScenarioStationConfig out;
+        out.id = stat->name;
+
+        out.anchored = stat->anchored;
+        if (out.anchored) {
+            const Celestial* cel = world.celestial(stat->anchor_id);
+            if (cel == nullptr) return StatusCode::invalid_anchor;
+            out.anchor = cel->name;
+            out.coordinate_type = "detic_llh";
+            out.llh_BCBF = stat->llh_BCBF;
+            out.local_frame = "ENU";
+            out.units_angle = UAngle::radian;
+        } else {
+            out.propagation.translation = stat->propagate_tr;
+            out.propagation.attitude = stat->propagate_att;
+
+            out.x_tr.input_type = StateTrInputType::pos_vel;
+            out.x_tr.r = stat->x_tr.r;
+            out.x_tr.v = stat->x_tr.v;
+
+            out.x_att.input_type = AttitudeType::quaternion;
+            out.x_att.q = stat->x_att.q;
+            out.x_att.w = stat->x_att.w;
+
+            out.mass_properties.mass = stat->mass_properties.mass;
+            out.mass_properties.inertia = stat->mass_properties.I;
+            out.mass_properties.principle_axes = stat->mass_properties.principal_axes;
+            out.mass_properties.offset_body = stat->mass_properties.offset_body;
+        }
+
+        for (const auto& [id, instr] : stat->instruments) {
+            ScenarioInstrumentConfig out;
+
+            out.id = instr.name;
+            out.type = instr.type;
+            out.covariance_cfg.covariance = instr.R;
+            out.covariance_cfg.type = "matrix";
+            out.enabled = instr.enabled;
+        }
     }
 
     return StatusCode::ok;

@@ -14,6 +14,3 @@
 [submodule "external/rlimgui"]
 	path = external/rlimgui
 	url = https://github.com/raylib-extras/rlImGui.git
-[submodule "external/imguifd"]
-	path = external/imguifd
-	url = https://github.com/Julianiolo/ImGuiFD.git

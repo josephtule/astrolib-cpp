@@ -6,6 +6,9 @@
 
 bool init_render_ui() {
     rlImGuiSetup(true);
+    ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
     ImPlot::CreateContext();
     return true;
 }

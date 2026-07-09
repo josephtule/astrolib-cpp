@@ -5,6 +5,8 @@
 #include "core/measurement.hpp"
 #include "core/scenario_io.hpp"
 #include "core/time.hpp"
+#include "core/transform.hpp"
+#include "graphics/camera.hpp"
 #include "graphics/render_loop.hpp"
 #include "graphics/ui.hpp"
 
@@ -15,13 +17,18 @@
 
 #include "raylib.h"
 #include "util/lightweight_tools.hpp"
+#include "util/math.hpp"
+#include "util/units.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 
 namespace im = ImGui;
 namespace imp = ImPlot;
 namespace imfd = ImGuiFD;
+
+// imfd::settings.ascii
 
 static Color status_color(const StatusCode code) {
     switch (code) {
@@ -29,6 +36,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::ok: return DARKGREEN;
 
     // Informational non-failure states
+    case StatusCode::file_overwritten:
     case StatusCode::prediction_only: return SKYBLUE;
 
     // Warning states that may still produce a usable result
@@ -75,6 +83,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::file_write_failed:
     case StatusCode::file_close_failed:
     case StatusCode::file_open_failed:
+    case StatusCode::file_already_exists:
     case StatusCode::matrix_invert_failed: return RED;
     }
 
@@ -105,7 +114,7 @@ static StatusCode validate_body_edit_draft(
 static StatusCode apply_body_edit_draft(BodyEditDraft& draft, World& world);
 static void cancel_body_edit_draft(BodyEditDraft& draft);
 static void open_scenario_file_dialog(RenderLoopState& state);
-static void render_scenario_file_dialog(RenderLoopState& state);
+static void render_open_scenario_file_dialog(RenderLoopState& state);
 
 static void render_simulation_ui(
     World& world,
@@ -158,6 +167,7 @@ static void render_station_instruments_ui(
 );
 static bool body_edit_draft_changed(const BodyEditDraft& draft, const World& world);
 static void render_body_list_row(const Body& body, World& world, RenderLoopConfig& cfg);
+static void request_scenario_save(RenderLoopState& state);
 
 static Body* draft_body_ptr(BodyEditDraft& draft) {
     switch (draft.edit_body_type) {
@@ -212,18 +222,32 @@ static string normalize_file_dialog_path(const char* path_in) {
     return path;
 }
 
+static std::filesystem::path resolve_textbox_path(
+    const string& filepath,
+    bool relative_path
+) {
+    std::filesystem::path path = filepath;
+
+    if (relative_path) {
+        return std::filesystem::path(pwd) / path.relative_path();
+    }
+
+    if (path.is_absolute()) return path;
+    return std::filesystem::path("/") / path.relative_path();
+}
+
 static string scenario_dialog_start_path(const RenderLoopState& state) {
     std::filesystem::path path;
 
     if (state.filepath.empty()) {
         path = std::filesystem::path(PROJECT_ROOT) / "scenarios";
-    } else if (state.relative_path) {
-        path = std::filesystem::path(pwd) / state.filepath;
     } else {
-        path = state.filepath;
+        path = resolve_textbox_path(state.filepath, state.relative_path);
     }
 
     if (std::filesystem::is_regular_file(path)) {
+        path = path.parent_path();
+    } else if (!std::filesystem::exists(path) && !path.parent_path().empty()) {
         path = path.parent_path();
     }
 
@@ -234,31 +258,150 @@ static string scenario_dialog_start_path(const RenderLoopState& state) {
     return normalize_file_dialog_path(path.string().c_str());
 }
 
-static void open_scenario_file_dialog(RenderLoopState& state) {
-    const string path = scenario_dialog_start_path(state);
-    imfd::settings.displayMode = imfd::GlobalSettings::DisplayMode_List;
-    imfd::OpenDialog(
-        "Open Scenario",
-        ImGuiFDMode_LoadFile,
-        path.c_str(),
-        "*.json",
-        0,
-        1
-    );
+static string scenario_file_path(const RenderLoopState& state) {
+    std::filesystem::path path
+        = resolve_textbox_path(state.filepath, state.relative_path);
+    return normalize_file_dialog_path(path.string().c_str());
 }
 
-static void render_scenario_file_dialog(RenderLoopState& state) {
+static bool path_exists(const string& filepath) {
+    std::error_code ec;
+    return std::filesystem::exists(filepath, ec);
+}
+
+static bool is_existing_regular_file(const string& filepath) {
+    std::error_code ec;
+    return std::filesystem::exists(filepath, ec)
+           && std::filesystem::is_regular_file(filepath, ec);
+}
+
+static bool is_existing_non_regular_file(const string& filepath) {
+    std::error_code ec;
+    return std::filesystem::exists(filepath, ec)
+           && !std::filesystem::is_regular_file(filepath, ec);
+}
+
+static void set_scenario_dialog_style() {
+    imfd::settings.displayMode = imfd::GlobalSettings::DisplayMode_List;
+    imfd::settings.asciiArtIcons = false;
+}
+
+static void open_scenario_file_dialog(RenderLoopState& state) {
+    const string path = scenario_dialog_start_path(state);
+    set_scenario_dialog_style();
+    imfd::OpenDialog("Open Scenario", ImGuiFDMode_LoadFile, path.c_str(), "*.json", 0, 1);
+}
+
+static void open_scenario_save_dialog(RenderLoopState& state) {
+    const string path = scenario_dialog_start_path(state);
+    set_scenario_dialog_style();
+    imfd::OpenDialog("Save Scenario", ImGuiFDMode_SaveFile, path.c_str(), "*.json", 0, 1);
+}
+
+static void open_folder_dialog(RenderLoopState& state) {
+    const string path = scenario_dialog_start_path(state);
+    set_scenario_dialog_style();
+    imfd::OpenDialog("Open Folder", ImGuiFDMode_OpenDir, path.c_str(), NULL, 0, 1);
+}
+
+static void render_open_scenario_file_dialog(RenderLoopState& state) {
+    set_scenario_dialog_style();
     if (imfd::BeginDialog("Open Scenario")) {
         if (imfd::ActionDone()) {
             if (imfd::SelectionMade()) {
                 state.filepath
                     = normalize_file_dialog_path(imfd::GetSelectionPathString(0));
                 state.relative_path = false;
-                state.load_attempt = false;
+                state.file_attempt = false;
             }
             imfd::CloseCurrentDialog();
         }
         imfd::EndDialog();
+    }
+}
+
+static void render_save_scenario_file_dialog(RenderLoopState& state) {
+    set_scenario_dialog_style();
+    if (imfd::BeginDialog("Save Scenario")) {
+        if (imfd::ActionDone()) {
+            if (imfd::SelectionMade()) {
+                state.filepath
+                    = normalize_file_dialog_path(imfd::GetSelectionPathString(0));
+                state.relative_path = false;
+                state.save_filepath = state.filepath;
+                state.file_attempt = true;
+
+                if (is_existing_non_regular_file(state.save_filepath)) {
+                    state.file_status = StatusCode::invalid_input;
+                } else if (is_existing_regular_file(state.save_filepath)) {
+                    state.file_status = StatusCode::file_already_exists;
+                    im::OpenPopup("File Warning");
+                } else {
+                    request_scenario_save(state);
+                }
+            }
+            imfd::CloseCurrentDialog();
+        }
+        imfd::EndDialog();
+    }
+}
+
+static void render_open_folder_dialog(RenderLoopState& state) {
+    set_scenario_dialog_style();
+    if (imfd::BeginDialog("Open Folder")) {
+        if (imfd::ActionDone()) {
+            if (imfd::SelectionMade()) {
+                state.filepath
+                    = normalize_file_dialog_path(imfd::GetSelectionPathString(0));
+                state.relative_path = false;
+                state.file_attempt = false;
+            }
+            imfd::CloseCurrentDialog();
+        }
+        imfd::EndDialog();
+    }
+}
+
+static void request_scenario_save(RenderLoopState& state) {
+    state.file_attempt = true;
+    state.save_filepath = scenario_file_path(state);
+
+    if (state.save_filepath.empty()) {
+        state.file_status = StatusCode::invalid_input;
+        return;
+    }
+
+    if (is_existing_non_regular_file(state.save_filepath)) {
+        state.file_status = StatusCode::invalid_input;
+        return;
+    }
+
+    if (is_existing_regular_file(state.save_filepath)) {
+        state.file_status = StatusCode::file_already_exists;
+        im::OpenPopup("File Warning");
+        return;
+    }
+
+    state.file_status = StatusCode::unsupported_method;
+}
+
+static void render_scenario_overwrite_popup(RenderLoopState& state) {
+    if (im::BeginPopupModal("File Warning")) {
+        im::Text("File already exists, overwrite?");
+        if (im::Button("Yes")) {
+            state.file_status = StatusCode::file_overwritten;
+            im::CloseCurrentPopup();
+            request_scenario_save(state);
+        }
+
+        im::SameLine();
+
+        if (im::Button("Cancel")) {
+            state.file_status = StatusCode::file_already_exists;
+            im::CloseCurrentPopup();
+        }
+
+        im::EndPopup();
     }
 }
 // static void push_selected_field_style() {
@@ -440,7 +583,7 @@ static void render_simulation_ui(
     im::Begin("Simulation");
     WorldStepperConfig& stepper = cfg.stepper_cfg;
 
-    if (im::Button("Play/Pause")) {
+    if (im::Button("Run/Pause")) {
         toggle(stepper.paused);
     }
     // TODO: hide single step while sim running
@@ -458,11 +601,20 @@ static void render_simulation_ui(
     im::Checkbox("Realtime", &cfg.realtime);
 
     im::Text("Time = %10.4f", world.t_sim());
-    im::SameLine();
     DHMStime dhms = sec_to_dhms(world.t_sim());
     im::Text("T0+%04d-%02d:%02d:%05.4f", dhms.day, dhms.hour, dhms.minute, dhms.second);
+    if (world.is_date_active()) {
+        im::Text("JD: %.6lf", jd_to_scalar(world.get_date_jd()));
+        im::Text("Date: %s", cal_str(world.get_date_cal()).c_str());
+    }
+
+    // TODO: allow set date, enum on date type and copy "now"
     im::Text("dt = %.3f", state.dt);
-    im::Text("Effective dt = %.3f", state.dt * stepper.ticks * stepper.dt_scale);
+    im::Text(
+        "Effective dt = %.3f (%d steps)",
+        state.dt * stepper.ticks * stepper.dt_scale,
+        stepper.ticks * stepper.substeps
+    );
 
     // im::Checkbox("Paused", &stepper.paused);
 
@@ -481,7 +633,40 @@ static void render_simulation_ui(
     // only allow while paused
     // if using history make vector and dropdown based on time or name?, resetting clears
     // history
-    
+
+    if (!cfg.realtime && stepper.paused) {
+        im::Separator();
+        // step to a certain world sim time or by delta amount of time using the current
+        // dt, ticks, substeps, and dt_scale settings
+        im::Text("Offline step"); // TODO: rename this
+        im::Checkbox("Relative", &state.relative_step);
+
+        // TODO: allow other date/time types later
+        if (state.relative_step) {
+            im::TextSL("Step by:");
+            im::InputDouble("sec", &state.step_by_delta);
+            state.step_to_time = world.t_sim() + state.step_by_delta;
+        } else {
+            im::TextSL("Step to:");
+            im::InputDouble("sec", &state.step_to_time);
+            state.step_by_delta = state.step_to_time - world.t_sim();
+        }
+        if (im::Button("Run")) {
+            // TODO: make ui still responsive while this runs
+
+            bool finite_pos_dt = finite_nonneg(state.step_by_delta);
+            if (finite_pos_dt) {
+                // TODO: step here
+                im::SameLine();
+                im::Text("Not yet implemented");
+            } else {
+                // TODO: use statuscode
+                im::SameLine();
+                im::Text("The time change must be positive");
+            }
+        }
+    }
+
     if (im::CollapsingHeader("Scenario")) {
         im::Indent();
         im::Text("Filepath:");
@@ -489,27 +674,47 @@ static void render_simulation_ui(
         im::InputText("##filepath", &state.filepath);
         im::SameLine();
         if (im::Button("/")) {
+            open_folder_dialog(state);
+        }
+        im::SameLine();
+        if (im::Button("...")) {
             open_scenario_file_dialog(state);
         }
-        render_scenario_file_dialog(state);
-        const string filename = std::filesystem::path(state.filepath).filename().string();
+        render_open_scenario_file_dialog(state);
+        render_save_scenario_file_dialog(state);
+        render_open_folder_dialog(state);
+
+        const std::filesystem::path path(state.filepath);
+        const string filename = path.filename().string();
         im::Text("File: %s", filename.c_str());
 
         im::Checkbox("Relative filepath", &state.relative_path);
 
-        if (im::Button("Save")) {
-            // TODO:
-            // TODO: if file already exists, pop up warning
+        if (im::Button("Save As")) {
+            build_scenario_config_from_world(
+                state.scenario,
+                world,
+                state.scenario_result,
+                cfg.stepper_cfg
+            );
+            open_scenario_save_dialog(state);
         }
+        render_scenario_overwrite_popup(state);
+
         im::SameLine();
         if (im::Button("Load")) {
-            // TEMP: use raylib file explorer or imgui-filebrowser
-            // TODO: if file doesn't exist, pop up warning
-            state.load_attempt = true;
-            string path = state.filepath;
-            if (state.relative_path) path = pwd + path;
+            state.file_attempt = true;
+            string path = scenario_file_path(state);
             state.load_filepath = path;
-            state.file_status = load_scenario_json(path, state.scenario);
+
+            if (!path_exists(path)) {
+                state.file_status = StatusCode::file_not_found;
+            } else if (!is_existing_regular_file(path)) {
+                state.file_status = StatusCode::invalid_input;
+            } else {
+                state.file_status = load_scenario_json(path, state.scenario);
+            }
+
             if (state.file_status == StatusCode::ok) {
                 world = World{};
                 build_world_from_scenario_config(
@@ -522,26 +727,17 @@ static void render_simulation_ui(
                 state.scenario_result = ScenarioBuildResult{};
             }
         }
-        if (state.load_attempt) {
-            const string load_filename
-                = std::filesystem::path(state.load_filepath).filename().string();
-            if (load_filename.empty()) {
-                status_text("Scenario Loader Status", state.file_status);
-            } else {
-                const string label = "Scenario Loader Status (" + load_filename + ")";
-                status_text(label.c_str(), state.file_status);
-            }
+        im::SameLine();
+        if (im::Button("Cancel")) {
+            state.file_attempt = false;
+            state.filepath = "";
+            state.load_filepath = "";
+            state.save_filepath = "";
+        }
+        if (state.file_attempt) {
+            status_text("Scenario Loader/Saver Status", state.file_status);
         }
         im::Unindent();
-    }
-
-    if (im::Button("Add Body")) {
-        state.add_body = true;
-        if (state.add_body_type == BodyType::unknown) {
-            state.add_body_type = BodyType::celestial;
-        }
-        init_add_body_draft_defaults(state, world, state.add_body_type);
-        state.add_body_status = StatusCode::ok;
     }
 
     im::End();
@@ -619,7 +815,6 @@ static void render_camera_ui(
         }
     }
 
-    // TODO: add dropdown or +- or separate submenu
     if (camera.mode == RenderCameraMode::target) {
         im::Indent();
         const Body* body = world.body(camera.target_id);
@@ -685,6 +880,22 @@ static void render_camera_ui(
         camera.fly_speed = default_cfg.fly_speed;
         camera.orbit_speed = default_cfg.orbit_speed;
         camera.pan_speed = default_cfg.pan_speed;
+    }
+
+    if (is_orbit(camera.mode)) {
+        vec3f azelr = cart_to_sph<f32>(camera.position, tol9, UAngle::degree);
+        vec2f azel = azelr.segment<2>(0);
+        if (im::SliderFloat2(
+                "[azimuth, elevation]",
+                azel,
+                vec2f{-179.9f, -89.9f},
+                vec2f{179.9f, 89.9f},
+                "%.1f"
+            )) {
+            azelr(0) = azel(0);
+            azelr(1) = azel(1);
+            camera.position = sph_to_cart(azelr, UAngle::degree);
+        }
     }
 
     im::End();
@@ -878,17 +1089,31 @@ static void render_body_stats_ui(
             cfg.camera.target_id = cfg.body_stats_id;
             sync_camera_tracking(cfg.camera, world);
         }
-        if (active && im::Button("Make Inactive")) {
-            world.make_inactive(cfg.body_stats_id);
-            state.wksp.dirty = true;
-            if (cfg.camera.target_id == body->id) {
-                cycle_active_id(cfg.camera.target_id, world, 1);
-                sync_camera_tracking(cfg.camera, world);
+        if (cfg.stepper_cfg.paused) {
+            if (active && im::Button("Make Inactive")) {
+                world.make_inactive(cfg.body_stats_id);
+                state.wksp.dirty = true;
+                if (cfg.camera.target_id == body->id) {
+                    cycle_active_id(cfg.camera.target_id, world, 1);
+                    sync_camera_tracking(cfg.camera, world);
+                }
+            }
+            if (!active && im::Button("Make Active")) {
+                world.make_active(cfg.body_stats_id);
+                state.wksp.dirty = true;
             }
         }
-        if (!active && im::Button("Make Active")) {
-            world.make_active(cfg.body_stats_id);
-            state.wksp.dirty = true;
+    }
+
+    if (cfg.stepper_cfg.paused) {
+        im::Separator();
+        if (im::Button("Add Body")) {
+            state.add_body = true;
+            if (state.add_body_type == BodyType::unknown) {
+                state.add_body_type = BodyType::celestial;
+            }
+            init_add_body_draft_defaults(state, world, state.add_body_type);
+            state.add_body_status = StatusCode::ok;
         }
     }
 
@@ -1693,7 +1918,6 @@ static void render_body_list_row(const Body& body, World& world, RenderLoopConfi
     const bool selected = cfg.body_stats_id == body.id;
 
     im::PushID(static_cast<int>(body.id));
-
     float row_height = ImGui::GetTextLineHeightWithSpacing();
     if (ImGui::Selectable(
             "##row",
@@ -1703,6 +1927,12 @@ static void render_body_list_row(const Body& body, World& world, RenderLoopConfi
 
         )) {
         cfg.body_stats_id = body.id;
+    }
+    if (im::IsItemHovered()) {
+        if (im::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            cfg.camera.target_id = body.id;
+            sync_camera_tracking(cfg.camera, world);
+        }
     }
 
     im::SameLine();
@@ -1714,7 +1944,9 @@ static void render_body_list_row(const Body& body, World& world, RenderLoopConfi
     }
     im::SameLine();
 
-    im::Text("%s (id: %llu)", body.name.c_str(), body.id);
+    string camera_target_marker = "";
+    if (cfg.camera.target_id == body.id) camera_target_marker = " <";
+    im::Text("%s (id: %llu)%s", body.name.c_str(), body.id, camera_target_marker.c_str());
 
     im::PopID();
 }

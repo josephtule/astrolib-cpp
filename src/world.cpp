@@ -4,7 +4,9 @@
 #include "core/entity.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
+#include "core/time.hpp"
 #include "core/transform.hpp"
+#include "util/lightweight_tools.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
@@ -13,9 +15,37 @@
 
 f64 World::t_sim() const { return t_sim_; }
 
-void World::reset_time(f64 t0) { t_sim_ = t0; }
+void World::reset_time(f64 t0) {
+    if (date_active) {
+        jd.frac = jd.frac - (t_sim_ - t0) / 86400.0;
+        jd = normalize_jd(jd);
+    }
+    t_sim_ = t0;
+}
 
-void World::advance_time(f64 dt) { t_sim_ += dt; }
+void World::advance_time(f64 dt) {
+    if (date_active) {
+        jd.frac = jd.frac + dt / 86400.0;
+        jd = normalize_jd(jd);
+    }
+    t_sim_ += dt;
+}
+
+void World::set_date(const JulianDate jd_in) {
+    date_active = true;
+    jd = jd_in;
+}
+void World::set_date(const ModifiedJulianDate mjd) {
+    date_active = true;
+    jd = mjd_to_jd(mjd);
+}
+void World::set_date(const CalendarTime cal) {
+    date_active = true;
+    jd = cal_to_jd(cal);
+}
+JulianDate World::get_date_jd() const { return jd; }
+ModifiedJulianDate World::get_date_mjd() const { return jd_to_mjd(jd); }
+CalendarTime World::get_date_cal() const { return jd_to_cal(jd); }
 
 WorldStateSnapshot World::capture_checkpoint() const {
     WorldStateSnapshot snapshot;

@@ -100,6 +100,73 @@ inline bool InputDouble7(
     return InputDouble7(label, v.data(), format, flags);
 }
 
+inline bool SliderFloat3(
+    const char* label,
+    vec3f& v,
+    const vec3f& v_min,
+    const vec3f& v_max,
+    const char* format = "%.3f",
+    ImGuiSliderFlags flags = 0
+) {
+    bool changed = false;
+
+    PushID(label);
+    Text("%s", label);
+
+    f32 width = (GetContentRegionAvail().x - 2.0f * GetStyle().ItemSpacing.x)
+                / 3.0f;
+
+    PushItemWidth(width);
+    changed |= SliderFloat("##x", &v(0), v_min(0), v_max(0), format, flags);
+    PopItemWidth();
+
+    SameLine();
+
+    PushItemWidth(width);
+    changed |= SliderFloat("##y", &v(1), v_min(1), v_max(1), format, flags);
+    PopItemWidth();
+
+    SameLine();
+
+    PushItemWidth(width);
+    changed |= SliderFloat("##z", &v(2), v_min(2), v_max(2), format, flags);
+    PopItemWidth();
+
+    PopID();
+    return changed;
+}
+
+inline bool SliderFloat2(
+    const char* label,
+    vec2f& v,
+    const vec2f& v_min,
+    const vec2f& v_max,
+    const char* format = "%.3f",
+    ImGuiSliderFlags flags = 0
+) {
+    bool changed = false;
+
+    PushID(label);
+    Text("%s", label);
+
+    f32 width = (GetContentRegionAvail().x - GetStyle().ItemSpacing.x) * 0.5f;
+
+    PushItemWidth(width);
+    changed |= SliderFloat("##x", &v(0), v_min(0), v_max(0), format, flags);
+    PopItemWidth();
+
+    SameLine();
+
+    PushItemWidth(width);
+    changed |= SliderFloat("##y", &v(1), v_min(1), v_max(1), format, flags);
+    PopItemWidth();
+
+    PopID();
+    return changed;
+}
+
+// TODO: make double version, only change original vector if sliders change
+
 inline bool InputDouble3x3(
     const char* label,
     mat3d& m,
