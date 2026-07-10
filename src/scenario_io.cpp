@@ -2684,19 +2684,19 @@ static StatusCode validate_station_config(
     if (string_empty(stat.id)) return StatusCode::invalid_input;
 
     if (stat.anchored) {
-        if (string_empty(stat.anchor)) return StatusCode::invalid_anchor;
+        if (string_empty(stat.anchor)) return StatusCode::anchor_not_found;
 
         const auto* anchor = find_celestial_config(cfg, stat.anchor);
-        if (!anchor) return StatusCode::invalid_anchor;
+        if (!anchor) return StatusCode::anchor_not_found;
 
         if (stat.coordinate_type == "detic_llh") {
-            if (!finite_vec(stat.llh)) return StatusCode::invalid_anchor;
+            if (!finite_vec(stat.llh)) return StatusCode::anchor_not_found;
             if (!finite_inrange(stat.llh(0), -90.0, 90.0, true, true)) {
-                return StatusCode::invalid_anchor;
+                return StatusCode::anchor_not_found;
             }
         } else if (stat.coordinate_type == "body_fixed") {
             if (!finite_norm_nonzero(stat.r_body, tol12))
-                return StatusCode::invalid_anchor;
+                return StatusCode::anchor_not_found;
         } else {
             return StatusCode::unsupported_method;
         }
@@ -3199,7 +3199,7 @@ static StatusCode apply_station_config(
     temp.anchored = cfg.anchored;
     if (cfg.anchored) {
         auto it = cel_ids.find(cfg.anchor);
-        if (it == cel_ids.end()) return StatusCode::invalid_anchor;
+        if (it == cel_ids.end()) return StatusCode::anchor_not_found;
         temp.anchor_id = it->second;
 
         if (cfg.coordinate_type == "detic_llh") {
@@ -3301,7 +3301,7 @@ StatusCode build_world_from_scenario_config(
             auto* stat = world.station(id);
             if (stat == nullptr) return StatusCode::body_not_found;
             auto* cel = world.celestial(stat->anchor_id);
-            if (cel == nullptr) return StatusCode::invalid_anchor;
+            if (cel == nullptr) return StatusCode::anchor_not_found;
 
             if (stat_cfg.coordinate_type == "detic_llh") {
                 bool set_ok = world.set_stat_anchor_detic(
@@ -3310,7 +3310,7 @@ StatusCode build_world_from_scenario_config(
                     stat->llh_BCBF,
                     UAngle::radian
                 );
-                if (!set_ok) return StatusCode::invalid_anchor;
+                if (!set_ok) return StatusCode::anchor_not_found;
             } else if (stat_cfg.coordinate_type == "body_fixed") {
                 stat->llh_BCBF = bcbf_to_detic(stat->r_body_BCBF, *cel, UAngle::radian);
             } else {
@@ -3477,7 +3477,7 @@ StatusCode build_scenario_config_from_world(
         out.anchored = stat->anchored;
         if (out.anchored) {
             const Celestial* cel = world.celestial(stat->anchor_id);
-            if (cel == nullptr) return StatusCode::invalid_anchor;
+            if (cel == nullptr) return StatusCode::anchor_not_found;
             out.anchor = cel->name;
             out.coordinate_type = "detic_llh";
             out.llh = stat->llh_BCBF;

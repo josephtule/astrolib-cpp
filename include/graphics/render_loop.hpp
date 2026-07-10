@@ -83,8 +83,7 @@ struct RenderLoopState {
     bool file_attempt = false;
     string load_filepath;
     string save_filepath;
-    ScenarioConfig scenario;
-    ScenarioBuildResult scenario_result;
+    ScenarioSession scenario;
 
     BodyFilterMode list_filter = BodyFilterMode::all;
 };

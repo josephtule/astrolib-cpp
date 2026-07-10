@@ -15,7 +15,6 @@ enum struct StatusCode {
     invalid_attitude_state,
     invalid_mass_properties,
     invalid_shape,
-    invalid_anchor,
     empty_measurements,
     empty_history,
     empty_events,
@@ -33,16 +32,17 @@ enum struct StatusCode {
     instrument_not_found,
     sample_not_found,
     interp_failed,
-
+    
     file_not_found,
     file_write_failed,
     file_close_failed,
     file_open_failed,
     file_already_exists,
     file_overwritten,
-
+    
     unsupported_method,
-
+    
+    anchor_not_found,
     body_not_found,
     gravity_model_not_found,
     attitude_type_not_found,
@@ -65,7 +65,7 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::invalid_attitude_state: return "Invalid Attitude State";
     case StatusCode::invalid_mass_properties: return "Invalid Mass Properties";
     case StatusCode::invalid_shape: return "Invalid Shape";
-    case StatusCode::invalid_anchor: return "Invalid Anchor";
+    case StatusCode::anchor_not_found: return "Anchor not found";
     case StatusCode::empty_measurements: return "Empty Measurements";
     case StatusCode::size_mismatch: return "Size Mismatch";
     case StatusCode::propagation_failed: return "Propagation Failed";

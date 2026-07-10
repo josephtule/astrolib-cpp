@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <string>
 
 namespace im = ImGui;
 namespace imp = ImPlot;
@@ -55,7 +56,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::invalid_attitude_state:
     case StatusCode::invalid_mass_properties:
     case StatusCode::invalid_shape:
-    case StatusCode::invalid_anchor:
+    case StatusCode::anchor_not_found:
     case StatusCode::size_mismatch:
     case StatusCode::time_mismatch:
     case StatusCode::invalid_covariance:
@@ -174,6 +175,444 @@ static void request_scenario_save(
     const World& world,
     bool overwrite = false
 );
+
+static const ScenarioCelestialConfig* find_celestial_config(
+    const ScenarioConfig& cfg,
+    const string& id
+) {
+    for (const auto& cel : cfg.celestials) {
+        if (cel.id == id) return &cel;
+    }
+    return nullptr;
+}
+static ScenarioCelestialConfig* find_celestial_config_mut(
+    ScenarioConfig& cfg,
+    const string& id
+) {
+    for (auto& cel : cfg.celestials) {
+        if (cel.id == id) return &cel;
+    }
+    return nullptr;
+}
+static const ScenarioCelestialConfig* find_celestial_config(
+    const ScenarioSession& scenario,
+    const EntityId id
+) {
+    auto it = scenario.build_result.celestial_config_ids.find(id);
+    if (it == scenario.build_result.celestial_config_ids.end()) return nullptr;
+    string id_str = it->second;
+    return find_celestial_config(scenario.config, id_str);
+}
+static ScenarioCelestialConfig* find_celestial_config_mut(
+    ScenarioSession& scenario,
+    const EntityId id
+) {
+    auto it = scenario.build_result.celestial_config_ids.find(id);
+    if (it == scenario.build_result.celestial_config_ids.end()) return nullptr;
+    string id_str = it->second;
+    return find_celestial_config_mut(scenario.config, id_str);
+}
+static const ScenarioSatelliteConfig* find_satellite_config(
+    const ScenarioConfig& cfg,
+    const string& id
+) {
+    for (const auto& sat : cfg.satellites) {
+        if (sat.id == id) return &sat;
+    }
+    return nullptr;
+}
+static ScenarioSatelliteConfig* find_satellite_config_mut(
+    ScenarioConfig& cfg,
+    const string& id
+) {
+    for (auto& sat : cfg.satellites) {
+        if (sat.id == id) return &sat;
+    }
+    return nullptr;
+}
+static const ScenarioSatelliteConfig* find_satellite_config(
+    const ScenarioSession& scenario,
+    const EntityId id
+) {
+    auto it = scenario.build_result.satellite_config_ids.find(id);
+    if (it == scenario.build_result.satellite_config_ids.end()) return nullptr;
+    string id_str = it->second;
+    return find_satellite_config(scenario.config, id_str);
+}
+static ScenarioSatelliteConfig* find_satellite_config_mut(
+    ScenarioSession& scenario,
+    const EntityId id
+) {
+    auto it = scenario.build_result.satellite_config_ids.find(id);
+    if (it == scenario.build_result.satellite_config_ids.end()) return nullptr;
+    string id_str = it->second;
+    return find_satellite_config_mut(scenario.config, id_str);
+}
+static const ScenarioStationConfig* find_station_config(
+    const ScenarioConfig& cfg,
+    const string& id
+) {
+    for (const auto& stat : cfg.stations) {
+        if (stat.id == id) return &stat;
+    }
+    return nullptr;
+}
+static ScenarioStationConfig* find_station_config_mut(
+    ScenarioConfig& cfg,
+    const string& id
+) {
+    for (auto& stat : cfg.stations) {
+        if (stat.id == id) return &stat;
+    }
+    return nullptr;
+}
+static const ScenarioStationConfig* find_station_config(
+    const ScenarioSession& scenario,
+    const EntityId id
+) {
+    auto it = scenario.build_result.station_config_ids.find(id);
+    if (it == scenario.build_result.station_config_ids.end()) return nullptr;
+    string id_str = it->second;
+    return find_station_config(scenario.config, id_str);
+}
+static ScenarioStationConfig* find_station_config_mut(
+    ScenarioSession& scenario,
+    const EntityId id
+) {
+    auto it = scenario.build_result.station_config_ids.find(id);
+    if (it == scenario.build_result.station_config_ids.end()) return nullptr;
+    string id_str = it->second;
+    return find_station_config_mut(scenario.config, id_str);
+}
+
+static StatusCode sync_scenario_body_active(
+    ScenarioSession& scenario,
+    const EntityId id,
+    const bool active,
+    const World& world
+) {
+    const auto* body = world.body(id);
+    switch (body->body_type) {
+    case BodyType::celestial: {
+        ScenarioCelestialConfig* cel_cfg = find_celestial_config_mut(scenario, id);
+        if (cel_cfg == nullptr) return StatusCode::body_not_found;
+        cel_cfg->active = active;
+        return StatusCode::ok;
+    } break;
+    case BodyType::satellite: {
+        ScenarioSatelliteConfig* sat_cfg = find_satellite_config_mut(scenario, id);
+        if (sat_cfg == nullptr) return StatusCode::body_not_found;
+        sat_cfg->active = active;
+        return StatusCode::ok;
+    } break;
+    case BodyType::station: {
+        ScenarioStationConfig* stat_cfg = find_station_config_mut(scenario, id);
+        if (stat_cfg == nullptr) return StatusCode::body_not_found;
+        stat_cfg->active = active;
+        return StatusCode::ok;
+    } break;
+    case BodyType::unknown: return StatusCode::body_not_found;
+    }
+
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_x_tr(ScenarioStateTrConfig& cfg, const StateTr& x_tr) {
+    cfg.r = x_tr.r;
+    cfg.v = x_tr.v;
+    return StatusCode::ok;
+}
+static StatusCode sync_scenario_x_att(
+    ScenarioStateAttConfig& cfg,
+    const StateAtt& x_att
+) {
+    cfg.q = x_att.q;
+    cfg.w = x_att.w;
+    return StatusCode::ok;
+}
+static StatusCode sync_scenario_body_state(
+    ScenarioSession& scenario,
+    const Body& body,
+    const World& world
+) {
+    ScenarioConfig& cfg = scenario.config;
+    ScenarioBuildResult& build_result = scenario.build_result;
+
+    switch (body.body_type) {
+    case BodyType::unknown: return StatusCode::body_not_found;
+    case BodyType::celestial: {
+        auto* cfg = find_celestial_config_mut(scenario, body.id);
+        if (cfg == nullptr) return StatusCode::body_not_found;
+        cfg->x_tr.r = body.x_tr.r;
+        cfg->x_tr.v = body.x_tr.v;
+        cfg->x_att.q = body.x_att.q;
+        cfg->x_att.w = body.x_att.w;
+    } break;
+    case BodyType::satellite: {
+        auto* body_cfg = find_satellite_config_mut(scenario, body.id);
+        if (body_cfg == nullptr) return StatusCode::body_not_found;
+        body_cfg->x_tr.r = body.x_tr.r;
+        body_cfg->x_tr.v = body.x_tr.v;
+        body_cfg->x_att.q = body.x_att.q;
+        body_cfg->x_att.w = body.x_att.w;
+    } break;
+    case BodyType::station: {
+        auto* stat = world.station(body.id);
+        if (stat == nullptr) return StatusCode::body_not_found;
+        auto* body_cfg = find_station_config_mut(scenario, body.id);
+        if (body_cfg == nullptr) return StatusCode::body_not_found;
+        if (stat->anchored) {
+            auto it = scenario.build_result.celestial_config_ids.find(stat->anchor_id);
+            if (it == scenario.build_result.celestial_config_ids.end())
+                return StatusCode::anchor_not_found;
+            body_cfg->anchor = it->second;
+            body_cfg->llh = stat->llh_BCBF;
+            body_cfg->r_body = stat->r_body_BCBF;
+        } else {
+            body_cfg->x_tr.r = body.x_tr.r;
+            body_cfg->x_tr.v = body.x_tr.v;
+            body_cfg->x_att.q = body.x_att.q;
+            body_cfg->x_att.w = body.x_att.w;
+        }
+    } break;
+    }
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_mass_properties(
+    ScenarioMassPropertiesConfig& cfg,
+    const MassProperties& mp
+) {
+    cfg.mass = mp.mass;
+    cfg.inertia = mp.I;
+    cfg.offset_body = mp.offset_body;
+    cfg.principle_axes = mp.principal_axes;
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_gravity_model(
+    ScenarioGravityConfig& cfg,
+    const Celestial& cel
+) {
+    cfg.model = cel.gravity_model;
+    cfg.mu = cel.mu;
+    cfg.radius = cel.ref_radius;
+    cfg.degree = cel.degree;
+    cfg.order = cel.order;
+    cfg.J = cel.J;
+    cfg.C = cel.C;
+    cfg.S = cel.S;
+    return StatusCode::ok;
+}
+static StatusCode sync_scenario_celestial_model(
+    ScenarioCelestialModelConfig& cfg,
+    const Celestial& cel
+) {
+    cfg.semimajor_axis = cel.semimajor_axis;
+    cfg.semiminor_axis = cel.semiminor_axis;
+    cfg.mean_radius = cel.mean_radius;
+    cfg.eccentricity = cel.eccentricity;
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_celestial(
+    ScenarioSession& scenario,
+    const Celestial& cel
+) {
+    ScenarioConfig& cfg = scenario.config;
+    ScenarioBuildResult& build_result = scenario.build_result;
+
+    auto* cel_cfg = find_celestial_config_mut(scenario, cel.id);
+
+    StatusCode status;
+
+    status = sync_scenario_x_tr(cel_cfg->x_tr, cel.x_tr);
+    if (status != StatusCode::ok) return status;
+
+    cel_cfg->attitude_model = cel.attitude_model;
+    status = sync_scenario_x_att(cel_cfg->x_att, cel.x_att);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_celestial_model(cel_cfg->model, cel);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_gravity_model(cel_cfg->model.gravity_model, cel);
+    if (status != StatusCode::ok) return status;
+
+    cel_cfg->propagation.translation = cel.propagate_tr;
+    cel_cfg->propagation.attitude = cel.propagate_att;
+
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_add_celestial(
+    ScenarioSession& scenario,
+    const Celestial& cel
+) {
+    ScenarioCelestialConfig cfg;
+    StatusCode status;
+
+    status = sync_scenario_celestial_model(cfg.model, cel);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_gravity_model(cfg.model.gravity_model, cel);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_x_tr(cfg.x_tr, cel.x_tr);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_x_att(cfg.x_att, cel.x_att);
+    if (status != StatusCode::ok) return status;
+
+    cfg.propagation.translation = cel.propagate_tr;
+    cfg.propagation.attitude = cel.propagate_att;
+
+    scenario.config.celestials.push_back(cfg);
+    cfg.name = cel.name;
+    string id = cel.name.empty() ? "celestial " + std::to_string(cel.id) : cel.name;
+    scenario.build_result.celestial_config_ids.at(cel.id) = id;
+    scenario.build_result.celestial_ids.at(id) = cel.id;
+    scenario.build_result.body_config_ids.at(cel.id) = id;
+    scenario.build_result.body_ids.at(id) = cel.id;
+
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_satellite(
+    ScenarioSession& scenario,
+    const Satellite& sat
+) {
+    ScenarioConfig& cfg = scenario.config;
+    ScenarioBuildResult& build_result = scenario.build_result;
+
+    auto* sat_cfg = find_satellite_config_mut(scenario, sat.id);
+
+    StatusCode status;
+
+    status = sync_scenario_x_tr(sat_cfg->x_tr, sat.x_tr);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_x_att(sat_cfg->x_att, sat.x_att);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_mass_properties(sat_cfg->mass_properties, sat.mass_properties);
+    if (status != StatusCode::ok) return status;
+
+    sat_cfg->propagation.translation = sat.propagate_tr;
+    sat_cfg->propagation.attitude = sat.propagate_att;
+
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_add_satellite(
+    ScenarioSession& scenario,
+    const Satellite& sat
+) {
+    ScenarioSatelliteConfig cfg;
+    StatusCode status;
+
+    status = sync_scenario_x_tr(cfg.x_tr, sat.x_tr);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_x_att(cfg.x_att, sat.x_att);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_mass_properties(cfg.mass_properties, sat.mass_properties);
+    if (status != StatusCode::ok) return status;
+
+    cfg.propagation.translation = sat.propagate_tr;
+    cfg.propagation.attitude = sat.propagate_att;
+
+    scenario.config.satellites.push_back(cfg);
+    cfg.name = sat.name;
+    string id = sat.name.empty() ? "satellite " + std::to_string(sat.id) : sat.name;
+    scenario.build_result.satellite_config_ids.at(sat.id) = id;
+    scenario.build_result.satellite_ids.at(id) = sat.id;
+    scenario.build_result.body_config_ids.at(sat.id) = id;
+    scenario.build_result.body_ids.at(id) = sat.id;
+
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_station_anchor(
+    ScenarioStationConfig& cfg,
+    const Station& stat,
+    ScenarioBuildResult& build_result
+) {
+    auto it = build_result.celestial_config_ids.find(stat.anchor_id);
+    if (it == build_result.celestial_config_ids.end())
+        return StatusCode::anchor_not_found;
+
+    cfg.anchor = it->second;
+    cfg.llh = stat.llh_BCBF;
+    cfg.r_body = stat.r_body_BCBF;
+    cfg.local_frame = "ENU"; // TODO: make enum for this?
+    cfg.units_angle = UAngle::radian;
+    cfg.units_length = ULength::kilometer;
+
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_instrument(
+    ScenarioInstrumentConfig& cfg,
+    const StationInstrument& instr
+) {
+    cfg.covariance_cfg.covariance = instr.R;
+    cfg.enabled = instr.enabled;
+    cfg.type = instr.type;
+
+    return StatusCode::ok;
+}
+static StatusCode sync_scenario_add_station(
+    ScenarioSession& scenario,
+    const Station& stat
+) {
+    ScenarioStationConfig cfg;
+    StatusCode status;
+
+    cfg.anchored = stat.anchored;
+    if (stat.anchored) {
+        status = sync_scenario_station_anchor(cfg, stat, scenario.build_result);
+        if (status != StatusCode::ok) return status;
+    } else {
+        status = sync_scenario_x_tr(cfg.x_tr, stat.x_tr);
+        if (status != StatusCode::ok) return status;
+
+        status = sync_scenario_x_att(cfg.x_att, stat.x_att);
+        if (status != StatusCode::ok) return status;
+
+        status = sync_scenario_mass_properties(cfg.mass_properties, stat.mass_properties);
+        if (status != StatusCode::ok) return status;
+    }
+    cfg.propagation.translation = stat.propagate_tr;
+    cfg.propagation.attitude = stat.propagate_att;
+
+    for (const auto& [id, instr] : stat.instruments) {
+        ScenarioInstrumentConfig instrument;
+        sync_scenario_instrument(instrument, instr);
+        instrument.id = "Instrument " + std::to_string(instr.id) + " ("
+                        + observation_type_str_simple(instr.type) + ")";
+        cfg.instruments.push_back(instrument);
+    }
+
+    scenario.config.stations.push_back(cfg);
+    cfg.name = stat.name;
+    string id = stat.name.empty() ? "station" + std::to_string(stat.id) : stat.name;
+    scenario.build_result.station_config_ids.at(stat.id) = id;
+    scenario.build_result.station_ids.at(id) = stat.id;
+    scenario.build_result.body_config_ids.at(stat.id) = id;
+    scenario.build_result.body_ids.at(id) = stat.id;
+
+    return StatusCode::ok;
+}
+
+static void sync_scenario_runtime_state_from_world(
+    RenderLoopState& state,
+    const World& world
+) {
+    if (state.scenario.dirty) {}
+    state.scenario.dirty = false;
+}
 
 static Body* draft_body_ptr(BodyEditDraft& draft) {
     switch (draft.edit_body_type) {
@@ -397,10 +836,13 @@ static void request_scenario_save(
         return;
     }
 
-    state.file_status = build_scenario_config_from_world(state.scenario, world, cfg.stepper_cfg);
-    if (state.file_status != StatusCode::ok) return;
+    // TODO: use as fallback?
+    // state.file_status
+    //     = build_scenario_config_from_world(state.scenario.config, world,
+    //     cfg.stepper_cfg);
+    // if (state.file_status != StatusCode::ok) return;
 
-    state.file_status = save_scenario_json(state.save_filepath, state.scenario);
+    state.file_status = save_scenario_json(state.save_filepath, state.scenario.config);
     if (state.file_status != StatusCode::ok) return;
 }
 
@@ -729,17 +1171,20 @@ static void render_simulation_ui(
             } else if (!is_existing_regular_file(path)) {
                 state.file_status = StatusCode::invalid_input;
             } else {
-                state.file_status = load_scenario_json(path, state.scenario);
+                state.file_status = load_scenario_json(path, state.scenario.config);
             }
 
             if (state.file_status == StatusCode::ok) {
                 world = World{};
                 state.file_status = build_world_from_scenario_config(
-                    state.scenario,
+                    state.scenario.config,
                     world,
-                    state.scenario_result,
+                    state.scenario.build_result,
                     cfg.stepper_cfg
                 );
+                if (state.file_status == StatusCode::ok) {
+                    state.scenario.dirty = false;
+                }
             }
         }
         im::SameLine();
@@ -1107,6 +1552,12 @@ static void render_body_stats_ui(
         if (cfg.stepper_cfg.paused) {
             if (active && im::Button("Make Inactive")) {
                 world.make_inactive(cfg.body_stats_id);
+                sync_scenario_body_active(
+                    state.scenario,
+                    cfg.body_stats_id,
+                    false,
+                    world
+                );
                 state.wksp.dirty = true;
                 if (cfg.camera.target_id == body->id) {
                     cycle_active_id(cfg.camera.target_id, world, 1);
@@ -1115,6 +1566,7 @@ static void render_body_stats_ui(
             }
             if (!active && im::Button("Make Active")) {
                 world.make_active(cfg.body_stats_id);
+                sync_scenario_body_active(state.scenario, cfg.body_stats_id, true, world);
                 state.wksp.dirty = true;
             }
         }
@@ -1229,16 +1681,31 @@ static void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState
                     case BodyType::unknown: break;
                     case BodyType::celestial: {
                         auto cel = std::make_unique<Celestial>(state.temp_celestial);
+                        state.add_body_status = sync_scenario_add_celestial(
+                            state.scenario,
+                            state.temp_celestial
+                        );
+                        if (state.add_body_status != StatusCode::ok) break;
                         id = world.insert_celestial(std::move(cel));
                         state.temp_celestial = Celestial{};
                     } break;
                     case BodyType::satellite: {
                         auto sat = std::make_unique<Satellite>(state.temp_satellite);
+                        state.add_body_status = sync_scenario_add_satellite(
+                            state.scenario,
+                            state.temp_satellite
+                        );
+                        if (state.add_body_status != StatusCode::ok) break;
                         id = world.insert_satellite(std::move(sat));
                         state.temp_satellite = Satellite{};
                     } break;
                     case BodyType::station: {
                         auto stat = std::make_unique<Station>(state.temp_station);
+                        state.add_body_status = sync_scenario_add_station(
+                            state.scenario,
+                            state.temp_station
+                        );
+                        if (state.add_body_status != StatusCode::ok) break;
                         id = world.insert_station(std::move(stat));
                         state.temp_station = Station{};
                     } break;
@@ -1729,9 +2196,9 @@ static StatusCode validate_add_body_draft(
         const Station& stat = state.temp_station;
         if (stat.anchored) {
             if (world.celestial(stat.anchor_id) == nullptr)
-                return StatusCode::invalid_anchor;
+                return StatusCode::anchor_not_found;
             if (!finite_vec(stat.r_body_BCBF) || !finite_vec(stat.llh_BCBF)) {
-                return StatusCode::invalid_anchor;
+                return StatusCode::anchor_not_found;
             }
         } else {
             if (!finite_state_tr(stat.x_tr) || !finite_state_att(stat.x_att)) {
@@ -1855,9 +2322,9 @@ static StatusCode validate_body(const Body& body, const World& world) {
         if (stat == nullptr) return StatusCode::unsupported_type;
         if (stat->anchored) {
             if (world.celestial(stat->anchor_id) == nullptr)
-                return StatusCode::invalid_anchor;
+                return StatusCode::anchor_not_found;
             if (!finite_vec(stat->r_body_BCBF) || !finite_vec(stat->llh_BCBF)) {
-                return StatusCode::invalid_anchor;
+                return StatusCode::anchor_not_found;
             }
         } else {
             if (!finite_state_tr(stat->x_tr) || !finite_state_att(stat->x_att)) {

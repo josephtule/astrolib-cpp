@@ -270,6 +270,19 @@ struct ScenarioBuildResult {
     umap<string, EntityId> celestial_ids;
     umap<string, EntityId> satellite_ids;
     umap<string, EntityId> station_ids;
+
+    umap<EntityId, string> body_config_ids;
+    umap<EntityId, string> celestial_config_ids;
+    umap<EntityId, string> satellite_config_ids;
+    umap<EntityId, string> station_config_ids;
+};
+
+struct ScenarioSession {
+    ScenarioConfig config;
+    ScenarioBuildResult build_result;
+    bool dirty = false;
+    string filepath;
+    bool has_filepath = false;
 };
 
 StatusCode load_scenario_json(const std::string& filepath, ScenarioConfig& out);
