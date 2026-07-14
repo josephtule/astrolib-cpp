@@ -3,141 +3,10 @@
         {
             "active": true,
             "attitude_model": "simple_spin",
-            "id": "Earth",
+            "id": "earth",
             "model": {
-                "eccentricity": 0.081819190842621,
-                "flattening": 0.003352810664747,
                 "gravity": {
-                    "C": [
-                        [
-                            1.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            -0.000484165143790815,
-                            -2.06615509074176e-10,
-                            2.43938357328313e-06,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            9.57161207093473e-07,
-                            2.03046201047864e-06,
-                            9.04787894809528e-07,
-                            7.21321757121568e-07,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            5.39965866638991e-07,
-                            -5.36157389388867e-07,
-                            3.50501623962649e-07,
-                            9.90856766672321e-07,
-                            -1.88519633023033e-07,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            6.86702913736681e-08,
-                            -6.29211923042529e-08,
-                            6.52078043176164e-07,
-                            -4.51847152328843e-07,
-                            -2.95328761175629e-07,
-                            1.74811795496002e-07,
-                            0.0
-                        ],
-                        [
-                            -1.49953927978527e-07,
-                            -7.59210081892527e-08,
-                            4.8648892460469e-08,
-                            5.72451611175653e-08,
-                            -8.60237937191611e-08,
-                            -2.67166423703038e-07,
-                            9.47068749756882e-09
-                        ]
-                    ],
-                    "S": [
-                        [
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            0.0,
-                            1.38441389137979e-09,
-                            -1.40027370385934e-06,
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            0.0,
-                            2.48200415856872e-07,
-                            -6.19005475177618e-07,
-                            1.4143492619294101e-06,
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            0.0,
-                            -4.73567346518086e-07,
-                            6.62480026275829e-07,
-                            -2.00956723567452e-07,
-                            3.08803882149194e-07,
-                            0.0,
-                            0.0
-                        ],
-                        [
-                            0.0,
-                            -9.43698073395769e-08,
-                            -3.23353192540522e-07,
-                            -2.14955408306046e-07,
-                            4.98070550102351e-08,
-                            -6.69379935180165e-07,
-                            0.0
-                        ],
-                        [
-                            0.0,
-                            2.65122593213647e-08,
-                            -3.73789324523752e-07,
-                            8.9520113001073e-09,
-                            -4.71425573429095e-07,
-                            -5.36493151500206e-07,
-                            -2.37382353351005e-07
-                        ]
-                    ],
+                    "coefficients": "EGM2008_gfc",
                     "degree": 6,
                     "model": "spherical_harmonics",
                     "mu": 398600.4418,
@@ -145,12 +14,10 @@
                     "radius": 6378.137,
                     "units_length": "kilometer"
                 },
-                "id": "custom",
-                "mean_radius": 6371.008771415059,
-                "semimajor_axis": 6378.137,
-                "semiminor_axis": 6356.752314245179,
+                "id": "wgs84",
                 "units_length": "kilometer"
             },
+            "name": "Earth",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -173,7 +40,7 @@
             "state_tr": {
                 "input_type": "pos_vel",
                 "r": [
-                    0.0,
+                    -10000.0,
                     0.0,
                     0.0
                 ],
@@ -188,7 +55,7 @@
         {
             "active": true,
             "attitude_model": "fixed",
-            "id": "Moon",
+            "id": "moon",
             "model": {
                 "eccentricity": 0.04914236410898444,
                 "flattening": 0.0012082158679016795,
@@ -203,6 +70,7 @@
                 "semiminor_axis": 1736.0,
                 "units_length": "kilometer"
             },
+            "name": "Moon",
             "propagation": {
                 "attitude": false,
                 "translation": true
@@ -240,7 +108,7 @@
         {
             "active": true,
             "attitude_model": "simple_spin",
-            "id": "Mars",
+            "id": "mars",
             "model": {
                 "eccentricity": 0.10836599942613576,
                 "flattening": 0.005888934691714269,
@@ -267,6 +135,7 @@
                 "semiminor_axis": 3376.2,
                 "units_length": "kilometer"
             },
+            "name": "Mars",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -300,6 +169,57 @@
                     0.0
                 ]
             }
+        },
+        {
+            "active": true,
+            "attitude_model": "fixed",
+            "id": "celestial_14",
+            "model": {
+                "gravity": {
+                    "model": "pointmass",
+                    "mu": 100.0,
+                    "units_length": "kilometer"
+                },
+                "id": "custom",
+                "mean_radius": 999.9999999999997,
+                "semimajor_axis": 1000.0,
+                "semiminor_axis": 1000.0,
+                "units_length": "kilometer"
+            },
+            "name": "New Celestial",
+            "propagation": {
+                "attitude": false,
+                "translation": true
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "units_angle": "radian",
+                "w": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            },
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [
+                    10000.0,
+                    0.0,
+                    0.0
+                ],
+                "units_length": "kilometer",
+                "v": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
         }
     ],
     "graphics_settings": {
@@ -317,13 +237,45 @@
         "window_width": 1600
     },
     "metadata": {
-        "name": "earth_moon_sat_demo",
-        "rng_seed": 12345
+        "name": "parser_stress_demo",
+        "rng_seed": 24680
+    },
+    "providers": {
+        "gravity": [
+            {
+                "format": "gfc",
+                "id": "EGM2008_gfc",
+                "lineskips": 0,
+                "normalized": true,
+                "path": "assets/earth/EGM2008.gfc.txt"
+            },
+            {
+                "format": "egm",
+                "id": "EGM2008_120",
+                "lineskips": 0,
+                "normalized": true,
+                "path": "assets/egm2008_120.txt"
+            },
+            {
+                "format": "gfc",
+                "id": "JGL165P1_gfc",
+                "lineskips": 0,
+                "normalized": true,
+                "path": "assets/moon/JGL165P1.gfc.txt"
+            },
+            {
+                "format": "nasa_sha",
+                "id": "gggrx_1200a_sha",
+                "lineskips": 1,
+                "normalized": true,
+                "path": "assets/moon/gggrx_1200a_sha.tab.txt"
+            }
+        ]
     },
     "satellites": [
         {
             "active": true,
-            "id": "Quaternion PosVel KM",
+            "id": "sat_quat_posvel_km",
             "mass_properties": {
                 "inertia_tensor": {
                     "type": "matrix",
@@ -347,6 +299,7 @@
                 },
                 "mass": 120.0
             },
+            "name": "Quaternion PosVel KM",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -370,7 +323,7 @@
                 "input_type": "pos_vel",
                 "r": [
                     7000.0,
-                    0.0,
+                    10000.0,
                     0.0
                 ],
                 "units_length": "kilometer",
@@ -383,7 +336,7 @@
         },
         {
             "active": true,
-            "id": "DCM PosVel Meter",
+            "id": "sat_dcm_posvel_meter",
             "mass_properties": {
                 "inertia_tensor": {
                     "type": "matrix",
@@ -407,6 +360,7 @@
                 },
                 "mass": 130.0
             },
+            "name": "DCM PosVel Meter",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -443,7 +397,7 @@
         },
         {
             "active": true,
-            "id": "Axis Angle Classical Degrees",
+            "id": "sat_axis_classical_deg",
             "mass_properties": {
                 "inertia_tensor": {
                     "type": "matrix",
@@ -467,6 +421,7 @@
                 },
                 "mass": 140.0
             },
+            "name": "Axis Angle Classical Degrees",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -503,7 +458,7 @@
         },
         {
             "active": true,
-            "id": "Euler Classical Radians Meter",
+            "id": "sat_euler_classical_rad_meter",
             "mass_properties": {
                 "inertia_tensor": {
                     "type": "matrix",
@@ -527,6 +482,7 @@
                 },
                 "mass": 150.0
             },
+            "name": "Euler Classical Radians Meter",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -563,7 +519,7 @@
         },
         {
             "active": true,
-            "id": "CRP PosVel Mile",
+            "id": "sat_crp_posvel_mile",
             "mass_properties": {
                 "inertia_tensor": {
                     "type": "matrix",
@@ -587,6 +543,7 @@
                 },
                 "mass": 160.0
             },
+            "name": "CRP PosVel Mile",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -623,7 +580,7 @@
         },
         {
             "active": true,
-            "id": "MRP Classical KM",
+            "id": "sat_mrp_classical_km",
             "mass_properties": {
                 "inertia_tensor": {
                     "type": "matrix",
@@ -647,6 +604,7 @@
                 },
                 "mass": 170.0
             },
+            "name": "MRP Classical KM",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -689,16 +647,37 @@
     "stations": [
         {
             "active": true,
-            "anchor": "Earth",
+            "anchor": "earth",
             "anchored": true,
             "coordinate_type": "detic_llh",
-            "id": "No Instruments Station",
+            "id": "stat_no_instruments",
+            "instruments": [
+                {
+                    "covariance": {
+                        "type": "matrix",
+                        "values": [
+                            [
+                                1.0,
+                                0.0
+                            ],
+                            [
+                                0.0,
+                                1.0
+                            ]
+                        ]
+                    },
+                    "enabled": true,
+                    "id": "New Instrument",
+                    "type": "radec"
+                }
+            ],
             "llh": [
                 0.7853981633974483,
                 -2.0943951023931953,
                 0.5
             ],
             "local_frame": "ENU",
+            "name": "No Instruments Station",
             "propagation": {
                 "attitude": false,
                 "translation": false
@@ -707,10 +686,10 @@
         },
         {
             "active": true,
-            "anchor": "Earth",
+            "anchor": "earth",
             "anchored": true,
             "coordinate_type": "detic_llh",
-            "id": "All Instruments Station",
+            "id": "stat_all_instruments",
             "instruments": [
                 {
                     "covariance": {
@@ -947,6 +926,7 @@
                 0.0
             ],
             "local_frame": "ENU",
+            "name": "All Instruments Station",
             "propagation": {
                 "attitude": false,
                 "translation": false
@@ -955,10 +935,10 @@
         },
         {
             "active": true,
-            "anchor": "Earth",
+            "anchor": "earth",
             "anchored": true,
             "coordinate_type": "detic_llh",
-            "id": "Body Fixed Meter Station",
+            "id": "stat_body_fixed_meter",
             "instruments": [
                 {
                     "covariance": {
@@ -980,6 +960,7 @@
                 0.0
             ],
             "local_frame": "ENU",
+            "name": "Body Fixed Meter Station",
             "propagation": {
                 "attitude": false,
                 "translation": false
@@ -989,7 +970,7 @@
         {
             "active": true,
             "anchored": false,
-            "id": "Free Tracking Station",
+            "id": "stat_free_tracking",
             "instruments": [
                 {
                     "covariance": {
@@ -1073,6 +1054,7 @@
                 },
                 "mass": 250.0
             },
+            "name": "Free Tracking Station",
             "propagation": {
                 "attitude": true,
                 "translation": true
@@ -1110,14 +1092,19 @@
     ],
     "time": {
         "date": {
-            "jd": {
-                "day": 2451545.0,
-                "frac": 0.0
-            }
+            "cal": {
+                "day": 1,
+                "hour": 0,
+                "input_type": "separate",
+                "minute": 0,
+                "month": 1,
+                "second": 1.0,
+                "year": 2000
+            },
+            "input_type": "cal",
+            "time_scale": "utc"
         },
-        "input_type": "jd",
-        "t0": 0.0,
-        "time_scale": "utc"
+        "t0": 0.0
     },
     "world_stepper": {
         "attitude_integrator": "rk4",

@@ -19,7 +19,7 @@ struct RenderLoopConfig {
     i32 screen_height = 900;
     string window_title = "astrolib-cpp";
 
-    bool set_target_fps = false;
+    bool set_target_fps = true;
     i32 target_fps = 60;
 
     bool realtime = false;
@@ -36,6 +36,8 @@ struct RenderLoopConfig {
     RenderAssetConfig assets{};
 };
 
+enum struct SimpleSpinEditMode : i32 { rate = 0, axis = 1 };
+
 struct BodyEditDraft {
     BodyType edit_body_type = BodyType::unknown;
     EntityId edit_body_id = kInvalidEntityId;
@@ -43,6 +45,9 @@ struct BodyEditDraft {
     Satellite edit_satellite = Satellite{};
     Station edit_station = Station{};
     StatusCode edit_body_status = StatusCode::invalid_input;
+    SimpleSpinEditMode simple_spin_edit_mode = SimpleSpinEditMode::rate;
+    f64 simple_spin_rate = 0.0;
+    vec3d simple_spin_axis = vec3d{0.0, 0.0, 1.0};
 };
 
 struct RenderLoopState {
@@ -88,7 +93,12 @@ struct RenderLoopState {
     BodyFilterMode list_filter = BodyFilterMode::all;
 };
 
-void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0);
+void run_world_render_loop(
+    World& world,
+    RenderLoopConfig& cfg,
+    f64 dt0,
+    ScenarioSession scenario = {}
+);
 inline vec3f camera_pivot_from_mode(const RenderCameraConfig& cfg, const World& world) {
     switch (cfg.mode) {
     case RenderCameraMode::locked: return cfg.target;

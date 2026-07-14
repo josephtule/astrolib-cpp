@@ -4691,9 +4691,9 @@ void run_build_world_from_scenario() {
 void run_scenario_render_diag() {
     print_diag_title("Scenario Render Diag");
 
+    const string scenario_filepath = pwd + "/scenarios/parser_stress_demo.json";
     ScenarioConfig scenario_cfg;
-    StatusCode status
-        = load_scenario_json(pwd + "/scenarios/parser_stress_demo.json", scenario_cfg);
+    StatusCode status = load_scenario_json(scenario_filepath, scenario_cfg);
     if (status != StatusCode::ok) {
         std::println("Parsing Error: {}", status_string(status));
         return;
@@ -4748,7 +4748,12 @@ void run_scenario_render_diag() {
 
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
-    run_world_render_loop(world, render_cfg, dt);
+    ScenarioSession scenario;
+    scenario.config = std::move(scenario_cfg);
+    scenario.build_result = std::move(build_result);
+    scenario.filepath = scenario_filepath;
+    scenario.has_filepath = true;
+    run_world_render_loop(world, render_cfg, dt, std::move(scenario));
 
     print_diag_title();
 }

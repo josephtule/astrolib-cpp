@@ -2988,6 +2988,8 @@ static StatusCode apply_celestial_config(
     // same as above, config > provided model > fail
     if (finite_pos(gravity.mu)) {
         temp.mu = gravity.mu;
+    } else if (model.id == "custom" && finite_nonneg(gravity.mu)) {
+        temp.mu = gravity.mu;
     } else if (finite_pos(temp.mu)) {
         // cel.mu = cel.mu;
     } else {
@@ -3277,7 +3279,9 @@ StatusCode build_world_from_scenario_config(
         EntityId id = world.insert_celestial(std::move(cel));
         if (!cel_cfg.active) world.make_inactive(id);
         result.celestial_ids.insert({cel_cfg.id, id});
+        result.celestial_config_ids.insert({id, cel_cfg.id});
         result.body_ids.insert({cel_cfg.id, id});
+        result.body_config_ids.insert({id, cel_cfg.id});
     }
 
     for (const auto& sat_cfg : cfg.satellites) {
@@ -3288,7 +3292,9 @@ StatusCode build_world_from_scenario_config(
         EntityId id = world.insert_satellite(std::move(sat));
         if (!sat_cfg.active) world.make_inactive(id);
         result.satellite_ids.insert({sat_cfg.id, id});
+        result.satellite_config_ids.insert({id, sat_cfg.id});
         result.body_ids.insert({sat_cfg.id, id});
+        result.body_config_ids.insert({id, sat_cfg.id});
     }
 
     for (const auto& stat_cfg : cfg.stations) {
@@ -3319,7 +3325,9 @@ StatusCode build_world_from_scenario_config(
         }
         if (!stat_cfg.active) world.make_inactive(id);
         result.station_ids.insert({stat_cfg.id, id});
+        result.station_config_ids.insert({id, stat_cfg.id});
         result.body_ids.insert({stat_cfg.id, id});
+        result.body_config_ids.insert({id, stat_cfg.id});
     }
 
     return StatusCode::ok;
@@ -3548,6 +3556,17 @@ static json json_from_mat(const eig::MatrixBase<Derived>& m) {
     return mat;
 }
 
+template <class Derived>
+static json json_from_flat_mat(const eig::MatrixBase<Derived>& m) {
+    json mat = json::array();
+    for (i32 i = 0; i < m.rows(); ++i) {
+        for (i32 j = 0; j < m.cols(); ++j) {
+            mat.push_back(m(i, j));
+        }
+    }
+    return mat;
+}
+
 static json json_from_state_tr_config(const ScenarioStateTrConfig& x_tr) {
     json state_tr;
 
@@ -3582,7 +3601,7 @@ static json json_from_state_att_config(const ScenarioStateAttConfig& x_att) {
 
     switch (x_att.input_type) {
     case AttitudeType::quaternion: state_att["q"] = json_from_vec4(x_att.q); break;
-    case AttitudeType::dcm: state_att["dcm"] = json_from_mat(x_att.dcm); break;
+    case AttitudeType::dcm: state_att["dcm"] = json_from_flat_mat(x_att.dcm); break;
     case AttitudeType::axis_angle: {
         state_att["axis"] = json_from_vec3(x_att.axis);
         state_att["angle"] = x_att.angle;
@@ -3841,10 +3860,10 @@ json json_from_scenario_config(const ScenarioConfig& cfg) {
 
     json time;
     time["t0"] = cfg.time.t0;
-    time["time_scale"] = time_scale_str(cfg.time.time_scale);
-    time["input_type"] = date_type_str(cfg.time.date_type);
 
     json date;
+    date["time_scale"] = time_scale_str(cfg.time.time_scale);
+    date["input_type"] = date_type_str(cfg.time.date_type);
     switch (cfg.time.date_type) {
     case DateType::cal: {
         json cal;

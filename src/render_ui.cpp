@@ -150,7 +150,11 @@ static bool render_stat_state_ui(
     World& world,
     ImGuiInputTextFlags flags = 0
 );
-static void render_celestial_stats_ui(Celestial& cel, ImGuiInputTextFlags flags = 0);
+static void render_celestial_stats_ui(
+    Celestial& cel,
+    ImGuiInputTextFlags flags = 0,
+    BodyEditDraft* draft = nullptr
+);
 static void render_satellite_stats_ui(Satellite& sat, ImGuiInputTextFlags flags = 0);
 static void render_mass_properties_ui(MassProperties& mp, ImGuiInputTextFlags flags = 0);
 static void render_station_stats_ui(
@@ -200,7 +204,7 @@ static const ScenarioCelestialConfig* find_celestial_config(
 ) {
     auto it = scenario.build_result.celestial_config_ids.find(id);
     if (it == scenario.build_result.celestial_config_ids.end()) return nullptr;
-    string id_str = it->second;
+    const string& id_str = it->second;
     return find_celestial_config(scenario.config, id_str);
 }
 static ScenarioCelestialConfig* find_celestial_config_mut(
@@ -209,7 +213,7 @@ static ScenarioCelestialConfig* find_celestial_config_mut(
 ) {
     auto it = scenario.build_result.celestial_config_ids.find(id);
     if (it == scenario.build_result.celestial_config_ids.end()) return nullptr;
-    string id_str = it->second;
+    const string& id_str = it->second;
     return find_celestial_config_mut(scenario.config, id_str);
 }
 static const ScenarioSatelliteConfig* find_satellite_config(
@@ -236,7 +240,7 @@ static const ScenarioSatelliteConfig* find_satellite_config(
 ) {
     auto it = scenario.build_result.satellite_config_ids.find(id);
     if (it == scenario.build_result.satellite_config_ids.end()) return nullptr;
-    string id_str = it->second;
+    const string& id_str = it->second;
     return find_satellite_config(scenario.config, id_str);
 }
 static ScenarioSatelliteConfig* find_satellite_config_mut(
@@ -245,7 +249,7 @@ static ScenarioSatelliteConfig* find_satellite_config_mut(
 ) {
     auto it = scenario.build_result.satellite_config_ids.find(id);
     if (it == scenario.build_result.satellite_config_ids.end()) return nullptr;
-    string id_str = it->second;
+    const string& id_str = it->second;
     return find_satellite_config_mut(scenario.config, id_str);
 }
 static const ScenarioStationConfig* find_station_config(
@@ -272,7 +276,7 @@ static const ScenarioStationConfig* find_station_config(
 ) {
     auto it = scenario.build_result.station_config_ids.find(id);
     if (it == scenario.build_result.station_config_ids.end()) return nullptr;
-    string id_str = it->second;
+    const string& id_str = it->second;
     return find_station_config(scenario.config, id_str);
 }
 static ScenarioStationConfig* find_station_config_mut(
@@ -281,8 +285,111 @@ static ScenarioStationConfig* find_station_config_mut(
 ) {
     auto it = scenario.build_result.station_config_ids.find(id);
     if (it == scenario.build_result.station_config_ids.end()) return nullptr;
-    string id_str = it->second;
+    const string& id_str = it->second;
     return find_station_config_mut(scenario.config, id_str);
+}
+
+static bool scenario_body_config_id_exists(const ScenarioConfig& cfg, const string& id) {
+    return find_celestial_config(cfg, id) != nullptr
+           || find_satellite_config(cfg, id) != nullptr
+           || find_station_config(cfg, id) != nullptr;
+}
+
+static const ScenarioGravityProviderConfig* find_gravity_provider_config(
+    const ScenarioConfig& cfg,
+    const string& id
+) {
+    for (const auto& provider : cfg.gravity_providers) {
+        if (provider.id == id) return &provider;
+    }
+    return nullptr;
+}
+
+static string make_unique_scenario_body_id(
+    const ScenarioSession& session,
+    BodyType type,
+    EntityId runtime_id
+) {
+    string prefix;
+
+    switch (type) {
+    case BodyType::celestial: prefix = "celestial"; break;
+    case BodyType::satellite: prefix = "satellite"; break;
+    case BodyType::station: prefix = "station"; break;
+    case BodyType::unknown: return "";
+    }
+
+    const string base = prefix + "_" + std::to_string(runtime_id);
+    string candidate = base;
+    i32 suffix = 2;
+
+    while (session.build_result.body_ids.contains(candidate)
+           || scenario_body_config_id_exists(session.config, candidate)) {
+        candidate = base + "_" + std::to_string(suffix);
+        ++suffix;
+    }
+
+    return candidate;
+}
+
+static StatusCode register_scenario_body_mapping(
+    ScenarioBuildResult& result,
+    BodyType type,
+    const string& config_id,
+    EntityId runtime_id
+) {
+    if (type == BodyType::unknown) return StatusCode::unsupported_type;
+    if (runtime_id == kInvalidEntityId) return StatusCode::body_not_found;
+    if (config_id.empty()) return StatusCode::body_not_found;
+
+    const auto it1 = result.body_ids.find(config_id);
+    if (it1 != result.body_ids.end()) return StatusCode::body_not_found;
+    const auto it2 = result.body_config_ids.find(runtime_id);
+    if (it2 != result.body_config_ids.end()) return StatusCode::body_not_found;
+
+    switch (type) {
+
+    case BodyType::unknown: return StatusCode::unsupported_type;
+    case BodyType::celestial: {
+        const auto it1 = result.celestial_ids.find(config_id);
+        if (it1 != result.celestial_ids.end()) return StatusCode::body_not_found;
+        const auto it2 = result.celestial_config_ids.find(runtime_id);
+        if (it2 != result.celestial_config_ids.end()) return StatusCode::body_not_found;
+    } break;
+    case BodyType::satellite: {
+        const auto it1 = result.satellite_ids.find(config_id);
+        if (it1 != result.satellite_ids.end()) return StatusCode::body_not_found;
+        const auto it2 = result.satellite_config_ids.find(runtime_id);
+        if (it2 != result.satellite_config_ids.end()) return StatusCode::body_not_found;
+    } break;
+    case BodyType::station: {
+        const auto it1 = result.station_ids.find(config_id);
+        if (it1 != result.station_ids.end()) return StatusCode::body_not_found;
+        const auto it2 = result.station_config_ids.find(runtime_id);
+        if (it2 != result.station_config_ids.end()) return StatusCode::body_not_found;
+    } break;
+    }
+
+    result.body_ids[config_id] = runtime_id;
+    result.body_config_ids[runtime_id] = config_id;
+
+    switch (type) {
+    case BodyType::unknown: return StatusCode::body_not_found;
+    case BodyType::celestial: {
+        result.celestial_ids[config_id] = runtime_id;
+        result.celestial_config_ids[runtime_id] = config_id;
+    } break;
+    case BodyType::satellite: {
+        result.satellite_ids[config_id] = runtime_id;
+        result.satellite_config_ids[runtime_id] = config_id;
+    } break;
+    case BodyType::station: {
+        result.station_ids[config_id] = runtime_id;
+        result.station_config_ids[runtime_id] = config_id;
+    } break;
+    }
+
+    return StatusCode::ok;
 }
 
 static StatusCode sync_scenario_body_active(
@@ -292,6 +399,7 @@ static StatusCode sync_scenario_body_active(
     const World& world
 ) {
     const auto* body = world.body(id);
+    if (body == nullptr) return StatusCode::body_not_found;
     switch (body->body_type) {
     case BodyType::celestial: {
         ScenarioCelestialConfig* cel_cfg = find_celestial_config_mut(scenario, id);
@@ -311,13 +419,16 @@ static StatusCode sync_scenario_body_active(
         stat_cfg->active = active;
         return StatusCode::ok;
     } break;
-    case BodyType::unknown: return StatusCode::body_not_found;
+    case BodyType::unknown: return StatusCode::unsupported_type;
     }
 
     return StatusCode::ok;
 }
 
 static StatusCode sync_scenario_x_tr(ScenarioStateTrConfig& cfg, const StateTr& x_tr) {
+    cfg = ScenarioStateTrConfig{}; // clear out unnecessary fields
+    cfg.input_type = StateTrInputType::pos_vel;
+    cfg.units_length = ULength::kilometer;
     cfg.r = x_tr.r;
     cfg.v = x_tr.v;
     return StatusCode::ok;
@@ -326,56 +437,11 @@ static StatusCode sync_scenario_x_att(
     ScenarioStateAttConfig& cfg,
     const StateAtt& x_att
 ) {
+    cfg = ScenarioStateAttConfig{}; // clear out unnecessary fields
+    cfg.input_type = AttitudeType::quaternion;
+    cfg.units_angle = UAngle::radian;
     cfg.q = x_att.q;
     cfg.w = x_att.w;
-    return StatusCode::ok;
-}
-static StatusCode sync_scenario_body_state(
-    ScenarioSession& scenario,
-    const Body& body,
-    const World& world
-) {
-    ScenarioConfig& cfg = scenario.config;
-    ScenarioBuildResult& build_result = scenario.build_result;
-
-    switch (body.body_type) {
-    case BodyType::unknown: return StatusCode::body_not_found;
-    case BodyType::celestial: {
-        auto* cfg = find_celestial_config_mut(scenario, body.id);
-        if (cfg == nullptr) return StatusCode::body_not_found;
-        cfg->x_tr.r = body.x_tr.r;
-        cfg->x_tr.v = body.x_tr.v;
-        cfg->x_att.q = body.x_att.q;
-        cfg->x_att.w = body.x_att.w;
-    } break;
-    case BodyType::satellite: {
-        auto* body_cfg = find_satellite_config_mut(scenario, body.id);
-        if (body_cfg == nullptr) return StatusCode::body_not_found;
-        body_cfg->x_tr.r = body.x_tr.r;
-        body_cfg->x_tr.v = body.x_tr.v;
-        body_cfg->x_att.q = body.x_att.q;
-        body_cfg->x_att.w = body.x_att.w;
-    } break;
-    case BodyType::station: {
-        auto* stat = world.station(body.id);
-        if (stat == nullptr) return StatusCode::body_not_found;
-        auto* body_cfg = find_station_config_mut(scenario, body.id);
-        if (body_cfg == nullptr) return StatusCode::body_not_found;
-        if (stat->anchored) {
-            auto it = scenario.build_result.celestial_config_ids.find(stat->anchor_id);
-            if (it == scenario.build_result.celestial_config_ids.end())
-                return StatusCode::anchor_not_found;
-            body_cfg->anchor = it->second;
-            body_cfg->llh = stat->llh_BCBF;
-            body_cfg->r_body = stat->r_body_BCBF;
-        } else {
-            body_cfg->x_tr.r = body.x_tr.r;
-            body_cfg->x_tr.v = body.x_tr.v;
-            body_cfg->x_att.q = body.x_att.q;
-            body_cfg->x_att.w = body.x_att.w;
-        }
-    } break;
-    }
     return StatusCode::ok;
 }
 
@@ -387,10 +453,12 @@ static StatusCode sync_scenario_mass_properties(
     cfg.inertia = mp.I;
     cfg.offset_body = mp.offset_body;
     cfg.principle_axes = mp.principal_axes;
+    cfg.offset = !mp.offset_body.isZero(tol12);
     return StatusCode::ok;
 }
 
 static StatusCode sync_scenario_gravity_model(
+    ScenarioConfig& scenario,
     ScenarioGravityConfig& cfg,
     const Celestial& cel
 ) {
@@ -402,6 +470,45 @@ static StatusCode sync_scenario_gravity_model(
     cfg.J = cel.J;
     cfg.C = cel.C;
     cfg.S = cel.S;
+
+    cfg.coefficients.clear();
+    switch (cel.gravity_model) {
+    case GravityModel::pointmass: {
+        cfg.coefficient_source = GravityCoefficientSource::none;
+    } break;
+    case GravityModel::zonal:
+    case GravityModel::spherical_harmonics: {
+        if (cel.gravity_provider.empty()) {
+            cfg.coefficient_source
+                = cel.gravity_model == GravityModel::zonal
+                      ? GravityCoefficientSource::direct_zonal
+                      : GravityCoefficientSource::direct_spherical_harmonics;
+            break;
+        }
+
+        if (find_gravity_provider_config(scenario, cel.gravity_provider) == nullptr) {
+            if (cel.gravity_provider_format.empty()
+                || cel.gravity_provider_filepath.empty()) {
+                return StatusCode::gravity_model_not_found;
+            }
+            if (scenario_body_config_id_exists(scenario, cel.gravity_provider)) {
+                return StatusCode::duplicate_id;
+            }
+
+            ScenarioGravityProviderConfig provider;
+            provider.id = cel.gravity_provider;
+            provider.format = cel.gravity_provider_format;
+            provider.filepath = cel.gravity_provider_filepath;
+            provider.lineskips = cel.gravity_provider_lineskips;
+            provider.normalized = cel.gravity_provider_normalized;
+            scenario.gravity_providers.push_back(std::move(provider));
+        }
+
+        cfg.coefficient_source = GravityCoefficientSource::provider;
+        cfg.coefficients = cel.gravity_provider;
+    } break;
+    }
+
     return StatusCode::ok;
 }
 static StatusCode sync_scenario_celestial_model(
@@ -412,19 +519,28 @@ static StatusCode sync_scenario_celestial_model(
     cfg.semiminor_axis = cel.semiminor_axis;
     cfg.mean_radius = cel.mean_radius;
     cfg.eccentricity = cel.eccentricity;
+    cfg.flattening = cel.flattening;
+    cfg.units_length = ULength::kilometer;
     return StatusCode::ok;
 }
 
 static StatusCode sync_scenario_celestial(
     ScenarioSession& scenario,
-    const Celestial& cel
+    const Celestial& cel,
+    bool active
 ) {
-    ScenarioConfig& cfg = scenario.config;
-    ScenarioBuildResult& build_result = scenario.build_result;
-
     auto* cel_cfg = find_celestial_config_mut(scenario, cel.id);
+    if (cel_cfg == nullptr) return StatusCode::body_not_found;
 
     StatusCode status;
+    cel_cfg->name = cel.name;
+
+    status = sync_scenario_celestial_model(cel_cfg->model, cel);
+    if (status != StatusCode::ok) return status;
+
+    status
+        = sync_scenario_gravity_model(scenario.config, cel_cfg->model.gravity_model, cel);
+    if (status != StatusCode::ok) return status;
 
     status = sync_scenario_x_tr(cel_cfg->x_tr, cel.x_tr);
     if (status != StatusCode::ok) return status;
@@ -433,61 +549,24 @@ static StatusCode sync_scenario_celestial(
     status = sync_scenario_x_att(cel_cfg->x_att, cel.x_att);
     if (status != StatusCode::ok) return status;
 
-    status = sync_scenario_celestial_model(cel_cfg->model, cel);
-    if (status != StatusCode::ok) return status;
-
-    status = sync_scenario_gravity_model(cel_cfg->model.gravity_model, cel);
-    if (status != StatusCode::ok) return status;
-
     cel_cfg->propagation.translation = cel.propagate_tr;
     cel_cfg->propagation.attitude = cel.propagate_att;
 
-    return StatusCode::ok;
-}
-
-static StatusCode sync_scenario_add_celestial(
-    ScenarioSession& scenario,
-    const Celestial& cel
-) {
-    ScenarioCelestialConfig cfg;
-    StatusCode status;
-
-    status = sync_scenario_celestial_model(cfg.model, cel);
-    if (status != StatusCode::ok) return status;
-
-    status = sync_scenario_gravity_model(cfg.model.gravity_model, cel);
-    if (status != StatusCode::ok) return status;
-
-    status = sync_scenario_x_tr(cfg.x_tr, cel.x_tr);
-    if (status != StatusCode::ok) return status;
-
-    status = sync_scenario_x_att(cfg.x_att, cel.x_att);
-    if (status != StatusCode::ok) return status;
-
-    cfg.propagation.translation = cel.propagate_tr;
-    cfg.propagation.attitude = cel.propagate_att;
-
-    scenario.config.celestials.push_back(cfg);
-    cfg.name = cel.name;
-    string id = cel.name.empty() ? "celestial " + std::to_string(cel.id) : cel.name;
-    scenario.build_result.celestial_config_ids.at(cel.id) = id;
-    scenario.build_result.celestial_ids.at(id) = cel.id;
-    scenario.build_result.body_config_ids.at(cel.id) = id;
-    scenario.build_result.body_ids.at(id) = cel.id;
+    cel_cfg->active = active;
 
     return StatusCode::ok;
 }
 
 static StatusCode sync_scenario_satellite(
     ScenarioSession& scenario,
-    const Satellite& sat
+    const Satellite& sat,
+    bool active
 ) {
-    ScenarioConfig& cfg = scenario.config;
-    ScenarioBuildResult& build_result = scenario.build_result;
-
     auto* sat_cfg = find_satellite_config_mut(scenario, sat.id);
+    if (sat_cfg == nullptr) return StatusCode::body_not_found;
 
     StatusCode status;
+    sat_cfg->name = sat.name;
 
     status = sync_scenario_x_tr(sat_cfg->x_tr, sat.x_tr);
     if (status != StatusCode::ok) return status;
@@ -500,36 +579,70 @@ static StatusCode sync_scenario_satellite(
 
     sat_cfg->propagation.translation = sat.propagate_tr;
     sat_cfg->propagation.attitude = sat.propagate_att;
+    sat_cfg->active = active;
 
     return StatusCode::ok;
 }
 
-static StatusCode sync_scenario_add_satellite(
-    ScenarioSession& scenario,
-    const Satellite& sat
+static StatusCode make_scenario_celestial_config(
+    ScenarioConfig& scenario,
+    const Celestial& cel,
+    bool active,
+    ScenarioCelestialConfig& out
 ) {
-    ScenarioSatelliteConfig cfg;
+    out = ScenarioCelestialConfig{};
     StatusCode status;
 
-    status = sync_scenario_x_tr(cfg.x_tr, sat.x_tr);
+    out.name = cel.name;
+
+    status = sync_scenario_x_tr(out.x_tr, cel.x_tr);
     if (status != StatusCode::ok) return status;
 
-    status = sync_scenario_x_att(cfg.x_att, sat.x_att);
+    status = sync_scenario_x_att(out.x_att, cel.x_att);
     if (status != StatusCode::ok) return status;
 
-    status = sync_scenario_mass_properties(cfg.mass_properties, sat.mass_properties);
+    status = sync_scenario_celestial_model(out.model, cel);
     if (status != StatusCode::ok) return status;
 
-    cfg.propagation.translation = sat.propagate_tr;
-    cfg.propagation.attitude = sat.propagate_att;
+    out.model.id = "custom";
 
-    scenario.config.satellites.push_back(cfg);
-    cfg.name = sat.name;
-    string id = sat.name.empty() ? "satellite " + std::to_string(sat.id) : sat.name;
-    scenario.build_result.satellite_config_ids.at(sat.id) = id;
-    scenario.build_result.satellite_ids.at(id) = sat.id;
-    scenario.build_result.body_config_ids.at(sat.id) = id;
-    scenario.build_result.body_ids.at(id) = sat.id;
+    status = sync_scenario_gravity_model(scenario, out.model.gravity_model, cel);
+    if (status != StatusCode::ok) return status;
+
+    out.attitude_model = cel.attitude_model;
+    out.has_attitude_model = true;
+
+    out.propagation.translation = cel.propagate_tr;
+    out.propagation.attitude = cel.propagate_att;
+
+    out.active = active;
+
+    return StatusCode::ok;
+}
+
+static StatusCode make_scenario_satellite_config(
+    const Satellite& sat,
+    bool active,
+    ScenarioSatelliteConfig& out
+) {
+    out = ScenarioSatelliteConfig{};
+    StatusCode status;
+
+    status = sync_scenario_x_tr(out.x_tr, sat.x_tr);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_x_att(out.x_att, sat.x_att);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_mass_properties(out.mass_properties, sat.mass_properties);
+    if (status != StatusCode::ok) return status;
+
+    out.name = sat.name;
+
+    out.propagation.translation = sat.propagate_tr;
+    out.propagation.attitude = sat.propagate_att;
+
+    out.active = active;
 
     return StatusCode::ok;
 }
@@ -537,7 +650,7 @@ static StatusCode sync_scenario_add_satellite(
 static StatusCode sync_scenario_station_anchor(
     ScenarioStationConfig& cfg,
     const Station& stat,
-    ScenarioBuildResult& build_result
+    const ScenarioBuildResult& build_result
 ) {
     auto it = build_result.celestial_config_ids.find(stat.anchor_id);
     if (it == build_result.celestial_config_ids.end())
@@ -546,6 +659,7 @@ static StatusCode sync_scenario_station_anchor(
     cfg.anchor = it->second;
     cfg.llh = stat.llh_BCBF;
     cfg.r_body = stat.r_body_BCBF;
+    cfg.coordinate_type = "detic_llh";
     cfg.local_frame = "ENU"; // TODO: make enum for this?
     cfg.units_angle = UAngle::radian;
     cfg.units_length = ULength::kilometer;
@@ -557,61 +671,263 @@ static StatusCode sync_scenario_instrument(
     ScenarioInstrumentConfig& cfg,
     const StationInstrument& instr
 ) {
+    cfg.id = instr.name.empty() ? "instrument_" + std::to_string(instr.id) : instr.name;
+
+    cfg.covariance_cfg.type = "matrix";
+
     cfg.covariance_cfg.covariance = instr.R;
     cfg.enabled = instr.enabled;
     cfg.type = instr.type;
 
     return StatusCode::ok;
 }
-static StatusCode sync_scenario_add_station(
-    ScenarioSession& scenario,
+
+static StatusCode sync_scenario_station_instruments(
+    ScenarioStationConfig& cfg,
     const Station& stat
 ) {
-    ScenarioStationConfig cfg;
-    StatusCode status;
+    svec<InstrumentId> instrument_ids;
+    instrument_ids.reserve(stat.instruments.size());
+    for (const auto& entry : stat.instruments) {
+        instrument_ids.push_back(entry.first);
+    }
+    std::sort(instrument_ids.begin(), instrument_ids.end());
 
-    cfg.anchored = stat.anchored;
+    svec<ScenarioInstrumentConfig> instruments;
+    instruments.reserve(instrument_ids.size());
+    uset<string> config_ids;
+
+    for (InstrumentId id : instrument_ids) {
+        auto it = stat.instruments.find(id);
+        if (it == stat.instruments.end()) return StatusCode::instrument_not_found;
+
+        ScenarioInstrumentConfig instr_cfg;
+        StatusCode status = sync_scenario_instrument(instr_cfg, it->second);
+        if (status != StatusCode::ok) return status;
+        if (!config_ids.insert(instr_cfg.id).second) return StatusCode::duplicate_id;
+        instruments.push_back(std::move(instr_cfg));
+    }
+
+    cfg.instruments = std::move(instruments);
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_station(
+    ScenarioSession& session,
+    const Station& stat,
+    bool active
+) {
+    auto* stat_cfg = find_station_config_mut(session, stat.id);
+    if (stat_cfg == nullptr) return StatusCode::body_not_found;
+
+    StatusCode status;
+    stat_cfg->name = stat.name;
+
+    stat_cfg->anchored = stat.anchored;
     if (stat.anchored) {
-        status = sync_scenario_station_anchor(cfg, stat, scenario.build_result);
+        status = sync_scenario_station_anchor(*stat_cfg, stat, session.build_result);
         if (status != StatusCode::ok) return status;
     } else {
-        status = sync_scenario_x_tr(cfg.x_tr, stat.x_tr);
+        status = sync_scenario_x_tr(stat_cfg->x_tr, stat.x_tr);
         if (status != StatusCode::ok) return status;
 
-        status = sync_scenario_x_att(cfg.x_att, stat.x_att);
+        status = sync_scenario_x_att(stat_cfg->x_att, stat.x_att);
         if (status != StatusCode::ok) return status;
 
-        status = sync_scenario_mass_properties(cfg.mass_properties, stat.mass_properties);
+        status = sync_scenario_mass_properties(
+            stat_cfg->mass_properties,
+            stat.mass_properties
+        );
         if (status != StatusCode::ok) return status;
     }
-    cfg.propagation.translation = stat.propagate_tr;
-    cfg.propagation.attitude = stat.propagate_att;
 
-    for (const auto& [id, instr] : stat.instruments) {
-        ScenarioInstrumentConfig instrument;
-        sync_scenario_instrument(instrument, instr);
-        instrument.id = "Instrument " + std::to_string(instr.id) + " ("
-                        + observation_type_str_simple(instr.type) + ")";
-        cfg.instruments.push_back(instrument);
-    }
+    status = sync_scenario_station_instruments(*stat_cfg, stat);
+    if (status != StatusCode::ok) return status;
 
-    scenario.config.stations.push_back(cfg);
-    cfg.name = stat.name;
-    string id = stat.name.empty() ? "station" + std::to_string(stat.id) : stat.name;
-    scenario.build_result.station_config_ids.at(stat.id) = id;
-    scenario.build_result.station_ids.at(id) = stat.id;
-    scenario.build_result.body_config_ids.at(stat.id) = id;
-    scenario.build_result.body_ids.at(id) = stat.id;
+    stat_cfg->propagation.translation = stat.propagate_tr;
+    stat_cfg->propagation.attitude = stat.propagate_att;
+    stat_cfg->active = active;
 
     return StatusCode::ok;
 }
 
-static void sync_scenario_runtime_state_from_world(
-    RenderLoopState& state,
+static StatusCode sync_scenario_body(
+    ScenarioSession& session,
+    const Body& body,
     const World& world
 ) {
-    if (state.scenario.dirty) {}
-    state.scenario.dirty = false;
+    const bool active = world.is_active(body.id);
+
+    switch (body.body_type) {
+    case BodyType::unknown: return StatusCode::unsupported_type;
+    case BodyType::celestial: {
+        const Celestial* cel = world.celestial(body.id);
+        if (cel == nullptr) return StatusCode::body_not_found;
+        return sync_scenario_celestial(session, *cel, active);
+    }
+    case BodyType::satellite: {
+        const Satellite* sat = world.satellite(body.id);
+        if (sat == nullptr) return StatusCode::body_not_found;
+        return sync_scenario_satellite(session, *sat, active);
+    }
+    case BodyType::station: {
+        const Station* stat = world.station(body.id);
+        if (stat == nullptr) return StatusCode::body_not_found;
+        return sync_scenario_station(session, *stat, active);
+    }
+    }
+
+    return StatusCode::unsupported_type;
+}
+static StatusCode make_scenario_station_config(
+    const Station& stat,
+    bool active,
+    const ScenarioBuildResult& mappings,
+    ScenarioStationConfig& out
+) {
+    out = ScenarioStationConfig{};
+
+    StatusCode status;
+    out.name = stat.name;
+
+    out.anchored = stat.anchored;
+    if (stat.anchored) {
+        status = sync_scenario_station_anchor(out, stat, mappings);
+        if (status != StatusCode::ok) return status;
+    } else {
+        status = sync_scenario_x_tr(out.x_tr, stat.x_tr);
+        if (status != StatusCode::ok) return status;
+
+        status = sync_scenario_x_att(out.x_att, stat.x_att);
+        if (status != StatusCode::ok) return status;
+
+        status = sync_scenario_mass_properties(out.mass_properties, stat.mass_properties);
+        if (status != StatusCode::ok) return status;
+    }
+
+    status = sync_scenario_station_instruments(out, stat);
+    if (status != StatusCode::ok) return status;
+
+    out.propagation.translation = stat.propagate_tr;
+    out.propagation.attitude = stat.propagate_att;
+    out.active = active;
+
+    return StatusCode::ok;
+}
+
+static StatusCode sync_scenario_runtime_state_from_world(
+    ScenarioSession& session,
+    const World& world,
+    const WorldStepperConfig& stepper
+) {
+    StatusCode status;
+    ScenarioConfig& cfg = session.config;
+    ScenarioBuildResult& mappings = session.build_result;
+
+    cfg.time.t0 = world.t_sim();
+
+    cfg.world_stepper.dt_scale = stepper.dt_scale;
+    cfg.world_stepper.substeps = stepper.substeps;
+    cfg.world_stepper.ticks = stepper.ticks;
+    cfg.world_stepper.paused = stepper.paused;
+    cfg.world_stepper.integrator_tr = stepper.integrator_tr;
+    cfg.world_stepper.integrator_att = stepper.integrator_att;
+
+    for (const EntityId id : world.all_celestial_ids()) {
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr) return StatusCode::body_not_found;
+
+        const auto mapping = mappings.celestial_config_ids.find(id);
+        if (mapping != mappings.celestial_config_ids.end()) {
+            // sync already existing
+            status = sync_scenario_celestial(session, *cel, world.is_active(id));
+            if (status != StatusCode::ok) return status;
+            continue;
+        }
+
+        // add new
+        ScenarioCelestialConfig cel_cfg;
+        status = make_scenario_celestial_config(cfg, *cel, world.is_active(id), cel_cfg);
+        if (status != StatusCode::ok) return status;
+
+        cel_cfg.id = make_unique_scenario_body_id(session, BodyType::celestial, id);
+        if (cel_cfg.id.empty()) return StatusCode::invalid_input;
+
+        status = register_scenario_body_mapping(
+            mappings,
+            BodyType::celestial,
+            cel_cfg.id,
+            id
+        );
+        if (status != StatusCode::ok) return status;
+
+        cfg.celestials.push_back(std::move(cel_cfg));
+    }
+
+    for (const EntityId id : world.all_satellite_ids()) {
+        const Satellite* sat = world.satellite(id);
+        if (sat == nullptr) return StatusCode::body_not_found;
+
+        const auto mapping = mappings.satellite_config_ids.find(id);
+        if (mapping != mappings.satellite_config_ids.end()) {
+            status = sync_scenario_satellite(session, *sat, world.is_active(id));
+            if (status != StatusCode::ok) return status;
+            continue;
+        }
+
+        ScenarioSatelliteConfig sat_cfg;
+        status = make_scenario_satellite_config(*sat, world.is_active(id), sat_cfg);
+        if (status != StatusCode::ok) return status;
+
+        sat_cfg.id = make_unique_scenario_body_id(session, BodyType::satellite, id);
+        if (sat_cfg.id.empty()) return StatusCode::invalid_input;
+
+        status = register_scenario_body_mapping(
+            mappings,
+            BodyType::satellite,
+            sat_cfg.id,
+            id
+        );
+        if (status != StatusCode::ok) return status;
+
+        cfg.satellites.push_back(std::move(sat_cfg));
+    }
+
+    for (const EntityId id : world.all_station_ids()) {
+        const Station* stat = world.station(id);
+        if (stat == nullptr) return StatusCode::body_not_found;
+
+        const auto mapping = mappings.station_config_ids.find(id);
+        if (mapping != mappings.station_config_ids.end()) {
+            status = sync_scenario_station(session, *stat, world.is_active(id));
+            if (status != StatusCode::ok) return status;
+            continue;
+        }
+
+        ScenarioStationConfig stat_cfg;
+        status = make_scenario_station_config(
+            *stat,
+            world.is_active(id),
+            mappings,
+            stat_cfg
+        );
+        if (status != StatusCode::ok) return status;
+
+        stat_cfg.id = make_unique_scenario_body_id(session, BodyType::station, id);
+        if (stat_cfg.id.empty()) return StatusCode::invalid_input;
+
+        status = register_scenario_body_mapping(
+            mappings,
+            BodyType::station,
+            stat_cfg.id,
+            id
+        );
+        if (status != StatusCode::ok) return status;
+
+        cfg.stations.push_back(std::move(stat_cfg));
+    }
+
+    return StatusCode::ok;
 }
 
 static Body* draft_body_ptr(BodyEditDraft& draft) {
@@ -765,6 +1081,40 @@ static void render_open_scenario_file_dialog(RenderLoopState& state) {
     }
 }
 
+static void set_draft_simple_spin_from_w(BodyEditDraft& draft, ecref<vec3d> w) {
+    draft.simple_spin_rate = w.norm();
+    if (draft.simple_spin_rate > tol12) {
+        draft.simple_spin_axis = w / draft.simple_spin_rate;
+    } else {
+        draft.simple_spin_axis = axis_z;
+    }
+    draft.simple_spin_edit_mode = SimpleSpinEditMode::rate;
+}
+
+static StatusCode apply_draft_simple_spin(BodyEditDraft& draft) {
+    if (draft.edit_body_type != BodyType::celestial) return StatusCode::ok;
+    if (draft.edit_celestial.attitude_model != CelestialAttitudeModel::simple_spin) {
+        return StatusCode::ok;
+    }
+    if (!std::isfinite(draft.simple_spin_rate) || draft.simple_spin_rate < 0.0) {
+        return StatusCode::invalid_input;
+    }
+    if (!finite_vec(draft.simple_spin_axis)) return StatusCode::invalid_input;
+
+    f64 axis_norm = draft.simple_spin_axis.norm();
+    if (draft.simple_spin_rate <= tol12) {
+        draft.edit_celestial.x_att.w = vec3d0;
+        if (axis_norm <= tol12) draft.simple_spin_axis = axis_z;
+        return StatusCode::ok;
+    }
+    if (axis_norm <= tol12) return StatusCode::invalid_input;
+
+    draft.simple_spin_axis /= axis_norm;
+    draft.edit_celestial.x_att.w = draft.simple_spin_axis * draft.simple_spin_rate;
+
+    return StatusCode::ok;
+}
+
 static void render_save_scenario_file_dialog(
     RenderLoopState& state,
     const RenderLoopConfig& cfg,
@@ -836,14 +1186,17 @@ static void request_scenario_save(
         return;
     }
 
-    // TODO: use as fallback?
-    // state.file_status
-    //     = build_scenario_config_from_world(state.scenario.config, world,
-    //     cfg.stepper_cfg);
-    // if (state.file_status != StatusCode::ok) return;
+    state.file_status
+        = sync_scenario_runtime_state_from_world(state.scenario, world, cfg.stepper_cfg);
+    if (state.file_status != StatusCode::ok) return;
 
     state.file_status = save_scenario_json(state.save_filepath, state.scenario.config);
     if (state.file_status != StatusCode::ok) return;
+
+    state.scenario.filepath = state.save_filepath;
+    state.scenario.has_filepath = true;
+    state.scenario.dirty = false;
+    if (overwrite) state.file_status = StatusCode::file_overwritten;
 }
 
 static void render_scenario_overwrite_popup(
@@ -886,7 +1239,7 @@ static bool render_state_tr_ui(Body& body, ImGuiInputTextFlags flags) {
 
 static bool render_state_att_ui(Body& body, ImGuiInputTextFlags flags) {
     return im::InputDouble4("q", body.x_att.q, "%.3f", flags)
-           || im::InputDouble3("w", body.x_att.w, "%.3f", flags);
+           || im::InputDouble3("w", body.x_att.w, "%.6E", flags);
 }
 
 static bool render_state_ui(Body& body, ImGuiInputTextFlags flags) {
@@ -907,6 +1260,24 @@ static bool vec4_changed(ecref<vec4d> a, ecref<vec4d> b, f64 tol = tol12) {
 
 static bool vec7_changed(ecref<vec7d> a, ecref<vec7d> b, f64 tol = tol12) {
     return !a.isApprox(b, tol);
+}
+
+static bool simple_spin_cache_changed(
+    const BodyEditDraft& draft,
+    const Celestial& cel,
+    f64 tol = tol12
+) {
+    if (draft.edit_celestial.attitude_model != CelestialAttitudeModel::simple_spin) {
+        return false;
+    }
+
+    f64 rate = cel.x_att.w.norm();
+    if (scalar_changed(draft.simple_spin_rate, rate, tol)) return true;
+    if (rate <= tol && draft.simple_spin_rate <= tol) return false;
+
+    vec3d axis = axis_z;
+    if (rate > tol) axis = cel.x_att.w / rate;
+    return vec3_changed(draft.simple_spin_axis, axis, tol);
 }
 
 static bool mat3_changed(ecref<mat3d> a, ecref<mat3d> b, f64 tol = tol12) {
@@ -1119,21 +1490,28 @@ static void render_simulation_ui(
         if (im::Button("Run")) {
             // TODO: make ui still responsive while this runs
 
-            bool finite_pos_dt = finite_nonneg(state.step_by_delta);
-            if (finite_pos_dt) {
-                // TODO: step here
-                im::SameLine();
-                im::Text("Not yet implemented");
-            } else {
-                // TODO: use statuscode
-                im::SameLine();
-                im::Text("The time change must be positive");
+            const f64 advance_per_call
+                = state.dt * stepper.dt_scale * stepper.ticks;
+            if (finite_pos(state.step_by_delta) && finite_pos(advance_per_call)) {
+                f64 remaining = state.step_by_delta;
+                while (remaining > tol12) {
+                    const f64 dt_call = std::min(
+                        state.dt,
+                        remaining / (stepper.dt_scale * stepper.ticks)
+                    );
+                    WorldStepperStats step_stats
+                        = step_world(world, dt_call, stepper, state.wksp);
+                    state.stats += step_stats;
+                    if (!step_stats.success) break;
+
+                    remaining -= step_stats.dt_sim_advanced;
+                    if (remaining < tol12) remaining = 0.0;
+                }
             }
         }
     }
 
     if (im::CollapsingHeader("Scenario")) {
-        im::Indent();
         im::Text("Filepath:");
         im::SameLine();
         im::InputText("##filepath", &state.filepath);
@@ -1171,19 +1549,28 @@ static void render_simulation_ui(
             } else if (!is_existing_regular_file(path)) {
                 state.file_status = StatusCode::invalid_input;
             } else {
-                state.file_status = load_scenario_json(path, state.scenario.config);
-            }
-
-            if (state.file_status == StatusCode::ok) {
-                world = World{};
-                state.file_status = build_world_from_scenario_config(
-                    state.scenario.config,
-                    world,
-                    state.scenario.build_result,
-                    cfg.stepper_cfg
-                );
+                ScenarioConfig loaded_config;
+                state.file_status = load_scenario_json(path, loaded_config);
                 if (state.file_status == StatusCode::ok) {
-                    state.scenario.dirty = false;
+                    World loaded_world;
+                    ScenarioBuildResult loaded_mappings;
+                    WorldStepperConfig loaded_stepper = cfg.stepper_cfg;
+                    state.file_status = build_world_from_scenario_config(
+                        loaded_config,
+                        loaded_world,
+                        loaded_mappings,
+                        loaded_stepper
+                    );
+                    if (state.file_status == StatusCode::ok) {
+                        world = std::move(loaded_world);
+                        cfg.stepper_cfg = loaded_stepper;
+                        state.scenario.config = std::move(loaded_config);
+                        state.scenario.build_result = std::move(loaded_mappings);
+                        state.scenario.filepath = path;
+                        state.scenario.has_filepath = true;
+                        state.scenario.dirty = false;
+                        state.wksp.dirty = true;
+                    }
                 }
             }
         }
@@ -1197,7 +1584,7 @@ static void render_simulation_ui(
         if (state.file_attempt) {
             status_text("Scenario Loader/Saver Status", state.file_status);
         }
-        im::Unindent();
+        im::Separator();
     }
 
     im::End();
@@ -1229,21 +1616,19 @@ static void render_renderer_ui(
 
     im::Checkbox("Draw Grids", &cfg.draw.draw_grids);
     if (cfg.draw.draw_grids) {
-        im::Indent();
         if (im::CollapsingHeader("Grids")) {
             im::Checkbox("Show XY Grid", &cfg.draw.draw_grid_xy);
             im::Checkbox("Show ZY Grid", &cfg.draw.draw_grid_zy);
             im::Checkbox("Show XZ Grid", &cfg.draw.draw_grid_xz);
         };
-        im::Unindent();
+        im::Separator();
     }
 
     if (im::CollapsingHeader("Axes")) {
-        im::Indent();
         im::Checkbox("Show Inertial Axes", &cfg.draw.draw_inertial_axes);
         im::Checkbox("Show Body Axes", &cfg.draw.draw_body_axes);
         im::Checkbox("Color Axes", &cfg.draw.color_axes);
-        im::Unindent();
+        im::Separator();
     }
 
     im::Checkbox("Highlight Selected Body", &cfg.draw.draw_selected_body);
@@ -1448,10 +1833,24 @@ static void render_body_stats_ui(
 
         if (cfg.edit_body_stats) {
             if (edit_locked) im::BeginDisabled();
-            if (im::Button("Save")) {
+            im::TextSL("Edit:");
+            if (im::Button("Confirm")) {
                 EntityId edit_body_id = state.draft.edit_body_id;
                 state.draft.edit_body_status = apply_body_edit_draft(state.draft, world);
                 if (state.draft.edit_body_status == StatusCode::ok) {
+                    const Body* edited_body = world.body(edit_body_id);
+                    if (edited_body == nullptr) {
+                        state.draft.edit_body_status = StatusCode::body_not_found;
+                    } else {
+                        state.draft.edit_body_status = sync_scenario_body(
+                            state.scenario,
+                            *edited_body,
+                            world
+                        );
+                    }
+                }
+                if (state.draft.edit_body_status == StatusCode::ok) {
+                    state.scenario.dirty = true;
                     state.wksp.dirty = true;
                     if (cfg.camera.target_id == edit_body_id) {
                         sync_camera_tracking(cfg.camera, world);
@@ -1516,7 +1915,11 @@ static void render_body_stats_ui(
             if (cel == nullptr) {
                 im::Text("Invalid Celestial");
             } else {
-                render_celestial_stats_ui(*cel, field_flags);
+                render_celestial_stats_ui(
+                    *cel,
+                    field_flags,
+                    editable ? &state.draft : nullptr
+                );
             }
         } break;
         case BodyType::satellite: {
@@ -1551,36 +1954,41 @@ static void render_body_stats_ui(
         }
         if (cfg.stepper_cfg.paused) {
             if (active && im::Button("Make Inactive")) {
-                world.make_inactive(cfg.body_stats_id);
-                sync_scenario_body_active(
-                    state.scenario,
-                    cfg.body_stats_id,
-                    false,
-                    world
-                );
-                state.wksp.dirty = true;
-                if (cfg.camera.target_id == body->id) {
-                    cycle_active_id(cfg.camera.target_id, world, 1);
-                    sync_camera_tracking(cfg.camera, world);
+                if (world.make_inactive(cfg.body_stats_id)) {
+                    StatusCode status = sync_scenario_body_active(
+                        state.scenario,
+                        cfg.body_stats_id,
+                        false,
+                        world
+                    );
+                    if (status == StatusCode::ok) {
+                        state.scenario.dirty = true;
+                        state.wksp.dirty = true;
+                        if (cfg.camera.target_id == body->id) {
+                            cycle_active_id(cfg.camera.target_id, world, 1);
+                            sync_camera_tracking(cfg.camera, world);
+                        }
+                    } else {
+                        world.make_active(cfg.body_stats_id);
+                    }
                 }
             }
             if (!active && im::Button("Make Active")) {
-                world.make_active(cfg.body_stats_id);
-                sync_scenario_body_active(state.scenario, cfg.body_stats_id, true, world);
-                state.wksp.dirty = true;
+                if (world.make_active(cfg.body_stats_id)) {
+                    StatusCode status = sync_scenario_body_active(
+                        state.scenario,
+                        cfg.body_stats_id,
+                        true,
+                        world
+                    );
+                    if (status == StatusCode::ok) {
+                        state.scenario.dirty = true;
+                        state.wksp.dirty = true;
+                    } else {
+                        world.make_inactive(cfg.body_stats_id);
+                    }
+                }
             }
-        }
-    }
-
-    if (cfg.stepper_cfg.paused) {
-        im::Separator();
-        if (im::Button("Add Body")) {
-            state.add_body = true;
-            if (state.add_body_type == BodyType::unknown) {
-                state.add_body_type = BodyType::celestial;
-            }
-            init_add_body_draft_defaults(state, world, state.add_body_type);
-            state.add_body_status = StatusCode::ok;
         }
     }
 
@@ -1649,6 +2057,18 @@ static void render_performance_ui(
 
 static void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState& state) {
     im::Begin("Add Body");
+    if (cfg.stepper_cfg.paused && !state.add_body) {
+        im::Separator();
+        if (im::Button("Add Body")) {
+            state.add_body = true;
+            if (state.add_body_type == BodyType::unknown) {
+                state.add_body_type = BodyType::celestial;
+            }
+            init_add_body_draft_defaults(state, world, state.add_body_type);
+            state.add_body_status = StatusCode::ok;
+        }
+    }
+
     if (cfg.stepper_cfg.paused && state.add_body) {
         ImGui::SetWindowCollapsed(false);
 
@@ -1672,7 +2092,7 @@ static void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState
         // TODO: add copy from existing bodies, maybe allow cross types for states, etc.
 
         if (state.add_body_type != BodyType::unknown) {
-            if (im::Button("Save")) {
+            if (im::Button("Create")) {
                 EntityId id = kInvalidEntityId;
                 state.add_body_status = validate_add_body_draft(state, world);
 
@@ -1680,42 +2100,137 @@ static void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState
                     switch (state.add_body_type) {
                     case BodyType::unknown: break;
                     case BodyType::celestial: {
-                        auto cel = std::make_unique<Celestial>(state.temp_celestial);
-                        state.add_body_status = sync_scenario_add_celestial(
-                            state.scenario,
-                            state.temp_celestial
+                        ScenarioCelestialConfig cel_cfg;
+                        state.add_body_status = make_scenario_celestial_config(
+                            state.scenario.config,
+                            state.temp_celestial,
+                            true,
+                            cel_cfg
                         );
                         if (state.add_body_status != StatusCode::ok) break;
+
+                        auto cel = std::make_unique<Celestial>(state.temp_celestial);
                         id = world.insert_celestial(std::move(cel));
-                        state.temp_celestial = Celestial{};
+                        if (id == kInvalidEntityId) {
+                            state.add_body_status = StatusCode::body_not_found;
+                            break;
+                        }
+
+                        const string config_id = make_unique_scenario_body_id(
+                            state.scenario,
+                            BodyType::celestial,
+                            id
+                        );
+                        if (config_id.empty()) {
+                            state.add_body_status = StatusCode::invalid_input;
+                            break;
+                        }
+
+                        cel_cfg.id = config_id;
+                        state.add_body_status = register_scenario_body_mapping(
+                            state.scenario.build_result,
+                            BodyType::celestial,
+                            config_id,
+                            id
+                        );
+                        if (state.add_body_status != StatusCode::ok) break;
+
+                        state.scenario.config.celestials.push_back(std::move(cel_cfg));
                     } break;
                     case BodyType::satellite: {
-                        auto sat = std::make_unique<Satellite>(state.temp_satellite);
-                        state.add_body_status = sync_scenario_add_satellite(
-                            state.scenario,
-                            state.temp_satellite
+                        ScenarioSatelliteConfig sat_cfg;
+                        state.add_body_status = make_scenario_satellite_config(
+                            state.temp_satellite,
+                            true,
+                            sat_cfg
                         );
                         if (state.add_body_status != StatusCode::ok) break;
+
+                        auto sat = std::make_unique<Satellite>(state.temp_satellite);
                         id = world.insert_satellite(std::move(sat));
-                        state.temp_satellite = Satellite{};
+                        if (id == kInvalidEntityId) {
+                            state.add_body_status = StatusCode::body_not_found;
+                            break;
+                        }
+
+                        const string config_id = make_unique_scenario_body_id(
+                            state.scenario,
+                            BodyType::satellite,
+                            id
+                        );
+                        if (config_id.empty()) {
+                            state.add_body_status = StatusCode::invalid_input;
+                            break;
+                        }
+
+                        sat_cfg.id = config_id;
+                        state.add_body_status = register_scenario_body_mapping(
+                            state.scenario.build_result,
+                            BodyType::satellite,
+                            config_id,
+                            id
+                        );
+                        if (state.add_body_status != StatusCode::ok) break;
+
+                        state.scenario.config.satellites.push_back(std::move(sat_cfg));
                     } break;
                     case BodyType::station: {
-                        auto stat = std::make_unique<Station>(state.temp_station);
-                        state.add_body_status = sync_scenario_add_station(
-                            state.scenario,
-                            state.temp_station
+                        ScenarioStationConfig stat_cfg;
+                        state.add_body_status = make_scenario_station_config(
+                            state.temp_station,
+                            true,
+                            state.scenario.build_result,
+                            stat_cfg
                         );
                         if (state.add_body_status != StatusCode::ok) break;
+
+                        auto stat = std::make_unique<Station>(state.temp_station);
                         id = world.insert_station(std::move(stat));
-                        state.temp_station = Station{};
+                        if (id == kInvalidEntityId) {
+                            state.add_body_status = StatusCode::body_not_found;
+                            break;
+                        }
+
+                        const string config_id = make_unique_scenario_body_id(
+                            state.scenario,
+                            BodyType::station,
+                            id
+                        );
+                        if (config_id.empty()) {
+                            state.add_body_status = StatusCode::invalid_input;
+                            break;
+                        }
+
+                        stat_cfg.id = config_id;
+                        state.add_body_status = register_scenario_body_mapping(
+                            state.scenario.build_result,
+                            BodyType::station,
+                            config_id,
+                            id
+                        );
+                        if (state.add_body_status != StatusCode::ok) break;
+
+                        state.scenario.config.stations.push_back(std::move(stat_cfg));
                     } break;
                     }
 
-                    if (id != kInvalidEntityId) {
+                    if (state.add_body_status == StatusCode::ok
+                        && id != kInvalidEntityId) {
+                        state.scenario.dirty = true;
                         state.wksp.dirty = true;
                         cfg.body_stats_id = id;
                         cfg.camera.target_id = id;
-                    } else {
+                        switch (state.add_body_type) {
+                        case BodyType::unknown: break;
+                        case BodyType::celestial:
+                            state.temp_celestial = Celestial{};
+                            break;
+                        case BodyType::satellite:
+                            state.temp_satellite = Satellite{};
+                            break;
+                        case BodyType::station: state.temp_station = Station{}; break;
+                        }
+                    } else if (state.add_body_status == StatusCode::ok) {
                         state.add_body_status = StatusCode::body_not_found;
                     }
 
@@ -1750,10 +2265,15 @@ static void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState
 }
 
 static bool render_body_propagation_ui(Body& body, bool editable) {
-    if (!editable) im::BeginDisabled();
-    bool changed = im::Checkbox("Propagate Translation", &body.propagate_tr)
-                   || im::Checkbox("Propagate Attitude", &body.propagate_att);
-    if (!editable) im::EndDisabled();
+    bool changed = false;
+
+    if (im::CollapsingHeader("Propagation")) {
+        if (!editable) im::BeginDisabled();
+        changed = im::Checkbox("Propagate Translation", &body.propagate_tr)
+                  || im::Checkbox("Propagate Attitude", &body.propagate_att);
+        if (!editable) im::EndDisabled();
+        im::Separator();
+    }
 
     return changed;
 }
@@ -1766,10 +2286,79 @@ static bool render_stat_state_ui(Station& stat, World& world, ImGuiInputTextFlag
            || im::InputDouble4("q", q, "%.3f", flags);
 }
 
-static void render_celestial_stats_ui(Celestial& cel, ImGuiInputTextFlags flags) {
+static void render_celestial_stats_ui(
+    Celestial& cel,
+    ImGuiInputTextFlags flags,
+    BodyEditDraft* draft
+) {
     bool editable = !fields_readonly(flags);
 
-    render_state_ui(cel, flags);
+    render_state_tr_ui(cel, flags);
+    im::InputDouble4("q", cel.x_att.q, "%.3f", flags);
+    if (cel.attitude_model != CelestialAttitudeModel::simple_spin) {
+        im::InputDouble3("w", cel.x_att.w, "%.6E", flags);
+    }
+
+    if (im::CollapsingHeader("Attitude Model")) {
+        i32 att_idx = static_cast<i32>(cel.attitude_model);
+        const char* att_name[] = {"Fixed", "Simple Spin", "Provider"};
+        if (!editable) im::BeginDisabled();
+        if (im::Combo("##Attitude Model", &att_idx, att_name, 3)) {
+            if (static_cast<CelestialAttitudeModel>(att_idx)
+                == CelestialAttitudeModel::provider) {
+                att_idx = static_cast<i32>(CelestialAttitudeModel::fixed);
+            } // TEMP: no attitude providers yet, fallback to fixed
+            cel.attitude_model = static_cast<CelestialAttitudeModel>(att_idx);
+        }
+        if (!editable) im::EndDisabled();
+        if (cel.attitude_model == CelestialAttitudeModel::simple_spin) {
+            if (editable && draft != nullptr) {
+                i32 spin_mode = static_cast<i32>(draft->simple_spin_edit_mode);
+                if (im::RadioButton("Edit Spin Rate", &spin_mode, 0)) {
+                    draft->simple_spin_edit_mode = SimpleSpinEditMode::rate;
+                }
+                im::SameLine();
+                if (im::RadioButton("Edit Spin Axis", &spin_mode, 1)) {
+                    draft->simple_spin_edit_mode = SimpleSpinEditMode::axis;
+                }
+
+                ImGuiInputTextFlags rate_flags = flags;
+                ImGuiInputTextFlags axis_flags = flags;
+                if (draft->simple_spin_edit_mode != SimpleSpinEditMode::rate) {
+                    rate_flags |= ImGuiInputTextFlags_ReadOnly;
+                }
+                if (draft->simple_spin_edit_mode != SimpleSpinEditMode::axis) {
+                    axis_flags |= ImGuiInputTextFlags_ReadOnly;
+                }
+
+                im::InputDouble(
+                    "Spin Rate",
+                    &draft->simple_spin_rate,
+                    0.0,
+                    0.0,
+                    "%.6E",
+                    rate_flags
+                );
+                im::InputDouble3(
+                    "Spin Axis",
+                    draft->simple_spin_axis,
+                    "%.6E",
+                    axis_flags
+                );
+                im::Text("Spin angular velocity is applied when Confirm is pressed.");
+            } else {
+                f64 w_mag = cel.x_att.w.norm();
+                vec3d spin_axis = axis_z;
+                if (w_mag > tol12) {
+                    spin_axis = cel.x_att.w / w_mag;
+                }
+                ImGuiInputTextFlags spin_flags = flags | ImGuiInputTextFlags_ReadOnly;
+                im::InputDouble("Spin Rate", &w_mag, 0.0, 0.0, "%.6E", spin_flags);
+                im::InputDouble3("Spin Axis", spin_axis, "%.6E", spin_flags);
+            }
+        }
+        im::Separator();
+    }
 
     if (im::CollapsingHeader("Celestial Model", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool edit_a = im::InputDouble(
@@ -1812,10 +2401,10 @@ static void render_celestial_stats_ui(Celestial& cel, ImGuiInputTextFlags flags)
             computed_flags
         );
         im::InputDouble("Flattening", &cel.flattening, 0.0, 0.0, "%.3f", computed_flags);
+        im::Separator();
     }
 
     if (im::CollapsingHeader("Gravity Model", ImGuiTreeNodeFlags_DefaultOpen)) {
-        im::Indent();
         i32 model_idx = static_cast<i32>(cel.gravity_model);
         const char* model_names[] = {"Pointmass", "Zonal", "Spherical Harmonics"};
         if (!editable) im::BeginDisabled();
@@ -1844,27 +2433,7 @@ static void render_celestial_stats_ui(Celestial& cel, ImGuiInputTextFlags flags)
             im::Text("C/S Matrices Active: %s", bool_str(csactive).c_str());
         } break;
         }
-        im::Unindent();
-    }
-
-    if (im::CollapsingHeader("Attitude Model")) {
-        i32 att_idx = static_cast<i32>(cel.attitude_model);
-        const char* att_name[] = {"Fixed", "Simple Spin", "Provider"};
-        if (!editable) im::BeginDisabled();
-        if (im::Combo("##Attitude Model", &att_idx, att_name, 3)) {
-            if (static_cast<CelestialAttitudeModel>(att_idx)
-                == CelestialAttitudeModel::provider) {
-                att_idx = static_cast<i32>(CelestialAttitudeModel::fixed);
-            } // TEMP: no attitude providers yet, fallback to fixed
-            cel.attitude_model = static_cast<CelestialAttitudeModel>(att_idx);
-        }
-        if (!editable) im::EndDisabled();
-        if (cel.attitude_model == CelestialAttitudeModel::simple_spin) {
-            ImGuiInputTextFlags spin_flags = flags | ImGuiInputTextFlags_ReadOnly;
-            f64 w_mag = cel.x_att.w.norm();
-            im::InputDouble("Spin Rate", &w_mag, 0.0, 0.0, "%.3f", spin_flags);
-            im::InputDouble3("Spin Axis", cel.x_att.w, "%.3f", spin_flags);
-        }
+        im::Separator();
     }
 
     render_body_propagation_ui(cel, editable);
@@ -2356,6 +2925,7 @@ static StatusCode load_body_edit_draft(
         const Celestial* cel = world.celestial(draft.edit_body_id);
         if (cel == nullptr) return StatusCode::body_not_found;
         draft.edit_celestial = *cel;
+        set_draft_simple_spin_from_w(draft, cel->x_att.w);
     } break;
     case BodyType::satellite: {
         const Satellite* sat = world.satellite(draft.edit_body_id);
@@ -2378,7 +2948,8 @@ static bool body_edit_draft_changed(const BodyEditDraft& draft, const World& wor
     case BodyType::celestial: {
         const Celestial* cel = world.celestial(draft.edit_body_id);
         if (cel == nullptr) return false;
-        return celestial_changed(*cel, draft.edit_celestial);
+        return celestial_changed(*cel, draft.edit_celestial)
+               || simple_spin_cache_changed(draft, *cel);
     }
     case BodyType::satellite: {
         const Satellite* sat = world.satellite(draft.edit_body_id);
@@ -2453,7 +3024,10 @@ static StatusCode validate_body_edit_draft(
     return status;
 }
 static StatusCode apply_body_edit_draft(BodyEditDraft& draft, World& world) {
-    StatusCode status = validate_body_edit_draft(draft, world);
+    StatusCode status = apply_draft_simple_spin(draft);
+    if (status != StatusCode::ok) return status;
+
+    status = validate_body_edit_draft(draft, world);
     if (status != StatusCode::ok) return status;
 
     switch (draft.edit_body_type) {
@@ -2462,7 +3036,6 @@ static StatusCode apply_body_edit_draft(BodyEditDraft& draft, World& world) {
         Celestial* cel = world.celestial(draft.edit_body_id);
         if (cel == nullptr) return StatusCode::body_not_found;
         *cel = draft.edit_celestial;
-        return StatusCode::ok;
     } break;
     case BodyType::satellite: {
         Satellite* sat = world.satellite(draft.edit_body_id);

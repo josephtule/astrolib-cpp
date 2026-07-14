@@ -473,8 +473,8 @@ static void handle_input(RenderLoopConfig& cfg, const World& world, f32 dt) {
     }
 
     const ImGuiIO& io = ImGui::GetIO();
-    bool ui_wants_mouse = io.WantCaptureMouse;
-    bool ui_wants_keyboard = io.WantCaptureKeyboard;
+    bool ui_wants_mouse = cfg.display_ui && io.WantCaptureMouse;
+    bool ui_wants_keyboard = cfg.display_ui && io.WantCaptureKeyboard;
 
     bool render_modifier = IsKeyDown(KEY_LEFT_SHIFT);
     bool camera_modifier = IsKeyDown(KEY_RIGHT_SHIFT);
@@ -514,7 +514,12 @@ static void shutdown_render_loop_state(RenderLoopState& state) {
     unload_render_assets(state.assets);
 }
 
-void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
+void run_world_render_loop(
+    World& world,
+    RenderLoopConfig& cfg,
+    f64 dt0,
+    ScenarioSession scenario
+) {
     InitWindow(cfg.screen_width, cfg.screen_height, cfg.window_title.c_str());
     if (!init_render_ui()) {
         CloseWindow();
@@ -523,6 +528,11 @@ void run_world_render_loop(World& world, RenderLoopConfig& cfg, f64 dt0) {
     SetExitKey(KEY_NULL);
 
     RenderLoopState state;
+    state.scenario = std::move(scenario);
+    if (state.scenario.has_filepath) {
+        state.filepath = state.scenario.filepath;
+        state.relative_path = false;
+    }
     init_render_loop_state(world, cfg, state);
 
     state.dt = dt0;
