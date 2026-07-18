@@ -1,3 +1,6 @@
+// Copyright 2025-2026 Joseph Tu Le
+// SPDX-License-Identifier: Apache-2.0
+
 #include "core/dynamics_translational.hpp"
 
 f64 inv_r3_safe(const ecref<vec3d> r, f64 epsilon) {

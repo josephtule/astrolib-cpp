@@ -1,3 +1,6 @@
+// Copyright 2025-2026 Joseph Tu Le
+// SPDX-License-Identifier: Apache-2.0
+
 #include "core/estimation_recursive.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
