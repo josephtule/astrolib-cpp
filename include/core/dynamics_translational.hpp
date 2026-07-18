@@ -1,4 +1,4 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,7 +6,6 @@
 #include "util/constants.hpp"
 #include "util/vecdefs.hpp"
 
-#include <cstddef>
 
 f64 inv_r3_safe(const ecref<vec3d> r, f64 epsilon = tol12);
 

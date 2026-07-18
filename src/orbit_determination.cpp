@@ -1,7 +1,11 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/orbit_determination.hpp"
+#include "core/observations.hpp"
+
+#include <algorithm>
+#include <cmath>
 
 bool iod_vec_valid(ecref<vec3d> v, f64 tol) { return v.allFinite() && v.norm() > tol; }
 

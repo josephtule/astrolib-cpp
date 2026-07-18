@@ -1,9 +1,19 @@
-// Copyright 2025-2026 Joseph Tu Le
-// SPDX-License-Identifier: Apache-2.0
+/**
+ * @file typedefs.hpp
+ * @author Joseph Le
+ * @brief Contains type definitions for commonly used classes/types.
+ * @version 0.1
+ * @date 2026-07-18
+ * 
+ * @copyright Copyright (c) 2026
+ * 
+ */
 
 #pragma once
 
+#include <array>
 #include <complex>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <limits>

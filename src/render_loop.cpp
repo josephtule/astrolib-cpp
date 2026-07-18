@@ -1,36 +1,30 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
+
+#include "graphics/render_loop.hpp"
 
 #include "core/body.hpp"
 #include "core/entity.hpp"
-#include "core/measurement.hpp"
-#include "core/observation_type.hpp"
 #include "core/transform.hpp"
-
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
 #include "graphics/camera.hpp"
 #include "graphics/raygen.hpp"
 #include "graphics/rdraw.hpp"
 #include "graphics/render_assets.hpp"
-#include "graphics/render_loop.hpp"
 #include "graphics/render_ui.hpp"
 #include "graphics/renderer.hpp"
 #include "graphics/ui.hpp"
 #include "imgui.h"
-#include "implot.h"
-#include "misc/cpp/imgui_stdlib.h"
 #include "raylib.h"
 #include "raymath.h"
 
 #include "util/lightweight_tools.hpp"
-#include "util/math.hpp"
 #include "util/vecdefs.hpp"
 
 #include <algorithm>
-#include <memory>
 #include <print>
-#include <string>
+#include <utility>
 
 // TODO: put units as possibly unit inputs in all ui sections
 

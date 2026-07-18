@@ -1,14 +1,12 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "Eigen/Core"
 #include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/state.hpp"
-#include "util/constants.hpp"
 #include "util/vecdefs.hpp"
 
 struct ODBatchInput {

@@ -1,18 +1,14 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "core/time.hpp"
 #include "core/transform.hpp"
-#include "util/constants.hpp"
-#include "util/math.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
-#include <fstream>
-#include <iostream>
-#include <sstream>
+#include <string>
 
 // TODO: Store the current transform(s) somewhere
 

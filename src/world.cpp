@@ -1,4 +1,4 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/world.hpp"
@@ -9,7 +9,6 @@
 #include "core/station_geometry.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
-#include "util/lightweight_tools.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 

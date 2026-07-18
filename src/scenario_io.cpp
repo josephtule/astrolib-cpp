@@ -1,8 +1,8 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/scenario_io.hpp"
-#include "Eigen/Core"
+
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
@@ -17,7 +17,6 @@
 
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
-#include "raylib.h"
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/printing.hpp"
@@ -26,7 +25,8 @@
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
-#include "nlohmann/json.hpp"
+#include <Eigen/Core>
+#include <nlohmann/json.hpp>
 
 #include <cmath>
 #include <filesystem>

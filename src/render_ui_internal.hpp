@@ -1,9 +1,13 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "graphics/render_ui.hpp"
+#include "core/body.hpp"
+#include "core/estimation_common.hpp"
+#include "core/scenario_io.hpp"
+#include "core/world.hpp"
+#include "graphics/render_loop.hpp"
 #include "imgui.h"
 #include "raylib.h"
 

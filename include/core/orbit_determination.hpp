@@ -1,18 +1,15 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <string>
-
-#include "core/observations.hpp"
 #include "core/state.hpp"
 #include "util/constants.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+
+#include <array>
+#include <string>
 
 enum struct IStatusCode : i32 {
     ok,

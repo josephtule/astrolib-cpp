@@ -1,4 +1,4 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,13 +6,13 @@
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
-#include "core/ingest.hpp"
 #include "core/observation_type.hpp"
 #include "core/scenario_io.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
 
 #include "graphics/camera.hpp"
+#include "graphics/render_assets.hpp"
 #include "graphics/renderer.hpp"
 
 #include "util/typedefs.hpp"

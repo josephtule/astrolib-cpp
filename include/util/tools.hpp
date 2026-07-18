@@ -1,14 +1,14 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "util/typedefs.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <iomanip>
-#include <optional>
 #include <sstream>
 #include <string>
 

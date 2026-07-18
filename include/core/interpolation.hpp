@@ -1,11 +1,13 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "util/constants.hpp"
-#include "util/math.hpp"
 #include "util/vecdefs.hpp"
+
+#include <algorithm>
+#include <cmath>
 
 enum struct HistoryInterpolation {
     nearest,
@@ -97,4 +99,3 @@ inline vec4d interp_quat_linear(
 
     return qt.normalized();
 }
-

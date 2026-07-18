@@ -1,4 +1,4 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/body.hpp"
@@ -12,16 +12,10 @@
 #include "core/world.hpp"
 
 #include "util/constants.hpp"
-#include "util/math.hpp"
-#include "util/tools.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 
-#include "graphics/raygen.hpp"
-#include "graphics/render_assets.hpp"
-
 #include <chrono>
-#include <iostream>
 #include <print>
 
 int main() {

@@ -1,9 +1,8 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "core/estimation_common.hpp"
 #include "util/constants.hpp"
 #include "util/typedefs.hpp"
 

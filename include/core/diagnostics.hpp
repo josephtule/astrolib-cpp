@@ -1,12 +1,16 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "core/earth_orientation.hpp"
 #include "core/entity.hpp"
-#include "core/time.hpp"
-#include "core/world.hpp"
+
+#include <string>
+
+class World;
+struct Celestial;
+struct EarthOrientationParams;
+struct JulianDate;
 
 void print_diag_title(const std::string& title);
 void run_batch_od_diag();

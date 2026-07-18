@@ -1,23 +1,23 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "core/body.hpp"
+#include "core/entity.hpp"
 #include "core/estimation_common.hpp"
-#include "core/ingest.hpp"
 #include "core/integrator.hpp"
 #include "core/observation_type.hpp"
-#include "core/od_dynamics.hpp"
 #include "core/orbital_elements.hpp"
-#include "core/state.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
-#include "core/world.hpp"
-#include "core/world_stepper.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+
+#include <string>
+
+class World;
+struct WorldStepperConfig;
 
 struct ScenarioSchemaConfig {
     string name = "astrolib.scenario";

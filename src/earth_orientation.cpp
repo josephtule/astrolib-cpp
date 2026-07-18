@@ -1,7 +1,13 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/earth_orientation.hpp"
+#include "util/math.hpp"
+#include "util/units.hpp"
+
+#include <cmath>
+#include <fstream>
+#include <sstream>
 
 f64 gmst_from_jd(
     const JulianDate& jd,
@@ -732,4 +738,3 @@ mat3d rot_earth_frame(
         return mat3d1;
     }
 }
-

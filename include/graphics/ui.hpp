@@ -1,14 +1,14 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-
-#include <cstdarg>
 
 #include "imgui.h"
 
 #include "util/typedefs.hpp"
 #include "util/vecdefs.hpp"
+
+#include <cstdarg>
 
 bool init_render_ui();
 void shutdown_render_ui();

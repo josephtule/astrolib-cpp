@@ -1,4 +1,4 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #include "render_ui_internal.hpp"
@@ -7,33 +7,31 @@
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
+#include "core/observation_type.hpp"
 #include "core/scenario_io.hpp"
-#include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "graphics/camera.hpp"
 #include "graphics/render_loop.hpp"
 #include "graphics/ui.hpp"
 
-#include "ImGuiFD.h"
 #include "imgui.h"
-#include "implot.h"
 #include "misc/cpp/imgui_stdlib.h"
 
 #include "raylib.h"
+#include "util/constants.hpp"
 #include "util/lightweight_tools.hpp"
 #include "util/math.hpp"
-#include "util/units.hpp"
+#include "util/typedefs.hpp"
+#include "util/vecdefs.hpp"
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace im = ImGui;
-namespace imp = ImPlot;
-namespace imfd = ImGuiFD;
 
 namespace render_ui_detail {
 static void init_add_body_draft_defaults(

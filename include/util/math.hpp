@@ -1,5 +1,8 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * @file math.hpp
+ */
 
 #pragma once
 
@@ -8,6 +11,15 @@
 #include "util/vecdefs.hpp"
 #include <cmath>
 
+/**
+ * @brief Computes the power of an input
+ *
+ * @tparam T
+ * @tparam I
+ * @param x
+ * @param n
+ * @return T
+ */
 template <typename T, typename I>
 inline T pow_Ti(T x, I n) {
     if (n == 0) return T(1.0);
@@ -32,7 +44,7 @@ inline T sign(T x, T eps = T(0)) {
 }
 
 template <typename T>
-inline T wrap_pi(f64 a) {
+inline T wrap_pi(T a) {
     return std::atan2(std::sin(a), std::cos(a));
 };
 

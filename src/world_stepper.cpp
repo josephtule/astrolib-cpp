@@ -1,4 +1,4 @@
-// Copyright 2025-2026 Joseph Tu Le
+// Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/world_stepper.hpp"
@@ -7,7 +7,6 @@
 #include "core/entity.hpp"
 #include "core/integrator.hpp"
 #include "core/state.hpp"
-#include "core/transform.hpp"
 #include "core/world.hpp"
 #include "util/math.hpp"
 #include "util/typedefs.hpp"
