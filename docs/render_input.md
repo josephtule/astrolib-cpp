@@ -43,7 +43,7 @@ Hold `Right Shift` for camera settings.
 | `Right Shift + mouse wheel` | Adjust camera zoom/FOV step rate. |
 | `Right Shift + ]` | Cycle to the next target body in target camera mode. |
 | `Right Shift + [` | Cycle to the previous target body in target camera mode. |
-| `Right Shift + `` | Toggle mouse-wheel inversion. |
+| `Right Shift + <grave_key>` | Toggle mouse-wheel inversion. |
 | `Right Shift + -` | Decrease camera FOV. |
 | `Right Shift + =` | Increase camera FOV. |
 | `Right Shift + \` | Reset camera FOV and zoom rate. |

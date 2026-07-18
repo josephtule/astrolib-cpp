@@ -1,0 +1,20 @@
+If:
+  PathMatch: (include|src)/.*
+
+CompileFlags:
+  Add:
+    - -I../include
+    - -I../external/eigen
+    - -I../external/raylib/src
+    - -I../external/imgui
+    - -I../external/implot
+    - -I../external/rlimgui
+    - -I../external/imguifd
+    - -I_deps/nlohmann_json-src/include
+    - -DPROJECT_ROOT=".."
+    - -DIMGUIFD_ENABLE_STL=1
+    - -std=gnu++23
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict

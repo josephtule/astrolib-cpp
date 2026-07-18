@@ -1,8 +1,6 @@
 // Copyright 2025-2026 Joseph Tu Le
 // SPDX-License-Identifier: Apache-2.0
 
-
-
 #pragma once
 
 #include "util/typedefs.hpp"
@@ -15,7 +13,7 @@ const f64 pio8 = pi / 8.;
 const f64 pio16 = pi / 16.;
 const f64 pio32 = pi / 32.;
 const f64 pio64 = pi / 64.;
-const f64 twopi = 2.0*pi;
+const f64 twopi = 2.0 * pi;
 
 const f64 deg_to_rad = pi / 180.;
 const f64 rad_to_deg = 180. / pi;
