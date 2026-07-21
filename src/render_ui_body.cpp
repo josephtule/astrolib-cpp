@@ -958,9 +958,12 @@ static void render_celestial_stats_ui(
         switch (cel.gravity_model) {
         case GravityModel::pointmass: break;
         case GravityModel::zonal: {
-            im::InputDouble("Reference Radius", &cel.ref_radius, 0.0, 0.0, "%.3f", flags);
+            im::Text("Reference Radius:");
+            im::InputDouble("##referenceradius", &cel.ref_radius, 0.0, 0.0, "%.3f", flags);
             im::InputInt("Degree", &cel.degree, 1, 100, flags);
-            im::InputDouble7("Zonal Coefficients (J)", cel.J, "%.3f", flags);
+            im::TextWrapped("Zonal Coefficients (J):");
+            im::SetNextItemWidth(-FLT_MIN);
+            im::InputDouble7("##zonalcoefs", cel.J, "%.3e", flags);
         } break;
         case GravityModel::spherical_harmonics: {
             im::InputDouble("Reference Radius", &cel.ref_radius, 0.0, 0.0, "%.3f", flags);

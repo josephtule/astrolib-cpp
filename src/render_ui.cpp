@@ -1,6 +1,7 @@
 // Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
+#include "imgui_internal.h"
 #include "render_ui_internal.hpp"
 
 #include "core/body.hpp"
@@ -412,14 +413,86 @@ void render_performance_ui(World& world, RenderLoopConfig& cfg, RenderLoopState&
     im::End();
 }
 
-} // namespace render_ui_detail
+constexpr ImGuiWindowFlags dockspace_flags
+    = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse
+      | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+      | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus
+      | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDocking;
+
+static void build_default_dock_layout(
+    ImGuiID dockspace_id,
+    const ImVec2& dockspace_size
+) {
+    ImGui::DockBuilderRemoveNode(dockspace_id);
+    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, dockspace_size);
+
+    ImGuiID dock_center = dockspace_id;
+
+    ImGuiID dock_left = ImGui::DockBuilderSplitNode(
+        dock_center,
+        ImGuiDir_Left,
+        0.20f, // percentage of main viewport
+        nullptr,
+        &dock_center
+    );
+
+    ImGuiID dock_right = ImGui::DockBuilderSplitNode(
+        dock_center,
+        ImGuiDir_Right,
+        0.33f,
+        nullptr,
+        &dock_center
+    );
+
+    ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(
+        dock_center,
+        ImGuiDir_Down,
+        0.33f,
+        nullptr,
+        &dock_center
+    );
+    ImGui::DockBuilderDockWindow("Bodies", dock_left);
+    ImGui::DockBuilderDockWindow("Body Statistics", dock_right);
+    ImGui::DockBuilderDockWindow("Add Body", dock_right);
+    ImGui::DockBuilderDockWindow("Simulation", dock_bottom);
+    ImGui::DockBuilderDockWindow("Camera", dock_bottom);
+    ImGui::DockBuilderDockWindow("Renderer", dock_bottom);
+    ImGui::DockBuilderDockWindow("Performance", dock_bottom);
+
+    ImGui::DockBuilderFinish(dockspace_id);
+}
 
 static void render_main_dockspace() {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0f, 0.0f});
+    ImGui::Begin("MainDockspaceHost", nullptr, dockspace_flags);
+    ImGui::PopStyleVar();
+
+    ImGuiID dockspace_id = ImGui::GetID("MainDockspace");
+    if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
+        build_default_dock_layout(dockspace_id, viewport->WorkSize);
+    }
+
+    ImGui::DockSpace(
+        dockspace_id,
+        ImVec2{0.0f, 0.0f},
+        ImGuiDockNodeFlags_PassthruCentralNode
+    );
+
+    im::End();
 }
+} // namespace render_ui_detail
 
 void render_loop_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& state) {
     begin_render_ui_frame();
+
+    render_ui_detail::render_main_dockspace();
 
     render_ui_detail::render_performance_ui(world, cfg, state);
     render_ui_detail::render_simulation_ui(world, cfg, state);
