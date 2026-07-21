@@ -7,38 +7,6 @@
         "name": "parser_stress_demo",
         "rng_seed": 24680
     },
-    "providers": {
-        "gravity": [
-            {
-                "id": "EGM2008_gfc",
-                "format": "gfc",
-                "path": "assets/earth/EGM2008.gfc.txt",
-                "lineskips": 0,
-                "normalized": true
-            },
-            {
-                "id": "EGM2008_120",
-                "format": "egm",
-                "path": "assets/egm2008_120.txt",
-                "lineskips": 0,
-                "normalized": true
-            },
-            {
-                "id": "JGL165P1_gfc",
-                "format": "gfc",
-                "path": "assets/moon/JGL165P1.gfc.txt",
-                "lineskips": 0,
-                "normalized": true
-            },
-            {
-                "id": "gggrx_1200a_sha",
-                "format": "nasa_sha",
-                "path": "assets/moon/gggrx_1200a_sha.tab.txt",
-                "lineskips": 1,
-                "normalized": true
-            }
-        ]
-    },
     "celestials": [
         {
             "id": "earth",
@@ -60,10 +28,9 @@
             "model": {
                 "id": "wgs84",
                 "gravity": {
-                    "model": "spherical_harmonics",
-                    "degree": 6,
-                    "order": 6,
-                    "coefficients": "EGM2008_gfc",
+                    "model": "zonal", // use wgs84 values
+                    "degree": 2,
+                    "order": 0,
                     "units_length": "kilometer"
                 },
                 "units_length": "kilometer"
@@ -110,7 +77,7 @@
             "state_att": {
                 "input_type": "quaternion",
                 "q": [0.0, 0.0, 0.0, 1.0],
-                "w": [0.0, 0.0, 7.0882e-05],
+                "w": [0.0, 0.0, 7.0882e-5],
                 "units_angle": "radian"
             },
             "attitude_model": "simple_spin",
@@ -123,7 +90,7 @@
                     "radius": 3396.19,
                     "degree": 3,
                     "order": 0,
-                    "J": [0.0, 0.0, 0.00196045, -3.145e-05]
+                    "J": [0.0, 0.0, 0.00196045, -3.145e-5]
                 },
                 "semimajor_axis": 3396.2,
                 "semiminor_axis": 3376.2,
@@ -363,8 +330,8 @@
                     "covariance": {
                         "type": "matrix",
                         "values": [
-                            [1e-08, 0.0],
-                            [0.0, 1e-08]
+                            [1e-8, 0.0],
+                            [0.0, 1e-8]
                         ]
                     }
                 },
@@ -383,7 +350,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [1e-08]
+                        "values": [1e-8]
                     }
                 },
                 {
@@ -392,7 +359,9 @@
                     "enabled": true,
                     "covariance": {
                         "type": "flattened",
-                        "values": [0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001]
+                        "values": [
+                            0.0001, 0.0, 0.0, 0.0, 0.0001, 0.0, 0.0, 0.0, 0.0001
+                        ]
                     }
                 },
                 {
@@ -401,7 +370,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [0.0001, 0.0001, 0.0001, 1e-08, 1e-08, 1e-08]
+                        "values": [0.0001, 0.0001, 0.0001, 1e-8, 1e-8, 1e-8]
                     }
                 },
                 {
@@ -423,7 +392,7 @@
                     "enabled": false,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [0.0001, 0.0001, 0.0001, 1e-08, 1e-08, 1e-08]
+                        "values": [0.0001, 0.0001, 0.0001, 1e-8, 1e-8, 1e-8]
                     }
                 }
             ],
@@ -487,7 +456,7 @@
                     "enabled": true,
                     "covariance": {
                         "type": "diagonal",
-                        "values": [0.001, 0.001, 0.001, 1e-06, 1e-06, 1e-06]
+                        "values": [0.001, 0.001, 0.001, 1e-6, 1e-6, 1e-6]
                     }
                 }
             ],

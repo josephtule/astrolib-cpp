@@ -2578,8 +2578,10 @@ static bool validate_direct_sphh_coefficients(const ScenarioGravityConfig& gravi
 
 static StatusCode validate_gravity_config(
     const ScenarioConfig& cfg,
-    const ScenarioGravityConfig& gravity
+    const ScenarioCelestialModelConfig& model
 ) {
+    const ScenarioGravityConfig& gravity = model.gravity_model;
+
     if (!finite_nonneg(gravity.mu)) return StatusCode::invalid_input;
     if (!finite_nonneg(gravity.radius)) return StatusCode::invalid_input;
     if (gravity.degree < 0 || gravity.order < 0) return StatusCode::invalid_input;
@@ -2605,6 +2607,15 @@ static StatusCode validate_gravity_config(
         if (!validate_direct_zonal_coefficients(gravity))
             return StatusCode::validation_failed;
         return StatusCode::ok;
+    }
+
+    if (gravity.model == GravityModel::zonal
+        && gravity.coefficient_source == GravityCoefficientSource::none) {
+        if (make_lower(model.id) == "wgs84" && gravity.order == 0
+            && gravity.degree <= 6) {
+            return StatusCode::ok;
+        }
+        return StatusCode::gravity_model_not_found;
     }
 
     if (gravity.model == GravityModel::spherical_harmonics
@@ -2644,7 +2655,7 @@ static StatusCode validate_celestial_config(
     if (!finite_state_att(cel.x_att)) return StatusCode::invalid_attitude_state;
     if (string_empty(cel.model.id)) return StatusCode::invalid_input;
 
-    status = validate_gravity_config(cfg, cel.model.gravity_model);
+    status = validate_gravity_config(cfg, cel.model);
     if (status != StatusCode::ok) return status;
 
     if (!supported_celestial_models(cel.model.id))
@@ -3633,17 +3644,18 @@ static json json_from_gravity_config(const ScenarioGravityConfig& grav) {
         gravity["radius"] = grav.radius;
         gravity["degree"] = grav.degree;
         gravity["order"] = grav.order;
-        if (grav.coefficients.empty()) {
-            // direct
-            if (grav.model == GravityModel::zonal) {
-                gravity["J"] = json_from_vec(grav.J);
-            } else if (grav.model == GravityModel::spherical_harmonics) {
-                gravity["C"] = json_from_mat(grav.C);
-                gravity["S"] = json_from_mat(grav.S);
-            }
-        } else {
-            // provider
+        switch (grav.coefficient_source) {
+        case GravityCoefficientSource::none: break;
+        case GravityCoefficientSource::provider:
             gravity["coefficients"] = grav.coefficients;
+            break;
+        case GravityCoefficientSource::direct_zonal:
+            gravity["J"] = json_from_vec(grav.J);
+            break;
+        case GravityCoefficientSource::direct_spherical_harmonics:
+            gravity["C"] = json_from_mat(grav.C);
+            gravity["S"] = json_from_mat(grav.S);
+            break;
         }
     }
 

@@ -4694,7 +4694,7 @@ void run_build_world_from_scenario() {
 void run_scenario_render_diag() {
     print_diag_title("Scenario Render Diag");
 
-    const string scenario_filepath = pwd + "/scenarios/parser_stress_demo.json";
+    const string scenario_filepath = pwd + "/scenarios/main_demo.json";
     ScenarioConfig scenario_cfg;
     StatusCode status = load_scenario_json(scenario_filepath, scenario_cfg);
     if (status != StatusCode::ok) {
