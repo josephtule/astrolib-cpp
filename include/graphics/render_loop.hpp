@@ -53,6 +53,18 @@ struct BodyEditDraft {
     vec3d simple_spin_axis = vec3d{0.0, 0.0, 1.0};
 };
 
+enum struct ScenarioFileOperation { none, load, save_as };
+
+struct ScenarioFileUIState {
+    string path_text;
+    string resolved_path;
+    StatusCode status = StatusCode::file_not_found;
+    ScenarioFileOperation operation = ScenarioFileOperation::none;
+    bool relative_path = true;
+    bool show_status = false;
+    bool overwrite_pending = false;
+};
+
 struct RenderLoopState {
     WorldStepperStats stats;
     WorldStepperWorkspace wksp;
@@ -85,12 +97,7 @@ struct RenderLoopState {
     vecXd add_instrument_R_diag = vecXd::Ones(2);
     StatusCode add_instrument_status = StatusCode::ok;
 
-    string filepath;
-    StatusCode file_status = StatusCode::file_not_found;
-    bool relative_path = true;
-    bool file_attempt = false;
-    string load_filepath;
-    string save_filepath;
+    ScenarioFileUIState scenario_file;
     ScenarioSession scenario;
 
     BodyFilterMode list_filter = BodyFilterMode::all;

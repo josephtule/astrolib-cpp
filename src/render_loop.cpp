@@ -527,8 +527,8 @@ void run_world_render_loop(
     RenderLoopState state;
     state.scenario = std::move(scenario);
     if (state.scenario.has_filepath) {
-        state.filepath = state.scenario.filepath;
-        state.relative_path = false;
+        state.scenario_file.path_text = state.scenario.filepath;
+        state.scenario_file.relative_path = false;
     }
     init_render_loop_state(world, cfg, state);
 

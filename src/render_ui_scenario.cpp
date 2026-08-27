@@ -809,13 +809,13 @@ static std::filesystem::path resolve_textbox_path(
     return std::filesystem::path("/") / path.relative_path();
 }
 
-static string scenario_dialog_start_path(const RenderLoopState& state) {
+static string scenario_dialog_start_path(const ScenarioFileUIState& file_ui) {
     std::filesystem::path path;
 
-    if (state.filepath.empty()) {
+    if (file_ui.path_text.empty()) {
         path = std::filesystem::path(PROJECT_ROOT) / "scenarios";
     } else {
-        path = resolve_textbox_path(state.filepath, state.relative_path);
+        path = resolve_textbox_path(file_ui.path_text, file_ui.relative_path);
     }
 
     if (std::filesystem::is_regular_file(path)) {
@@ -831,9 +831,9 @@ static string scenario_dialog_start_path(const RenderLoopState& state) {
     return normalize_file_dialog_path(path.string().c_str());
 }
 
-static string scenario_file_path(const RenderLoopState& state) {
+static string scenario_file_path(const ScenarioFileUIState& file_ui) {
     std::filesystem::path path
-        = resolve_textbox_path(state.filepath, state.relative_path);
+        = resolve_textbox_path(file_ui.path_text, file_ui.relative_path);
     return normalize_file_dialog_path(path.string().c_str());
 }
 
@@ -859,33 +859,35 @@ static void set_scenario_dialog_style() {
     imfd::settings.asciiArtIcons = false;
 }
 
-static void open_scenario_file_dialog(RenderLoopState& state) {
-    const string path = scenario_dialog_start_path(state);
+static void open_scenario_file_dialog(ScenarioFileUIState& file_ui) {
+    const string path = scenario_dialog_start_path(file_ui);
     set_scenario_dialog_style();
     imfd::OpenDialog("Open Scenario", ImGuiFDMode_LoadFile, path.c_str(), "*.json", 0, 1);
 }
 
-static void open_scenario_save_dialog(RenderLoopState& state) {
-    const string path = scenario_dialog_start_path(state);
+static void open_scenario_save_dialog(ScenarioFileUIState& file_ui) {
+    const string path = scenario_dialog_start_path(file_ui);
     set_scenario_dialog_style();
     imfd::OpenDialog("Save Scenario", ImGuiFDMode_SaveFile, path.c_str(), "*.json", 0, 1);
 }
 
-static void open_folder_dialog(RenderLoopState& state) {
-    const string path = scenario_dialog_start_path(state);
+static void open_folder_dialog(ScenarioFileUIState& file_ui) {
+    const string path = scenario_dialog_start_path(file_ui);
     set_scenario_dialog_style();
     imfd::OpenDialog("Open Folder", ImGuiFDMode_OpenDir, path.c_str(), NULL, 0, 1);
 }
 
-static void render_open_scenario_file_dialog(RenderLoopState& state) {
+static void render_open_scenario_file_dialog(ScenarioFileUIState& file_ui) {
     set_scenario_dialog_style();
     if (imfd::BeginDialog("Open Scenario")) {
         if (imfd::ActionDone()) {
             if (imfd::SelectionMade()) {
-                state.filepath
+                file_ui.path_text
                     = normalize_file_dialog_path(imfd::GetSelectionPathString(0));
-                state.relative_path = false;
-                state.file_attempt = false;
+                file_ui.relative_path = false;
+                file_ui.resolved_path.clear();
+                file_ui.operation = ScenarioFileOperation::none;
+                file_ui.show_status = false;
             }
             imfd::CloseCurrentDialog();
         }
@@ -898,24 +900,16 @@ static void render_save_scenario_file_dialog(
     const RenderLoopConfig& cfg,
     const World& world
 ) {
+    ScenarioFileUIState& file_ui = state.scenario_file;
+
     set_scenario_dialog_style();
     if (imfd::BeginDialog("Save Scenario")) {
         if (imfd::ActionDone()) {
             if (imfd::SelectionMade()) {
-                state.filepath
+                file_ui.path_text
                     = normalize_file_dialog_path(imfd::GetSelectionPathString(0));
-                state.relative_path = false;
-                state.save_filepath = state.filepath;
-                state.file_attempt = true;
-
-                if (is_existing_non_regular_file(state.save_filepath)) {
-                    state.file_status = StatusCode::invalid_input;
-                } else if (is_existing_regular_file(state.save_filepath)) {
-                    state.file_status = StatusCode::file_already_exists;
-                    im::OpenPopup("File Warning");
-                } else {
-                    request_scenario_save(state, cfg, world);
-                }
+                file_ui.relative_path = false;
+                request_scenario_save(state, cfg, world);
             }
             imfd::CloseCurrentDialog();
         }
@@ -923,15 +917,17 @@ static void render_save_scenario_file_dialog(
     }
 }
 
-static void render_open_folder_dialog(RenderLoopState& state) {
+static void render_open_folder_dialog(ScenarioFileUIState& file_ui) {
     set_scenario_dialog_style();
     if (imfd::BeginDialog("Open Folder")) {
         if (imfd::ActionDone()) {
             if (imfd::SelectionMade()) {
-                state.filepath
+                file_ui.path_text
                     = normalize_file_dialog_path(imfd::GetSelectionPathString(0));
-                state.relative_path = false;
-                state.file_attempt = false;
+                file_ui.relative_path = false;
+                file_ui.resolved_path.clear();
+                file_ui.operation = ScenarioFileOperation::none;
+                file_ui.show_status = false;
             }
             imfd::CloseCurrentDialog();
         }
@@ -945,36 +941,84 @@ static void request_scenario_save(
     const World& world,
     bool overwrite
 ) {
-    state.file_attempt = true;
-    state.save_filepath = scenario_file_path(state);
+    ScenarioFileUIState& file_ui = state.scenario_file;
+    file_ui.operation = ScenarioFileOperation::save_as;
+    file_ui.show_status = true;
+    if (!overwrite) file_ui.resolved_path = scenario_file_path(file_ui);
 
-    if (state.save_filepath.empty()) {
-        state.file_status = StatusCode::invalid_input;
+    if (file_ui.resolved_path.empty()) {
+        file_ui.status = StatusCode::invalid_input;
         return;
     }
 
-    if (is_existing_non_regular_file(state.save_filepath)) {
-        state.file_status = StatusCode::invalid_input;
+    if (is_existing_non_regular_file(file_ui.resolved_path)) {
+        file_ui.status = StatusCode::invalid_input;
         return;
     }
 
-    if (!overwrite && is_existing_regular_file(state.save_filepath)) {
-        state.file_status = StatusCode::file_already_exists;
-        im::OpenPopup("File Warning");
+    if (!overwrite && is_existing_regular_file(file_ui.resolved_path)) {
+        file_ui.status = StatusCode::file_already_exists;
+        file_ui.overwrite_pending = true;
         return;
     }
 
-    state.file_status
+    file_ui.overwrite_pending = false;
+    file_ui.status
         = sync_scenario_runtime_state_from_world(state.scenario, world, cfg.stepper_cfg);
-    if (state.file_status != StatusCode::ok) return;
+    if (file_ui.status != StatusCode::ok) return;
 
-    state.file_status = save_scenario_json(state.save_filepath, state.scenario.config);
-    if (state.file_status != StatusCode::ok) return;
+    file_ui.status = save_scenario_json(file_ui.resolved_path, state.scenario.config);
+    if (file_ui.status != StatusCode::ok) return;
 
-    state.scenario.filepath = state.save_filepath;
+    state.scenario.filepath = file_ui.resolved_path;
     state.scenario.has_filepath = true;
     state.scenario.dirty = false;
-    if (overwrite) state.file_status = StatusCode::file_overwritten;
+    if (overwrite) file_ui.status = StatusCode::file_overwritten;
+}
+
+static void request_scenario_load(
+    RenderLoopState& state,
+    RenderLoopConfig& cfg,
+    World& world
+) {
+    ScenarioFileUIState& file_ui = state.scenario_file;
+    file_ui.operation = ScenarioFileOperation::load;
+    file_ui.show_status = true;
+    file_ui.overwrite_pending = false;
+    file_ui.resolved_path = scenario_file_path(file_ui);
+
+    if (!path_exists(file_ui.resolved_path)) {
+        file_ui.status = StatusCode::file_not_found;
+        return;
+    }
+    if (!is_existing_regular_file(file_ui.resolved_path)) {
+        file_ui.status = StatusCode::invalid_input;
+        return;
+    }
+
+    ScenarioConfig loaded_config;
+    file_ui.status = load_scenario_json(file_ui.resolved_path, loaded_config);
+    if (file_ui.status != StatusCode::ok) return;
+
+    World loaded_world;
+    ScenarioBuildResult loaded_mappings;
+    WorldStepperConfig loaded_stepper = cfg.stepper_cfg;
+    file_ui.status = build_world_from_scenario_config(
+        loaded_config,
+        loaded_world,
+        loaded_mappings,
+        loaded_stepper
+    );
+    if (file_ui.status != StatusCode::ok) return;
+
+    world = std::move(loaded_world);
+    cfg.stepper_cfg = loaded_stepper;
+    state.scenario.config = std::move(loaded_config);
+    state.scenario.build_result = std::move(loaded_mappings);
+    state.scenario.filepath = file_ui.resolved_path;
+    state.scenario.has_filepath = true;
+    state.scenario.dirty = false;
+    state.wksp.dirty = true;
 }
 
 static void render_scenario_overwrite_popup(
@@ -982,10 +1026,13 @@ static void render_scenario_overwrite_popup(
     const RenderLoopConfig& cfg,
     const World& world
 ) {
+    ScenarioFileUIState& file_ui = state.scenario_file;
+
+    if (file_ui.overwrite_pending) im::OpenPopup("File Warning");
     if (im::BeginPopupModal("File Warning")) {
         im::Text("File already exists, overwrite?");
         if (im::Button("Yes")) {
-            state.file_status = StatusCode::file_overwritten;
+            file_ui.overwrite_pending = false;
             im::CloseCurrentPopup();
             request_scenario_save(state, cfg, world, true);
         }
@@ -993,7 +1040,8 @@ static void render_scenario_overwrite_popup(
         im::SameLine();
 
         if (im::Button("Cancel")) {
-            state.file_status = StatusCode::file_already_exists;
+            file_ui.status = StatusCode::file_already_exists;
+            file_ui.overwrite_pending = false;
             im::CloseCurrentPopup();
         }
 
@@ -1006,78 +1054,48 @@ void render_scenario_file_ui(
     RenderLoopConfig& cfg,
     RenderLoopState& state
 ) {
+    ScenarioFileUIState& file_ui = state.scenario_file;
+
     if (im::CollapsingHeader("Scenario")) {
         im::Text("Filepath:");
         im::SameLine();
-        im::InputText("##filepath", &state.filepath);
+        im::InputText("##filepath", &file_ui.path_text);
         im::SameLine();
         if (im::Button("/")) {
-            open_folder_dialog(state);
+            open_folder_dialog(file_ui);
         }
         im::SameLine();
         if (im::Button("...")) {
-            open_scenario_file_dialog(state);
+            open_scenario_file_dialog(file_ui);
         }
-        render_open_scenario_file_dialog(state);
+        render_open_scenario_file_dialog(file_ui);
         render_save_scenario_file_dialog(state, cfg, world);
-        render_open_folder_dialog(state);
+        render_open_folder_dialog(file_ui);
 
-        const std::filesystem::path path(state.filepath);
+        const std::filesystem::path path(file_ui.path_text);
         const string filename = path.filename().string();
         im::Text("File: %s", filename.c_str());
 
-        im::Checkbox("Relative filepath", &state.relative_path);
+        im::Checkbox("Relative filepath", &file_ui.relative_path);
 
         if (im::Button("Save As")) {
-            open_scenario_save_dialog(state);
+            open_scenario_save_dialog(file_ui);
         }
         render_scenario_overwrite_popup(state, cfg, world);
 
         im::SameLine();
         if (im::Button("Load")) {
-            state.file_attempt = true;
-            string path = scenario_file_path(state);
-            state.load_filepath = path;
-
-            if (!path_exists(path)) {
-                state.file_status = StatusCode::file_not_found;
-            } else if (!is_existing_regular_file(path)) {
-                state.file_status = StatusCode::invalid_input;
-            } else {
-                ScenarioConfig loaded_config;
-                state.file_status = load_scenario_json(path, loaded_config);
-                if (state.file_status == StatusCode::ok) {
-                    World loaded_world;
-                    ScenarioBuildResult loaded_mappings;
-                    WorldStepperConfig loaded_stepper = cfg.stepper_cfg;
-                    state.file_status = build_world_from_scenario_config(
-                        loaded_config,
-                        loaded_world,
-                        loaded_mappings,
-                        loaded_stepper
-                    );
-                    if (state.file_status == StatusCode::ok) {
-                        world = std::move(loaded_world);
-                        cfg.stepper_cfg = loaded_stepper;
-                        state.scenario.config = std::move(loaded_config);
-                        state.scenario.build_result = std::move(loaded_mappings);
-                        state.scenario.filepath = path;
-                        state.scenario.has_filepath = true;
-                        state.scenario.dirty = false;
-                        state.wksp.dirty = true;
-                    }
-                }
-            }
+            request_scenario_load(state, cfg, world);
         }
         im::SameLine();
         if (im::Button("Cancel")) {
-            state.file_attempt = false;
-            state.filepath = "";
-            state.load_filepath = "";
-            state.save_filepath = "";
+            file_ui.resolved_path.clear();
+            file_ui.operation = ScenarioFileOperation::none;
+            file_ui.show_status = false;
+            file_ui.overwrite_pending = false;
         }
-        if (state.file_attempt) {
-            status_text("Scenario Loader/Saver Status", state.file_status);
+        if (file_ui.show_status) {
+            status_text("Scenario Loader/Saver Status", file_ui.status);
         }
         im::Separator();
     }
