@@ -5,8 +5,8 @@
 
 #include "core/body.hpp"
 #include "core/entity.hpp"
-#include "core/estimation_common.hpp"
-#include "core/integrator.hpp"
+#include "core/status.hpp"
+#include "core/integrator_common.hpp"
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
 #include "core/orbital_elements.hpp"

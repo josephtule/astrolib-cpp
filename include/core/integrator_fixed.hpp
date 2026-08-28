@@ -3,40 +3,9 @@
 
 #pragma once
 
-#include "util/typedefs.hpp"
+#include "core/integrator_common.hpp"
 
 // generic (unstaged) explicit integrator steps live here
-
-enum struct IntegratorType : i32 {
-    rk1,
-    rk2,
-    rk2_heun,
-    rk2_ralston,
-    rk3,
-    rk4,
-};
-inline std::string integrator_name(IntegratorType integrator) {
-    switch (integrator) {
-    case IntegratorType::rk1: return "RK1";
-    case IntegratorType::rk2: return "RK2";
-    case IntegratorType::rk2_heun: return "RK2 Heun";
-    case IntegratorType::rk2_ralston: return "RK2 Ralston";
-    case IntegratorType::rk3: return "RK3";
-    case IntegratorType::rk4: return "RK4";
-    }
-    return "Unknown";
-};
-inline string integrator_str(IntegratorType type){
-    switch (type) {
-    case IntegratorType::rk1: return "rk1";
-    case IntegratorType::rk2: return "rk2";
-    case IntegratorType::rk2_heun: return "rk2_heun";
-    case IntegratorType::rk2_ralston: return "rk2_ralston";
-    case IntegratorType::rk3: return "rk3";
-    case IntegratorType::rk4: return "rk4";
-    }
-    return "unknown";
-}
 
 template <typename State, typename Deriv, typename Func>
 inline std::pair<f64, State> step_rk1(Func&& f, f64 t, const State& x, f64 dt) {
@@ -122,3 +91,5 @@ inline std::pair<f64, State> step_integrator(
     }
     return tx;
 }
+
+

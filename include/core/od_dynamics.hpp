@@ -6,13 +6,14 @@
 #include "core/body.hpp"
 #include "core/dynamics_rotational.hpp"
 #include "core/dynamics_translational.hpp"
-#include "core/integrator.hpp"
+#include "core/integrator_adaptive.hpp"
+#include "core/integrator_fixed.hpp"
 #include "core/state.hpp"
 #include "core/transform.hpp"
 #include "util/typedefs.hpp"
 #include "util/vecdefs.hpp"
 
-enum struct ODTrDynamicsModel : i32 { two_body, zonal};
+enum struct ODTrDynamicsModel : i32 { two_body, zonal };
 
 inline ODTrDynamicsModel worldtrmodel_to_odtrmodel(GravityModel model) {
     switch (model) {
@@ -142,14 +143,14 @@ inline StateTr rk4_steptr_od(
 inline StateTr propagate_tr_od(
     f64 t0,
     const StateTr& x0,
-    f64 t_span,
+    f64 t_interval,
     i32 n_steps,
     const ODDynamicsConfig& cfg
 ) {
     StateTr x = x0;
-    if (n_steps <= 0 || t_span == 0) return x;
+    if (n_steps <= 0 || t_interval == 0) return x;
 
-    f64 dt_step = t_span / static_cast<f64>(n_steps);
+    f64 dt_step = t_interval / static_cast<f64>(n_steps);
     f64 t = t0;
     auto f = [&cfg](f64 t, const StateTr& x) -> DerivTr { return derivtr_od(t, x, cfg); };
     for (i32 i = 0; i < n_steps; ++i) {
@@ -159,6 +160,37 @@ inline StateTr propagate_tr_od(
         x = tx.second;
     }
     return x;
+}
+
+inline AdaptivePropagationResult<StateTr> propagate_tr_od_adaptive(
+    f64 t0,
+    const StateTr& x0,
+    f64 t_interval,
+    const ODDynamicsConfig& dyn_cfg,
+    const AdaptiveIntegratorConfig& integrator_cfg
+) {
+    f64 tf = t0 + t_interval;
+
+    AdaptivePropagationResult<StateTr> res;
+
+    res.status = StatusCode::invalid_state;
+    res.t = t0;
+    res.x = x0;
+    if (!finite_state_tr(x0)) return res;
+
+    auto f = [&dyn_cfg](f64 t, const StateTr& x) -> DerivTr {
+        return derivtr_od(t, x, dyn_cfg);
+    };
+
+    auto error_norm = [&integrator_cfg](
+                          const StateTr& x,
+                          const StateTr& x_high,
+                          const DerivTr& error_delta
+                      ) -> f64 {
+        return adaptive_error_norm_state_tr(x, x_high, error_delta, integrator_cfg);
+    };
+
+    return propagate_dopri54<StateTr, DerivTr>(f, error_norm, t0, x0, tf, integrator_cfg);
 }
 
 // State and Derivatives for orbit determination (state + STM)
@@ -566,7 +598,7 @@ inline VarStateTr propagate_var_tr_od(
     const ODDynamicsConfig& cfg
 ) {
     VarStateTr y = y0;
-    if (n_steps <= 0 || t_interval == 0) return y;
+    if (n_steps <= 0 || t_interval == 0.0) return y;
 
     f64 dt_step = t_interval / static_cast<f64>(n_steps);
     f64 t = t0;
@@ -579,5 +611,28 @@ inline VarStateTr propagate_var_tr_od(
         t = ty.first;
         y = ty.second;
     }
+    return y;
+}
+
+inline VarStateTr propagate_var_tr_od_adaptive(
+    f64 t0,
+    const VarStateTr& y0,
+    f64 t_interval,
+    const ODDynamicsConfig& cfg,
+    const AdaptiveIntegratorConfig& adaptive_cfg
+) {
+    // TODO: add guards
+    VarStateTr y = y0;
+    if (t_interval == 0.0) return y;
+
+    f64 t = t0;
+    auto f = [&cfg](f64 t, const VarStateTr& y) -> VarDerivTr {
+        return deriv_var_tr_od(t, y, cfg);
+    };
+    // TODO: complete this
+
+    // propagate_dopri54<VarStateTr, VarDerivTr>(f, error_nor_fn, t, y0, t0+t_interval,
+    // adaptive_cfg);
+
     return y;
 }

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "core/entity.hpp"
-#include "core/estimation_common.hpp"
-#include "core/integrator.hpp"
+#include "core/status.hpp"
+#include "core/integrator_common.hpp"
 #include "core/observation_type.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/time.hpp"

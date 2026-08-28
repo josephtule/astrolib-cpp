@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/body.hpp"
-#include "core/estimation_common.hpp"
+#include "core/status.hpp"
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
 

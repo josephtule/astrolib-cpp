@@ -4,7 +4,7 @@
 #pragma once
 
 #include "core/body.hpp"
-#include "core/estimation_common.hpp"
+#include "core/status.hpp"
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/units.hpp"

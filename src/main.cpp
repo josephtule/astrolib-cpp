@@ -117,7 +117,9 @@ int main() {
     // run_world_history_ekf_diag();
 
     // run_build_world_from_scenario();
-    run_scenario_render_diag();
+    // run_scenario_render_diag();
+
+    run_od_prop_adaptive_diag(*earth);
 
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");

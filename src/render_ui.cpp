@@ -6,7 +6,7 @@
 
 #include "core/body.hpp"
 #include "core/entity.hpp"
-#include "core/estimation_common.hpp"
+#include "core/status.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
@@ -88,7 +88,12 @@ static Color status_color(const StatusCode code) {
     case StatusCode::file_close_failed:
     case StatusCode::file_open_failed:
     case StatusCode::file_already_exists:
-    case StatusCode::matrix_invert_failed: return RED;
+    case StatusCode::matrix_invert_failed:
+    case StatusCode::step_size_underflow:
+    case StatusCode::max_steps_reached:
+    case StatusCode::max_rejections_reached:
+    case StatusCode::non_finite_derivative:
+    case StatusCode::non_finite_result: return RED;
     }
 
     return RAYWHITE;

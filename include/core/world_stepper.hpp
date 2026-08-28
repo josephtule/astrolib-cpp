@@ -4,7 +4,7 @@
 #pragma once
 
 #include "core/entity.hpp"
-#include "core/integrator.hpp"
+#include "core/integrator_common.hpp"
 #include "core/state.hpp"
 #include "core/world.hpp"
 

@@ -5,7 +5,7 @@
 
 #include "Eigen/Core"
 #include "core/entity.hpp"
-#include "core/estimation_common.hpp"
+#include "core/status.hpp"
 #include "core/observation_type.hpp"
 #include "core/observations.hpp"
 #include "core/state.hpp"

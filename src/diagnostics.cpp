@@ -11,7 +11,8 @@
 #include "core/estimation_world.hpp"
 #include "core/history_io.hpp"
 #include "core/ingest.hpp"
-#include "core/integrator.hpp"
+#include "core/integrator_adaptive.hpp"
+#include "core/integrator_fixed.hpp"
 #include "core/interpolation.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
@@ -46,6 +47,7 @@
 #include "raymath.h"
 #include "rlgl.h"
 
+#include <chrono>
 #include <limits>
 #include <memory>
 #include <random>
@@ -849,6 +851,307 @@ void run_od_prop_diag(const Celestial& body) {
 
     std::println("Phi norm = {}", yf.Phi.norm());
     std::println("Phi fd norm = {}", Phi_fd.norm());
+}
+
+void run_od_prop_adaptive_diag(const Celestial& body) {
+    print_diag_title("OD Propagation Error (Adaptive)");
+    OEClassical coes{
+        .sma = body.mean_radius * 2.0,
+        .ecc = 0.1,
+        .inc = pio4,
+        .raan = 0.0,
+        .aop = 0.0
+    };
+
+    f64 ta1 = 0.0;
+    f64 ta2 = 0.2;
+
+    coes.ta = ta1;
+    StateTr x1 = classical_to_rv(coes, body.mu, UAngle::radian);
+    coes.ta = ta2;
+    StateTr x2_truth = classical_to_rv(coes, body.mu, UAngle::radian);
+    f64 tof = tof_elliptic_ta(coes.sma, coes.ecc, ta1, ta2, body.mu);
+
+    i32 n_steps = 24;
+    f64 dt = tof / n_steps;
+
+    f64 t0 = 0.0;
+
+    ODDynamicsConfig cfg{.tr_model = ODTrDynamicsModel::two_body, .mu = body.mu};
+    f64 t_interval = tof;
+    StateTr x2_prop = propagate_tr_od(t0, x1, t_interval, n_steps, cfg);
+
+    AdaptiveIntegratorConfig adaptive_cfg{};
+    f64 tf = t0 + t_interval;
+
+    auto run_case = [&](const AdaptiveIntegratorConfig& integrator_cfg,
+                        const StateTr& x0,
+                        f64 interval,
+                        const ODDynamicsConfig* dyn_cfg = nullptr) {
+        const ODDynamicsConfig& selected_dyn_cfg = dyn_cfg ? *dyn_cfg : cfg;
+        auto time_start = std::chrono::steady_clock::now();
+        auto result
+            = propagate_tr_od_adaptive(t0, x0, interval, selected_dyn_cfg, integrator_cfg);
+        auto time_end = std::chrono::steady_clock::now();
+        f64 runtime_us
+            = std::chrono::duration<f64, std::micro>(time_end - time_start).count();
+        return std::pair{result, runtime_us};
+    };
+
+    auto print_result = [&](const std::string& label,
+                            const AdaptivePropagationResult<StateTr>& result,
+                            f64 runtime_us,
+                            f64 requested_tf,
+                            const StateTr* truth = nullptr) {
+        std::println("{}", label);
+        std::println("Status: {}", status_string(result.status));
+        std::println("Requested/returned time: {} / {}", requested_tf, result.t);
+        std::println("Endpoint error: {}", std::abs(result.t - requested_tf));
+        if (truth && result.status == StatusCode::ok) {
+            StateTr error = *truth - result.x;
+            std::println("Position error: {}", error.r.norm());
+            std::println("Velocity error: {}", error.v.norm());
+        }
+        std::println("Final error norm: {}", result.final_error_norm);
+        std::println(
+            "Attempts/accepted/rejected: {} / {} / {}",
+            result.stats.attempted_steps,
+            result.stats.accepted_steps,
+            result.stats.rejected_steps
+        );
+        std::println("Derivative evaluations: {}", result.stats.derivative_evaluations);
+        std::println(
+            "Min/max/final dt: {} / {} / {}",
+            result.stats.min_accepted_dt,
+            result.stats.max_accepted_dt,
+            result.stats.final_accepted_dt
+        );
+        std::println("Runtime (us): {}", runtime_us);
+    };
+
+    auto print_status_check = [](StatusCode actual, StatusCode expected) {
+        std::println(
+            "Expected status: {}, passed: {}",
+            status_string(expected),
+            actual == expected
+        );
+    };
+
+    auto [adaptive_res, adaptive_runtime_us]
+        = run_case(adaptive_cfg, x1, t_interval);
+
+    StateTr x2_err = x2_truth - x2_prop;
+
+    std::println("\nBaseline ---------------------------------------------------");
+    std::println("Position error (fixed) = {}", x2_err.r.norm());
+    std::println("Velocity error (fixed) = {}", x2_err.v.norm());
+    std::println(
+        "Fixed Stepper Stats:\nFixed dt: {},\nDerivative Evals: {}",
+        dt,
+        n_steps * 4
+    );
+    print_result(
+        "Adaptive result:",
+        adaptive_res,
+        adaptive_runtime_us,
+        tf,
+        &x2_truth
+    );
+    std::println(
+        "Step growth observed: {}",
+        adaptive_res.stats.max_accepted_dt > adaptive_cfg.dt_initial
+    );
+    std::println(
+        "Stats consistent: {}",
+        adaptive_res.stats.attempted_steps
+                == adaptive_res.stats.accepted_steps + adaptive_res.stats.rejected_steps
+            && adaptive_res.stats.derivative_evaluations
+                == adaptive_res.stats.attempted_steps * 7
+    );
+
+    std::println("\nOversized Initial Step -------------------------------------");
+    AdaptiveIntegratorConfig oversized_cfg = adaptive_cfg;
+    oversized_cfg.rel_tol = 1e-12;
+    oversized_cfg.abs_tol_r = 1e-12;
+    oversized_cfg.abs_tol_v = 1e-15;
+    oversized_cfg.dt_initial = tof;
+    oversized_cfg.dt_max = tof;
+    auto [oversized_res, oversized_runtime_us]
+        = run_case(oversized_cfg, x1, t_interval);
+    print_result(
+        "Oversized-step result:",
+        oversized_res,
+        oversized_runtime_us,
+        tf,
+        &x2_truth
+    );
+    std::println(
+        "Rejected then recovered: {}",
+        oversized_res.status == StatusCode::ok && oversized_res.stats.rejected_steps > 0
+    );
+
+    std::println("\nTolerance Sweep --------------------------------------------");
+    struct ToleranceCase {
+        std::string label;
+        f64 rel_tol;
+        f64 abs_tol_r;
+        f64 abs_tol_v;
+    };
+    array<ToleranceCase, 3> tolerance_cases{{
+        {.label = "Loose", .rel_tol = 1e-6, .abs_tol_r = 1e-6, .abs_tol_v = 1e-9},
+        {.label = "Medium", .rel_tol = 1e-9, .abs_tol_r = 1e-9, .abs_tol_v = 1e-12},
+        {.label = "Tight", .rel_tol = 1e-12, .abs_tol_r = 1e-12, .abs_tol_v = 1e-15},
+    }};
+
+    array<f64, 3> tolerance_position_errors{};
+    for (size_t i = 0; i < tolerance_cases.size(); ++i) {
+        AdaptiveIntegratorConfig tolerance_cfg = adaptive_cfg;
+        tolerance_cfg.rel_tol = tolerance_cases[i].rel_tol;
+        tolerance_cfg.abs_tol_r = tolerance_cases[i].abs_tol_r;
+        tolerance_cfg.abs_tol_v = tolerance_cases[i].abs_tol_v;
+        auto [tolerance_res, tolerance_runtime_us]
+            = run_case(tolerance_cfg, x1, t_interval);
+        if (tolerance_res.status == StatusCode::ok) {
+            tolerance_position_errors[i] = (x2_truth - tolerance_res.x).r.norm();
+        } else {
+            tolerance_position_errors[i] = inf<f64>;
+        }
+        print_result(
+            tolerance_cases[i].label + " tolerance:",
+            tolerance_res,
+            tolerance_runtime_us,
+            tf,
+            &x2_truth
+        );
+    }
+    std::println(
+        "Tighter tolerances reduce position error: {}",
+        tolerance_position_errors[1] < tolerance_position_errors[0]
+            && tolerance_position_errors[2] < tolerance_position_errors[1]
+    );
+
+    std::println("\nBackward Propagation ---------------------------------------");
+    AdaptivePropagationResult<StateTr> backward_res{};
+    f64 backward_runtime_us = 0.0;
+    if (adaptive_res.status == StatusCode::ok) {
+        auto time_start = std::chrono::steady_clock::now();
+        backward_res = propagate_tr_od_adaptive(
+            tf,
+            adaptive_res.x,
+            -t_interval,
+            cfg,
+            adaptive_cfg
+        );
+        auto time_end = std::chrono::steady_clock::now();
+        backward_runtime_us
+            = std::chrono::duration<f64, std::micro>(time_end - time_start).count();
+    }
+    print_result(
+        "Forward/backward closure:",
+        backward_res,
+        backward_runtime_us,
+        t0,
+        &x1
+    );
+
+    std::println("\nInvalid Configuration --------------------------------------");
+    auto run_invalid_config = [&](const std::string& label,
+                                  const AdaptiveIntegratorConfig& invalid_cfg) {
+        auto [result, runtime_us] = run_case(invalid_cfg, x1, t_interval);
+        print_result(label, result, runtime_us, tf);
+        print_status_check(result.status, StatusCode::invalid_input);
+    };
+
+    AdaptiveIntegratorConfig zero_tolerance_cfg = adaptive_cfg;
+    zero_tolerance_cfg.rel_tol = 0.0;
+    run_invalid_config("Zero relative tolerance:", zero_tolerance_cfg);
+
+    AdaptiveIntegratorConfig invalid_bounds_cfg = adaptive_cfg;
+    invalid_bounds_cfg.dt_min = 20.0;
+    invalid_bounds_cfg.dt_max = 10.0;
+    run_invalid_config("Invalid step bounds:", invalid_bounds_cfg);
+
+    AdaptiveIntegratorConfig zero_initial_step_cfg = adaptive_cfg;
+    zero_initial_step_cfg.dt_initial = 0.0;
+    run_invalid_config("Zero initial step:", zero_initial_step_cfg);
+
+    std::println("\nFailure Statuses -------------------------------------------");
+    StateTr non_finite_state = x1;
+    non_finite_state.r(0) = qNaN<f64>;
+    auto [non_finite_state_res, non_finite_state_runtime_us]
+        = run_case(adaptive_cfg, non_finite_state, t_interval);
+    print_result(
+        "Non-finite initial state:",
+        non_finite_state_res,
+        non_finite_state_runtime_us,
+        tf
+    );
+    print_status_check(non_finite_state_res.status, StatusCode::invalid_state);
+
+    ODDynamicsConfig non_finite_dyn_cfg = cfg;
+    non_finite_dyn_cfg.mu = qNaN<f64>;
+    auto [non_finite_result_res, non_finite_result_runtime_us]
+        = run_case(adaptive_cfg, x1, t_interval, &non_finite_dyn_cfg);
+    print_result(
+        "Non-finite dynamics result:",
+        non_finite_result_res,
+        non_finite_result_runtime_us,
+        tf
+    );
+    print_status_check(non_finite_result_res.status, StatusCode::non_finite_result);
+
+    AdaptiveIntegratorConfig rejection_limit_cfg = oversized_cfg;
+    rejection_limit_cfg.max_rejections = 1;
+    auto [rejection_limit_res, rejection_limit_runtime_us]
+        = run_case(rejection_limit_cfg, x1, t_interval);
+    print_result(
+        "Rejection limit:",
+        rejection_limit_res,
+        rejection_limit_runtime_us,
+        tf
+    );
+    print_status_check(
+        rejection_limit_res.status,
+        StatusCode::max_rejections_reached
+    );
+
+    AdaptiveIntegratorConfig attempt_limit_cfg = oversized_cfg;
+    attempt_limit_cfg.max_attempts = 1;
+    attempt_limit_cfg.max_rejections = 1000;
+    auto [attempt_limit_res, attempt_limit_runtime_us]
+        = run_case(attempt_limit_cfg, x1, t_interval);
+    print_result(
+        "Attempt limit:",
+        attempt_limit_res,
+        attempt_limit_runtime_us,
+        tf
+    );
+    print_status_check(attempt_limit_res.status, StatusCode::max_steps_reached);
+
+    AdaptiveIntegratorConfig underflow_cfg = oversized_cfg;
+    underflow_cfg.dt_min = tof * 0.5;
+    auto [underflow_res, underflow_runtime_us]
+        = run_case(underflow_cfg, x1, t_interval);
+    print_result("Step underflow:", underflow_res, underflow_runtime_us, tf);
+    print_status_check(underflow_res.status, StatusCode::step_size_underflow);
+
+    std::println("\nZero Duration ----------------------------------------------");
+    auto [zero_duration_res, zero_duration_runtime_us]
+        = run_case(adaptive_cfg, x1, 0.0);
+    print_result(
+        "Zero-duration result:",
+        zero_duration_res,
+        zero_duration_runtime_us,
+        t0,
+        &x1
+    );
+    std::println(
+        "Zero-duration counts unchanged: {}",
+        zero_duration_res.stats.attempted_steps == 0
+            && zero_duration_res.stats.accepted_steps == 0
+            && zero_duration_res.stats.rejected_steps == 0
+            && zero_duration_res.stats.derivative_evaluations == 0
+    );
 }
 
 void run_measurement_jacobian_diag() {

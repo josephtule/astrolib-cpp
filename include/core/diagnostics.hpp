@@ -67,6 +67,7 @@ void run_rv_coe_diag(const Celestial& body);
 void run_radec_diag();
 void run_iod_diag(const Celestial& body);
 void run_od_prop_diag(const Celestial& body);
+void run_od_prop_adaptive_diag(const Celestial& body);
 void run_measurement_jacobian_diag();
 void run_checkpoint_diag();
 void run_station_anchor_diag();

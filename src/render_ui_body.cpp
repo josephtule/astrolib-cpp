@@ -5,7 +5,7 @@
 
 #include "core/body.hpp"
 #include "core/entity.hpp"
-#include "core/estimation_common.hpp"
+#include "core/status.hpp"
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
 #include "core/scenario_io.hpp"

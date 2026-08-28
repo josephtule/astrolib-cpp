@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/estimation_common.hpp"
+#include "core/status.hpp"
 #include "core/estimation_recursive.hpp"
 #include "core/interpolation.hpp"
 #include "core/measurement.hpp"

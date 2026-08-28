@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/estimation_common.hpp"
+#include "core/status.hpp"
 #include "core/measurement.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/state.hpp"
