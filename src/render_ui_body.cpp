@@ -419,6 +419,7 @@ void render_body_stats_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& 
                 EntityId edit_body_id = state.draft.edit_body_id;
                 state.draft.edit_body_status = apply_body_edit_draft(state.draft, world);
                 if (state.draft.edit_body_status == StatusCode::ok) {
+                    invalidate_stepper_wksp(state.wksp);
                     const Body* edited_body = world.body(edit_body_id);
                     if (edited_body == nullptr) {
                         state.draft.edit_body_status = StatusCode::body_not_found;
@@ -426,11 +427,9 @@ void render_body_stats_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& 
                         state.draft.edit_body_status
                             = sync_scenario_body(state.scenario, *edited_body, world);
                     }
-                    // invalidate_stepper_wksp(wksp);
                 }
                 if (state.draft.edit_body_status == StatusCode::ok) {
                     state.scenario.dirty = true;
-                    state.wksp.dirty = true;
                     if (cfg.camera.target_id == edit_body_id) {
                         sync_camera_tracking(cfg.camera, world);
                     }
@@ -542,7 +541,7 @@ void render_body_stats_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& 
                     );
                     if (status == StatusCode::ok) {
                         state.scenario.dirty = true;
-                        state.wksp.dirty = true;
+                        invalidate_stepper_wksp(state.wksp);
                         if (cfg.camera.target_id == body->id) {
                             cycle_active_id(cfg.camera.target_id, world, 1);
                             sync_camera_tracking(cfg.camera, world);
@@ -562,7 +561,7 @@ void render_body_stats_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& 
                     );
                     if (status == StatusCode::ok) {
                         state.scenario.dirty = true;
-                        state.wksp.dirty = true;
+                        invalidate_stepper_wksp(state.wksp);
                     } else {
                         world.make_inactive(cfg.body_stats_id);
                     }
@@ -634,6 +633,7 @@ void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState& state
                             state.add_body_status = StatusCode::body_not_found;
                             break;
                         }
+                        invalidate_stepper_wksp(state.wksp);
 
                         const string config_id = make_unique_scenario_body_id(
                             state.scenario,
@@ -671,6 +671,7 @@ void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState& state
                             state.add_body_status = StatusCode::body_not_found;
                             break;
                         }
+                        invalidate_stepper_wksp(state.wksp);
 
                         const string config_id = make_unique_scenario_body_id(
                             state.scenario,
@@ -709,6 +710,7 @@ void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState& state
                             state.add_body_status = StatusCode::body_not_found;
                             break;
                         }
+                        invalidate_stepper_wksp(state.wksp);
 
                         const string config_id = make_unique_scenario_body_id(
                             state.scenario,
@@ -736,7 +738,7 @@ void render_add_body(World& world, RenderLoopConfig& cfg, RenderLoopState& state
                     if (state.add_body_status == StatusCode::ok
                         && id != kInvalidEntityId) {
                         state.scenario.dirty = true;
-                        state.wksp.dirty = true;
+                        invalidate_stepper_wksp(state.wksp);
                         cfg.body_stats_id = id;
                         cfg.camera.target_id = id;
                         switch (state.add_body_type) {

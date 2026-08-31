@@ -2893,6 +2893,76 @@ void run_world_workspace_diag() {
     rebuild_world_stepper_workspace(world, wksp);
     print_workspace("WORLD WKSP Initial");
 
+    auto contains_id = [](const svec<EntityId>& ids, EntityId id) {
+        for (EntityId current_id : ids) {
+            if (current_id == id) return true;
+        }
+        return false;
+    };
+
+    i32 workspace_test_steps = 0;
+
+    // adding a propagated body requires the cached ID sets to be rebuilt
+    EntityId added_sat_id = world.spawn_satellite();
+    Satellite* added_sat = world.satellite(added_sat_id);
+    if (added_sat == nullptr) {
+        std::println("Added Satellite Lookup Failed");
+        return;
+    }
+    added_sat->propagate_tr = true;
+    added_sat->propagate_att = false;
+    added_sat->x_tr
+        = classical_to_rv(9000, 0.05, 20.0, 0.0, 0.0, 0.0, earth->mu, UAngle::degree);
+
+    invalidate_stepper_wksp(wksp);
+    bool add_marked_dirty = wksp.dirty;
+    WorldStepResult add_step_result = step_world(world, dt, cfg, wksp);
+    stats += add_step_result.stats;
+    step_status = add_step_result.status;
+    ++workspace_test_steps;
+    bool add_rebuilt = !wksp.dirty
+        && contains_id(wksp.propagated_tr_ids, added_sat_id);
+
+    if (step_status != StatusCode::ok) {
+        std::println("Added Body Step Status = {}", status_string(step_status));
+        return;
+    }
+
+    // deactivating the body removes it from the propagated ID cache
+    if (!world.make_inactive(added_sat_id)) {
+        std::println("Added Satellite Deactivation Failed");
+        return;
+    }
+    invalidate_stepper_wksp(wksp);
+    bool inactive_marked_dirty = wksp.dirty;
+    WorldStepResult inactive_step_result = step_world(world, dt, cfg, wksp);
+    stats += inactive_step_result.stats;
+    step_status = inactive_step_result.status;
+    ++workspace_test_steps;
+    bool inactive_rebuilt = !wksp.dirty
+        && !contains_id(wksp.propagated_tr_ids, added_sat_id);
+
+    if (step_status != StatusCode::ok) {
+        std::println("Inactive Body Step Status = {}", status_string(step_status));
+        return;
+    }
+
+    // state values do not change workspace membership
+    sat->x_tr.r(0) += 1.0;
+    bool state_change_kept_clean = !wksp.dirty;
+
+    std::println("WORLD WKSP Invalidation Checks");
+    std::println("    Add Marked Dirty = {}", add_marked_dirty);
+    std::println("    Added ID Present After Rebuild = {}", add_rebuilt);
+    std::println("    Inactive Marked Dirty = {}", inactive_marked_dirty);
+    std::println("    Inactive ID Removed After Rebuild = {}", inactive_rebuilt);
+    std::println("    State Change Kept Cache Clean = {}", state_change_kept_clean);
+    std::println(
+        "    Passed = {}",
+        add_marked_dirty && add_rebuilt && inactive_marked_dirty
+            && inactive_rebuilt && state_change_kept_clean
+    );
+
     for (i32 i = 0; i < n_steps; ++i) {
         WorldStepResult step_result = step_world(world, dt, cfg, wksp);
         stats += step_result.stats;
@@ -2909,7 +2979,7 @@ void run_world_workspace_diag() {
     std::println("WORLD WKSP Substeps Completed = {}", stats.substeps_completed);
     std::println("WORLD WKSP Time Advanced = {}", stats.dt_sim_advanced);
     std::println("WORLD WKSP Final Time = {}", world.t_sim());
-    std::println("WORLD WKSP Expected Time = {}", t0 + t_span);
+    std::println("WORLD WKSP Expected Time = {}", t0 + t_span + workspace_test_steps * dt);
 }
 
 void run_world_measurement_context_diag() {

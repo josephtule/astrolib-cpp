@@ -1022,7 +1022,7 @@ static void request_scenario_load(
     state.scenario.filepath = file_ui.resolved_path;
     state.scenario.has_filepath = true;
     state.scenario.dirty = false;
-    state.wksp.dirty = true;
+    invalidate_stepper_wksp(state.wksp);
 }
 
 static void render_scenario_overwrite_popup(
