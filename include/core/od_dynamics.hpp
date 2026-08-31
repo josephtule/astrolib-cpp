@@ -7,7 +7,6 @@
 #include "core/dynamics_rotational.hpp"
 #include "core/dynamics_translational.hpp"
 #include "core/integrator_adaptive.hpp"
-#include "core/integrator_common.hpp"
 #include "core/integrator_fixed.hpp"
 #include "core/state.hpp"
 #include "core/transform.hpp"

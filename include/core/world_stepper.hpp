@@ -9,15 +9,25 @@
 #include "core/state.hpp"
 #include "core/world.hpp"
 
+#include <algorithm>
+
+struct WorldAdaptiveConfig {
+    AdaptiveIntegratorConfig opts{};
+    bool use_substeps = false;
+};
+
 struct WorldStepperConfig {
-    IntegratorTypeFixed integrator_tr = IntegratorTypeFixed::rk2;
-    IntegratorTypeFixed integrator_att = IntegratorTypeFixed::rk4;
+    IntegratorType integrator_tr{IntegratorTypeFixed::rk4};
+    IntegratorType integrator_att{IntegratorTypeFixed::rk4};
+
     i32 substeps = 1;   // subdivisions per tick
     i32 ticks = 1;      // repeated integration ticks per call
     f64 dt_scale = 1.0; // simulated-time multiplier applied to input dt
     bool step_tr = true;
     bool step_att = true;
     bool paused = false;
+
+    WorldAdaptiveConfig adaptive{};
 };
 
 struct WorldStepperWorkspace {
@@ -35,21 +45,54 @@ void rebuild_world_stepper_workspace(
     WorldStepperWorkspace& workspace
 );
 
+inline void invalidate_stepper_wksp(WorldStepperWorkspace& wksp) {
+    wksp.dirty = true;
+}
+
 struct WorldStepperStats {
-    bool success = true;
     i32 ticks_completed = 0;
     i32 substeps_completed = 0;
     f64 dt_sim_advanced = 0.0;
+    AdaptiveIntegratorStats adaptive{};
 };
+
+struct WorldStepResult {
+    StatusCode status = StatusCode::invalid_state;
+    f64 t = 0.0;
+    f64 final_error_norm = 0.0;
+    WorldStepperStats stats{};
+};
+
 inline WorldStepperStats operator+(
     const WorldStepperStats& stats1,
     const WorldStepperStats& stats2
 ) {
+    AdaptiveIntegratorStats adaptive = stats1.adaptive;
+    i64 accepted_before = adaptive.accepted_steps;
+
+    adaptive.attempted_steps += stats2.adaptive.attempted_steps;
+    adaptive.accepted_steps += stats2.adaptive.accepted_steps;
+    adaptive.rejected_steps += stats2.adaptive.rejected_steps;
+    adaptive.deriv_evals += stats2.adaptive.deriv_evals;
+
+    if (stats2.adaptive.accepted_steps > 0) {
+        if (accepted_before == 0) {
+            adaptive.min_accepted_dt = stats2.adaptive.min_accepted_dt;
+            adaptive.max_accepted_dt = stats2.adaptive.max_accepted_dt;
+        } else {
+            adaptive.min_accepted_dt
+                = std::min(adaptive.min_accepted_dt, stats2.adaptive.min_accepted_dt);
+            adaptive.max_accepted_dt
+                = std::max(adaptive.max_accepted_dt, stats2.adaptive.max_accepted_dt);
+        }
+        adaptive.final_accepted_dt = stats2.adaptive.final_accepted_dt;
+    }
+
     return WorldStepperStats{
-        .success = stats1.success && stats2.success,
         .ticks_completed = stats1.ticks_completed + stats2.ticks_completed,
         .substeps_completed = stats1.substeps_completed + stats2.substeps_completed,
-        .dt_sim_advanced = stats1.dt_sim_advanced + stats2.dt_sim_advanced
+        .dt_sim_advanced = stats1.dt_sim_advanced + stats2.dt_sim_advanced,
+        .adaptive = adaptive
     };
 }
 inline WorldStepperStats& operator+=(
@@ -64,61 +107,29 @@ DerivTr derivtr_world(const World& world, EntityId id, const StateTr& x);
 
 bool step_tr_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg);
 
-WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg);
-
-WorldStepperStats step_world(
-    World& world,
-    f64 dt,
-    const WorldStepperConfig& cfg,
-    WorldStepperWorkspace& wksp
-);
-
-WorldStepperStats step_world_tableau(
+WorldStepResult step_world_legacy(
     World& world,
     f64 dt,
     const WorldStepperConfig& cfg
 );
 
-WorldStepperStats step_world_tableau(
+WorldStepResult step_world_legacy(
     World& world,
     f64 dt,
     const WorldStepperConfig& cfg,
     WorldStepperWorkspace& wksp
 );
 
-struct WorldAdaptiveIntegratorConfig {
-    IntegratorTypeAdaptive integrator_tr = IntegratorTypeAdaptive::dopri54;
-    // IntegratorTypeAdaptive integrator_tr = IntegratorTypeAdaptive::bosha32;
-    IntegratorTypeAdaptive integrator_att = IntegratorTypeAdaptive::dopri54;
 
-    AdaptiveIntegratorConfig opts{};
-    bool use_substeps = false;
-};
-
-struct WorldAdaptiveStepResult {
-    StatusCode status = StatusCode::invalid_input;
-
-    f64 t = 0.0;
-    f64 dt_sim_advanced = 0.0;
-
-    f64 final_error_norm = 0.0;
-
-    i32 ticks_completed = 0;
-    i32 substeps_completed = 0;
-    AdaptiveIntegratorStats stats{};
-};
-
-WorldAdaptiveStepResult step_world_adaptive(
+WorldStepResult step_world(
     World& world,
     f64 dt,
-    const WorldStepperConfig& stepper_cfg,
-    const WorldAdaptiveIntegratorConfig& adaptive_cfg,
+    const WorldStepperConfig& cfg,
     WorldStepperWorkspace& wksp
 );
 
-WorldAdaptiveStepResult step_world_adaptive(
+WorldStepResult step_world(
     World& world,
     f64 dt,
-    const WorldStepperConfig& stepper_cfg,
-    const WorldAdaptiveIntegratorConfig& adaptive_cfg
+    const WorldStepperConfig& cfg
 );

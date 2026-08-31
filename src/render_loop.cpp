@@ -499,8 +499,6 @@ static void init_render_loop_state(
     RenderLoopConfig& cfg,
     RenderLoopState& state
 ) {
-    state.stats.success = true;
-
     state.camera = make_render_camera(cfg.camera);
     state.assets = load_render_assets(cfg.assets);
     init_camera(cfg.camera, world);
@@ -544,9 +542,14 @@ void run_world_render_loop(
 
         state.dt = cfg.realtime ? state.frame_time : dt0;
         if (!cfg.stepper_cfg.paused) {
-            state.stats += step_world(world, state.dt, cfg.stepper_cfg, state.wksp);
-            if (!state.stats.success) {
-                std::println("Simulation Failure");
+            WorldStepResult step_result
+                = step_world(world, state.dt, cfg.stepper_cfg, state.wksp);
+            state.stats += step_result.stats;
+            if (step_result.status != StatusCode::ok) {
+                std::println(
+                    "Simulation Failure: {}",
+                    status_string(step_result.status)
+                );
                 break;
             }
         }

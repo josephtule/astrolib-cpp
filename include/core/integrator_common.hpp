@@ -4,8 +4,8 @@
 #include "util/typedefs.hpp"
 
 #include <array>
-#include <cassert>
 #include <cstddef>
+#include <variant>
 
 enum struct IntegratorFamily : i32 {
     fixed,
@@ -19,13 +19,108 @@ inline string integrator_name(IntegratorFamily family) {
     }
     return "Unknown";
 }
-
 inline string integrator_str(IntegratorFamily family) {
     switch (family) {
     case IntegratorFamily::fixed: return "fixed";
     case IntegratorFamily::adaptive: return "adaptive";
     }
     return "unknown";
+}
+
+enum struct IntegratorTypeFixed : i32 {
+    rk1,
+    rk2,
+    rk2_heun,
+    rk2_ralston,
+    rk3,
+    rk3_ralston,
+    rk4,
+    rk4_38,
+    rk5_nystrom,
+    rk6_butcher,
+};
+
+inline string integrator_name(IntegratorTypeFixed type) {
+    switch (type) {
+    case IntegratorTypeFixed::rk1: return "RK1";
+    case IntegratorTypeFixed::rk2: return "RK2";
+    case IntegratorTypeFixed::rk2_heun: return "RK2 Heun";
+    case IntegratorTypeFixed::rk2_ralston: return "RK2 Ralston";
+    case IntegratorTypeFixed::rk3: return "RK3";
+    case IntegratorTypeFixed::rk3_ralston: return "RK3 Ralston";
+    case IntegratorTypeFixed::rk4: return "RK4";
+    case IntegratorTypeFixed::rk4_38: return "RK4 3/8 Rule";
+    case IntegratorTypeFixed::rk5_nystrom: return "RK5 Nystrom";
+    case IntegratorTypeFixed::rk6_butcher: return "RK6 Butcher";
+    }
+    return "Unknown";
+}
+
+inline string integrator_str(IntegratorTypeFixed type) {
+    switch (type) {
+    case IntegratorTypeFixed::rk1: return "rk1";
+    case IntegratorTypeFixed::rk2: return "rk2";
+    case IntegratorTypeFixed::rk2_heun: return "rk2_heun";
+    case IntegratorTypeFixed::rk2_ralston: return "rk2_ralston";
+    case IntegratorTypeFixed::rk3: return "rk3";
+    case IntegratorTypeFixed::rk3_ralston: return "rk3_ralston";
+    case IntegratorTypeFixed::rk4: return "rk4";
+    case IntegratorTypeFixed::rk4_38: return "rk4_38";
+    case IntegratorTypeFixed::rk5_nystrom: return "rk5_nystrom";
+    case IntegratorTypeFixed::rk6_butcher: return "rk6_butcher";
+    }
+    return "unknown";
+}
+
+enum struct IntegratorTypeAdaptive : i32 {
+    rkf12,
+    heuneuler21,
+    bosha32,
+    rkf54,
+    cashkarp54,
+    dopri54,
+    rkf78,
+};
+
+inline string integrator_name(IntegratorTypeAdaptive type) {
+    switch (type) {
+    case IntegratorTypeAdaptive::rkf12: return "Runge-Kutta-Fehlberg 2(1)";
+    case IntegratorTypeAdaptive::heuneuler21: return "Heun-Euler 2(1)";
+    case IntegratorTypeAdaptive::bosha32: return "Bogacki-Shampine 3(2)";
+    case IntegratorTypeAdaptive::rkf54: return "Runge-Kutta-Fehlberg 5(4)";
+    case IntegratorTypeAdaptive::cashkarp54: return "Cash-Karp 5(4)";
+    case IntegratorTypeAdaptive::dopri54: return "Dormand-Prince 5(4)";
+    case IntegratorTypeAdaptive::rkf78: return "Runge-Kutta-Fehlberg 8(7)";
+    }
+    return "Unknown";
+}
+
+inline string integrator_str(IntegratorTypeAdaptive type) {
+    switch (type) {
+    case IntegratorTypeAdaptive::rkf12: return "rkf12";
+    case IntegratorTypeAdaptive::heuneuler21: return "heun_euler21";
+    case IntegratorTypeAdaptive::bosha32: return "bogacki_shampine32";
+    case IntegratorTypeAdaptive::rkf54: return "rkf54";
+    case IntegratorTypeAdaptive::cashkarp54: return "cash_karp54";
+    case IntegratorTypeAdaptive::dopri54: return "dormand_prince54";
+    case IntegratorTypeAdaptive::rkf78: return "rkf78";
+    }
+    return "unknown";
+}
+
+using IntegratorType = std::variant<IntegratorTypeFixed, IntegratorTypeAdaptive>;
+
+inline IntegratorFamily integrator_family(const IntegratorType& type) {
+    return std::holds_alternative<IntegratorTypeFixed>(type) ? IntegratorFamily::fixed
+                                                             : IntegratorFamily::adaptive;
+}
+
+inline string integrator_name(const IntegratorType& type) {
+    return std::visit([](auto method) { return integrator_name(method); }, type);
+}
+
+inline string integrator_str(const IntegratorType& type) {
+    return std::visit([](auto method) { return integrator_str(method); }, type);
 }
 
 template <size_t Stages>
@@ -93,350 +188,4 @@ GenericRKResult<State, Stages> step_generic_rk(
 
     result.status = StatusCode::ok;
     return result;
-}
-
-inline constexpr RKTableau<1> rk1_tableau{
-    // c
-    {0.0},
-
-    // a
-    {{{{0.0}}}},
-
-    // b_high
-    {1.0},
-
-    // b_low
-    {0.0},
-
-    1,
-    0,
-    false
-};
-
-inline constexpr RKTableau<2> rk2_tableau{
-    // c
-    {0.0, 1.0 / 2.0},
-
-    // a
-    {{
-        {{0.0, 0.0}},      // row 0
-        {{1.0 / 2.0, 0.0}} // row 1
-    }},
-
-    // b_high
-    {0.0, 1.0},
-
-    // b_low
-    {0.0, 0.0},
-
-    2,
-    0,
-    false
-};
-
-inline constexpr RKTableau<2> rk2_heun_tableau{
-    // c
-    {0.0, 1.0},
-
-    // a
-    {{
-        {{0.0, 0.0}}, // row 0
-        {{1.0, 0.0}}  // row 1
-    }},
-
-    // b_high
-    {1.0 / 2.0, 1.0 / 2.0},
-
-    // b_low
-    {0.0, 0.0},
-
-    2,
-    0,
-    false
-};
-
-inline constexpr RKTableau<2> rk2_ralston_tableau{
-    // c
-    {0.0, 2.0 / 3.0},
-
-    // a
-    {{{{0.0, 0.0}}, {{2.0 / 3.0, 0.0}}}},
-
-    // b_high
-    {1.0 / 4.0, 3.0 / 4.0},
-
-    // b_low
-    {0.0, 0.0},
-
-    2,
-    0,
-    false
-};
-
-inline constexpr RKTableau<3> rk3_tableau{
-    // c
-    {0.0, 1.0 / 2.0, 1.0},
-
-    // a
-    {{{{0.0, 0.0, 0.0}}, {{1.0 / 2.0, 0.0, 0.0}}, {{-1.0, 2.0, 0.0}}}},
-
-    // b_high
-    {1.0 / 6.0, 2.0 / 3.0, 1.0 / 6.0},
-
-    // b_low
-    {0.0, 0.0, 0.0},
-
-    3,
-    0,
-    false
-};
-
-inline constexpr RKTableau<4> rk4_tableau{
-    // c
-    {0.0, 1.0 / 2.0, 1.0 / 2.0, 1.0},
-
-    // a
-    {{{{0.0, 0.0, 0.0, 0.0}},
-      {{1.0 / 2.0, 0.0, 0.0, 0.0}},
-      {{0.0, 1.0 / 2.0, 0.0, 0.0}},
-      {{0.0, 0.0, 1.0, 0.0}}}},
-
-    // b_high
-    {1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0},
-
-    // b_low
-    {0.0, 0.0, 0.0, 0.0},
-
-    4,
-    0,
-    false
-};
-
-inline constexpr RKTableau<2> heuneuler21_tableau{
-    // c
-    {0.0, 1.0},
-
-    // a
-    {{
-        {0.0, 0.0}, // row 0
-        {1.0, 0.0}  // row 1
-    }},
-
-    // b_high
-    {1.0 / 2.0, 1.0 / 2.0},
-
-    // b_low
-    {1.0, 0.0},
-
-    2,
-    1,
-    false,
-    true
-};
-
-// aka rkf12
-inline constexpr RKTableau<3> rkf21_tableau{
-    // c
-    {0.0, 1.0 / 2.0, 1.0},
-
-    // a
-    {{
-        {0.0},                       // row 0
-        {1.0 / 2.0},                 // row 1
-        {1.0 / 256.0, 255.0 / 256.0} // row 2
-    }},
-
-    // b_high
-    {1.0 / 512.0, 255.0 / 256.0, 1.0 / 512.0},
-
-    // b_low
-    {1.0 / 256.0, 255.0 / 256.0},
-
-    2,
-    1,
-    false,
-    true
-};
-
-// aka bosha23
-inline constexpr RKTableau<4> bosha32{
-    // c
-    {0.0, 1.0 / 2.0, 3.0 / 4.0, 1.0},
-
-    // a
-    {{
-        {0.0},                            // row 0
-        {1.0 / 2.0},                      // row 1
-        {0.0, 3.0 / 4.0},                 // row 2
-        {2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0} // row 3
-    }},
-
-    // b_high
-    {2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0, 0.0},
-
-    // b_low
-    {7.0 / 24.0, 1.0 / 4.0, 1.0 / 3.0, 1.0 / 8.0},
-
-    3,
-    2,
-    true,
-    true
-};
-
-// aka rkf45
-inline constexpr RKTableau<6> rkf54_tableau{
-    // c
-    {0.0, 1.0 / 4.0, 3.0 / 8.0, 12.0 / 13.0, 1.0, 1.0 / 2.0},
-
-    // a
-    {{{{0.0}},
-      {{1.0 / 4.0}},
-      {{3.0 / 32.0, 9.0 / 32.0}},
-      {{1932.0 / 2197.0, -7200.0 / 2197.0, 7296.0 / 2197.0}},
-      {{439.0 / 216.0, -8.0, 3680.0 / 513.0, -845.0 / 4104.0}},
-      {{-8.0 / 27.0, 2.0, -3544.0 / 2565.0, 1859.0 / 4104.0, -11.0 / 40.0}}}},
-
-    // b_high
-    {16.0 / 135.0, 0.0, 6656.0 / 12825.0, 28561.0 / 56430.0, -9.0 / 50.0, 2.0 / 55.0},
-
-    // b_low
-    {25.0 / 216.0, 0.0, 1408.0 / 2565.0, 2197.0 / 4104.0, -1.0 / 5.0, 0.0},
-
-    5,
-    4,
-    false,
-    true
-};
-
-inline constexpr RKTableau<6> cashkarp54_tableau{
-    // c
-    {0.0, 1.0 / 5.0, 3.0 / 10.0, 3.0 / 5.0, 1.0, 7.0 / 8.0},
-
-    // a
-    {{
-        {0.0},                                                // row 0
-        {1.0 / 5.0},                                          // row 1
-        {3.0 / 40.0, 9.0 / 40.0},                             // row 2
-        {3.0 / 10.0, -9.0 / 10.0, 6.0 / 5.0},                 // row 3
-        {-11.0 / 54.0, 5.0 / 2.0, -70.0 / 27.0, 35.0 / 27.0}, // row 4
-        {1631.0 / 55296.0,
-         175.0 / 512.0,
-         575.0 / 13824.0,
-         44275.0 / 110592.0,
-         253.0 / 4096.0} // row 5
-    }},
-
-    // b_high
-    {37.0 / 378.0, 0.0, 250.0 / 621.0, 125.0 / 594.0, 0.0, 512.0 / 1771.0},
-
-    // b_low
-    {2825.0 / 27648.0,
-     0.0,
-     18575.0 / 48384.0,
-     13525.0 / 55296.0,
-     277.0 / 14336.0,
-     1.0 / 4.0},
-
-    5,
-    4,
-    false,
-    true
-};
-
-inline constexpr RKTableau<7> dopri54_tableau{
-    // c
-    {0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0},
-
-    // a
-    {{{{0.0}},
-      {{1.0 / 5.0}},
-      {{3.0 / 40.0, 9.0 / 40.0}},
-      {{44.0 / 45.0, -56.0 / 15.0, 32.0 / 9.0}},
-      {{19372.0 / 6561.0, -25360.0 / 2187.0, 64448.0 / 6561.0, -212.0 / 729.0}},
-      {{9017.0 / 3168.0,
-        -355.0 / 33.0,
-        46732.0 / 5247.0,
-        49.0 / 176.0,
-        -5103.0 / 18656.0}},
-      {{35.0 / 384.0,
-        0.0,
-        500.0 / 1113.0,
-        125.0 / 192.0,
-        -2187.0 / 6784.0,
-        11.0 / 84.0}}}},
-
-    // b_high
-    {35.0 / 384.0,
-     0.0,
-     500.0 / 1113.0,
-     125.0 / 192.0,
-     -2187.0 / 6784.0,
-     11.0 / 84.0,
-     0.0},
-
-    // b_low
-    {5179.0 / 57600.0,
-     0.0,
-     7571.0 / 16695.0,
-     393.0 / 640.0,
-     -92097.0 / 339200.0,
-     187.0 / 2100.0,
-     1.0 / 40.0},
-
-    5,
-    4,
-    true,
-    true
-};
-
-inline RKTableau<2> genexp2_tableau(f64 alpha) {
-    assert(alpha > 0);
-
-    RKTableau<2> tableau;
-
-    tableau.c = {0.0, alpha};
-    tableau.a = {{
-        {0.0},       // row 0
-        {alpha, 0.0} // row 1
-    }};
-    tableau.b_high = {1.0 - 1.0 / (2.0 * alpha), 1.0 / (2.0 * alpha)};
-    tableau.b_low = {0.0};
-    tableau.order_high = 2;
-    tableau.order_low = 0;
-    tableau.fsal = false;
-tableau.embedded = false;
-    return tableau;
-}
-
-inline RKTableau<3> genexp3_tableau(f64 alpha, f64 beta) {
-    assert(alpha != 0.0);
-    assert(alpha != 2.0 / 3.0);
-    assert(beta != 0.0);
-    assert(alpha != beta);
-
-    RKTableau<3> tableau;
-
-    tableau.c = {0.0, alpha, beta};
-
-    tableau.a = {{
-        {0.0},        // row 0
-        {alpha, 0.0}, // row 1
-        {(beta / alpha) * (beta - 3.0 * alpha * (1.0 - alpha)) / (3.0 * alpha - 2.0),
-         -(beta / alpha) * (beta - alpha) / (3.0 * alpha - 2.0),
-         0.0} // row 2
-    }};
-
-    tableau.b_high
-        = {1.0 - (3.0 * alpha + 3.0 * beta - 2.0) / (6.0 * alpha * beta),
-           (3.0 * beta - 2.0) / (6.0 * alpha * (beta - alpha)),
-           (2.0 - 3.0 * alpha) / (6.0 * beta * (beta - alpha))};
-
-    tableau.b_low = {0.0, 0.0, 0.0};
-
-    tableau.order_high = 3;
-    tableau.order_low = 0;
-    tableau.fsal = false;
-    tableau.embedded = false;
-
-    return tableau;
 }

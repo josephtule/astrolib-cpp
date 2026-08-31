@@ -691,6 +691,10 @@ static StatusCode sync_scenario_runtime_state_from_world(
     cfg.world_stepper.paused = stepper.paused;
     cfg.world_stepper.integrator_tr = stepper.integrator_tr;
     cfg.world_stepper.integrator_att = stepper.integrator_att;
+    cfg.world_stepper.step_tr = stepper.step_tr;
+    cfg.world_stepper.step_att = stepper.step_att;
+    cfg.world_stepper.adaptive.use_substeps = stepper.adaptive.use_substeps;
+    cfg.world_stepper.adaptive.opts = stepper.adaptive.opts;
 
     for (const EntityId id : world.all_celestial_ids()) {
         const Celestial* cel = world.celestial(id);

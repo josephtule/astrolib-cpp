@@ -5,13 +5,14 @@
 
 #include "core/body.hpp"
 #include "core/entity.hpp"
-#include "core/status.hpp"
+#include "core/integrator_adaptive.hpp"
 #include "core/integrator_common.hpp"
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
 #include "core/state.hpp"
+#include "core/status.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
 
@@ -31,6 +32,7 @@
 #include <cmath>
 #include <filesystem>
 #include <memory>
+#include <variant>
 
 using json = nlohmann::json;
 
@@ -234,6 +236,24 @@ static StatusCode parse_opt_i32(
     if (!child->is_number()) return StatusCode::invalid_input;
 
     out = child->get<i32>();
+    return StatusCode::ok;
+}
+
+static StatusCode parse_opt_i64(
+    const json& object,
+    const string& key,
+    bool& found,
+    i64& out,
+    const string& path
+) {
+    const json* child = nullptr;
+    StatusCode status = get_opt_child(object, key, child, found, path);
+    if (status != StatusCode::ok) return status;
+    if (!found) return StatusCode::ok;
+
+    if (!child->is_number_integer()) return StatusCode::invalid_input;
+
+    out = child->get<i64>();
     return StatusCode::ok;
 }
 
@@ -718,10 +738,7 @@ static StatusCode parse_opt_units_angle(
     string units_angle_str;
     StatusCode status = parse_opt_string(object, key, found, units_angle_str, path);
     if (status != StatusCode::ok) return status;
-    if (!found) {
-        out = UAngle::radian;
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     return parse_units_angle(units_angle_str, out);
 }
@@ -772,10 +789,7 @@ static StatusCode parse_opt_units_length(
     string units_length_str;
     StatusCode status = parse_opt_string(object, key, found, units_length_str, path);
     if (status != StatusCode::ok) return status;
-    if (!found) {
-        out = ULength::kilometer;
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     return parse_units_length(units_length_str, out);
 }
@@ -876,28 +890,46 @@ static StatusCode parse_opt_gravity_model(
 ) {
     string model_str;
     StatusCode status = parse_opt_string(object, key, found, model_str, path);
-    if (!found) {
-        out = GravityModel::pointmass; // default
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     return parse_gravity_model(model_str, out);
 }
 
-static StatusCode parse_integrator_type(string str, IntegratorTypeFixed& out) {
-    // NOTE: update if adding more types
-    if (str == "rk1")
+static StatusCode parse_integrator_type(string str, IntegratorType& out) {
+    if (str == integrator_str(IntegratorTypeFixed::rk1))
         out = IntegratorTypeFixed::rk1;
-    else if (str == "rk2")
+    else if (str == integrator_str(IntegratorTypeFixed::rk2))
         out = IntegratorTypeFixed::rk2;
-    else if (str == "rk2_heun")
+    else if (str == integrator_str(IntegratorTypeFixed::rk2_heun))
         out = IntegratorTypeFixed::rk2_heun;
-    else if (str == "rk2_ralston")
+    else if (str == integrator_str(IntegratorTypeFixed::rk2_ralston))
         out = IntegratorTypeFixed::rk2_ralston;
-    else if (str == "rk3")
+    else if (str == integrator_str(IntegratorTypeFixed::rk3))
         out = IntegratorTypeFixed::rk3;
-    else if (str == "rk4")
+    else if (str == integrator_str(IntegratorTypeFixed::rk3_ralston))
+        out = IntegratorTypeFixed::rk3_ralston;
+    else if (str == integrator_str(IntegratorTypeFixed::rk4))
         out = IntegratorTypeFixed::rk4;
+    else if (str == integrator_str(IntegratorTypeFixed::rk4_38))
+        out = IntegratorTypeFixed::rk4_38;
+    else if (str == integrator_str(IntegratorTypeFixed::rk5_nystrom))
+        out = IntegratorTypeFixed::rk5_nystrom;
+    else if (str == integrator_str(IntegratorTypeFixed::rk6_butcher))
+        out = IntegratorTypeFixed::rk6_butcher;
+    else if (str == integrator_str(IntegratorTypeAdaptive::rkf12))
+        out = IntegratorTypeAdaptive::rkf12;
+    else if (str == integrator_str(IntegratorTypeAdaptive::heuneuler21))
+        out = IntegratorTypeAdaptive::heuneuler21;
+    else if (str == integrator_str(IntegratorTypeAdaptive::bosha32))
+        out = IntegratorTypeAdaptive::bosha32;
+    else if (str == integrator_str(IntegratorTypeAdaptive::rkf54))
+        out = IntegratorTypeAdaptive::rkf54;
+    else if (str == integrator_str(IntegratorTypeAdaptive::cashkarp54))
+        out = IntegratorTypeAdaptive::cashkarp54;
+    else if (str == integrator_str(IntegratorTypeAdaptive::dopri54))
+        out = IntegratorTypeAdaptive::dopri54;
+    else if (str == integrator_str(IntegratorTypeAdaptive::rkf78))
+        out = IntegratorTypeAdaptive::rkf78;
     else
         return StatusCode::invalid_input;
 
@@ -907,7 +939,7 @@ static StatusCode parse_integrator_type(string str, IntegratorTypeFixed& out) {
 static StatusCode parse_req_integrator_type(
     const json& object,
     const string& key,
-    IntegratorTypeFixed& out,
+    IntegratorType& out,
     const string& path
 ) {
     string integrator_type_str;
@@ -921,16 +953,13 @@ static StatusCode parse_opt_integrator_type(
     const json& object,
     const string& key,
     bool& found,
-    IntegratorTypeFixed& out,
+    IntegratorType& out,
     const string& path
 ) {
     string integrator_type_str;
     StatusCode status = parse_opt_string(object, key, found, integrator_type_str, path);
     if (status != StatusCode::ok) return status;
-    if (!found) {
-        out = IntegratorTypeFixed::rk4;
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     return parse_integrator_type(integrator_type_str, out);
 }
@@ -980,10 +1009,7 @@ static StatusCode parse_opt_attitude_type(
     string type_str;
     StatusCode status = parse_opt_string(object, key, found, type_str, path);
     if (status != StatusCode::ok) return status;
-    if (!found) {
-        out = AttitudeType::quaternion; // default
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     return parse_attitude_type(type_str, out);
 }
@@ -1031,10 +1057,7 @@ static StatusCode parse_opt_time_scale(
     string type_str;
     StatusCode status = parse_opt_string(object, key, found, type_str, path);
     if (status != StatusCode::ok) return status;
-    if (!found) {
-        out = TimeScale::utc;
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     return parse_time_scale(type_str, out);
 }
@@ -1100,6 +1123,7 @@ static StatusCode parse_state_tr_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioStateTrConfig{};
 
     StatusCode status;
     const json* state_tr = nullptr;
@@ -1115,7 +1139,6 @@ static StatusCode parse_state_tr_config(
         path
     );
     if (status != StatusCode::ok) return status;
-    if (!found_ulength) out.units_length = ULength::kilometer; // default
 
     bool found_inputtype;
     string input_type_str = "";
@@ -1127,10 +1150,9 @@ static StatusCode parse_state_tr_config(
         path
     );
     if (status != StatusCode::ok) return status;
-    if (!found_inputtype) {
-        out.input_type = StateTrInputType::pos_vel; // default
-    } else {
+    if (found_inputtype) {
         status = parse_state_tr_type(input_type_str, out.input_type);
+        if (status != StatusCode::ok) return status;
     }
 
     switch (out.input_type) {
@@ -1156,7 +1178,6 @@ static StatusCode parse_state_tr_config(
             path
         );
         if (status != StatusCode::ok) return status;
-        if (!found_uangle) out.units_angle = UAngle::degree; // assume degree input
 
         // TODO: add additional spellings
         status = parse_req_f64(*state_tr, "sma", out.coes.sma, path);
@@ -1185,10 +1206,12 @@ static StatusCode parse_covariance(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioCovarianceConfig{};
 
     string type = "";
     StatusCode status = parse_req_string(object, "type", type, path);
     if (status != StatusCode::ok) return status;
+    out.type = type;
 
     out.covariance = matXd::Zero(dim, dim);
 
@@ -1229,6 +1252,7 @@ static StatusCode parse_instrument_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioInstrumentConfig{};
 
     StatusCode status = parse_req_string(object, "id", out.id, path);
     if (status != StatusCode::ok) return status;
@@ -1266,6 +1290,7 @@ static StatusCode parse_state_att_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioStateAttConfig{};
 
     StatusCode status;
 
@@ -1273,12 +1298,7 @@ static StatusCode parse_state_att_config(
     const json* state_att = nullptr;
     status = get_opt_child(object, "state_att", state_att, found_x_att, path);
     if (status != StatusCode::ok) return status;
-    if (!found_x_att) {
-        out.input_type = AttitudeType::quaternion;
-        out.q = q_identity;
-        out.w = vec3d0;
-        return StatusCode::ok;
-    }
+    if (!found_x_att) return StatusCode::ok;
 
     bool found_uangle;
     status = parse_opt_units_angle(
@@ -1289,7 +1309,6 @@ static StatusCode parse_state_att_config(
         path
     );
     if (status != StatusCode::ok) return status;
-    if (!found_uangle) out.units_angle = UAngle::radian;
 
     bool found_type = false;
     status = parse_opt_attitude_type(
@@ -1355,16 +1374,11 @@ static StatusCode parse_state_att_config(
         }
         if (out.q.norm() <= tol12) return StatusCode::invalid_input;
         out.q.normalize();
-    } else {
-        out.q = q_identity;
     }
 
     bool found_w;
     status = parse_opt_vec3d(*state_att, "w", found_w, out.w, path);
     if (status != StatusCode::ok) return status;
-    if (!found_w) {
-        out.w = vec3d0;
-    }
 
     if (out.units_angle != UAngle::radian) {
         for (i32 i = 0; i < 3; ++i) { // units/s -> radians/s
@@ -1382,6 +1396,7 @@ static StatusCode parse_gravity_provider_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioGravityProviderConfig{};
 
     StatusCode status;
 
@@ -1402,14 +1417,10 @@ static StatusCode parse_gravity_provider_config(
             = parse_opt_i32(object, "line_skips", found_lineskips, out.lineskips, path);
         if (status != StatusCode::ok) return status;
     }
-    if (!found_lineskips) out.lineskips = 0; // default
 
     bool found_normalized = false;
     status = parse_opt_bool(object, "normalized", found_normalized, out.normalized, path);
     if (status != StatusCode::ok) return status;
-    if (!found_normalized) {
-        out.normalized = true; // default
-    }
 
     return StatusCode::ok;
 }
@@ -1420,6 +1431,7 @@ static StatusCode parse_gravity_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioGravityConfig{};
 
     StatusCode status;
     const json* gravity = nullptr;
@@ -1445,7 +1457,6 @@ static StatusCode parse_gravity_config(
         path
     );
     if (status != StatusCode::ok) return status;
-    if (!found_units_length) out.units_length = ULength::kilometer;
 
     if (found_mu) {
         f64 length_scale = convert_length(1.0, out.units_length, ULength::kilometer);
@@ -1591,6 +1602,7 @@ static StatusCode parse_celestial_model_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioCelestialModelConfig{};
 
     StatusCode status;
     const json* model = nullptr;
@@ -1600,9 +1612,6 @@ static StatusCode parse_celestial_model_config(
     bool found_id;
     status = parse_opt_string(*model, "id", found_id, out.id, path);
     if (status != StatusCode::ok) return status;
-    if (!found_id) {
-        out.id = "custom";
-    }
 
     if (out.id == "custom") {
         status = parse_gravity_config(*model, out.gravity_model, path);
@@ -1617,7 +1626,6 @@ static StatusCode parse_celestial_model_config(
             path
         );
         if (status != StatusCode::ok) return status;
-        if (!found_units_length) out.units_length = ULength::kilometer;
 
         bool found_semimajor = false;
         status = parse_opt_f64(
@@ -1695,6 +1703,7 @@ static StatusCode parse_propagation_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioPropagationConfig{};
 
     StatusCode status;
     const json* propagation = nullptr;
@@ -1704,12 +1713,10 @@ static StatusCode parse_propagation_config(
     bool found_tr = false;
     status = parse_opt_bool(*propagation, "translation", found_tr, out.translation, path);
     if (status != StatusCode::ok) return status;
-    if (!found_tr) out.translation = true;
 
     bool found_att = false;
     status = parse_opt_bool(*propagation, "attitude", found_att, out.attitude, path);
     if (status != StatusCode::ok) return status;
-    if (!found_att) out.attitude = false;
 
     return StatusCode::ok;
 }
@@ -1720,6 +1727,7 @@ static StatusCode parse_celestial_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioCelestialConfig{};
 
     StatusCode status;
 
@@ -1734,7 +1742,6 @@ static StatusCode parse_celestial_config(
     bool found_active;
     status = parse_opt_bool(object, "active", found_active, out.active, path);
     if (status != StatusCode::ok) return status;
-    if (!found_active) out.active = true;
 
     status = parse_celestial_model_config(object, out.model, path);
     if (status != StatusCode::ok) return status;
@@ -1767,6 +1774,7 @@ static StatusCode parse_opt_mass_properties_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioMassPropertiesConfig{};
     StatusCode status;
 
     const json* mass_properties = nullptr;
@@ -1777,7 +1785,6 @@ static StatusCode parse_opt_mass_properties_config(
     bool found_mass;
     status = parse_opt_f64(*mass_properties, "mass", found_mass, out.mass, path);
     if (status != StatusCode::ok) return status;
-    if (!found_mass) out.mass = 0.0;
 
     bool found_inertia;
     const json* inertia_tensor = nullptr;
@@ -1809,7 +1816,7 @@ static StatusCode parse_opt_mass_properties_config(
                 out.principle_axes,
                 path
             );
-            if (!found_PA) out.principle_axes = true;
+            if (status != StatusCode::ok) return status;
 
             if (out.type == "diagonal" || out.type == "diag") {
                 vec3d diag;
@@ -1859,6 +1866,7 @@ static StatusCode parse_satellite_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioSatelliteConfig{};
 
     StatusCode status;
 
@@ -1873,7 +1881,6 @@ static StatusCode parse_satellite_config(
     bool found_active;
     status = parse_opt_bool(object, "active", found_active, out.active, path);
     if (status != StatusCode::ok) return status;
-    if (!found_active) out.active = true;
 
     status = parse_state_tr_config(object, out.x_tr, path);
     if (status != StatusCode::ok) return status;
@@ -1903,6 +1910,7 @@ static StatusCode parse_station_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioStationConfig{};
 
     StatusCode status;
 
@@ -1917,7 +1925,6 @@ static StatusCode parse_station_config(
     bool found_active;
     status = parse_opt_bool(object, "active", found_active, out.active, path);
     if (status != StatusCode::ok) return status;
-    if (!found_active) out.active = true;
 
     bool found_ulength;
     status = parse_opt_units_length(
@@ -1928,7 +1935,6 @@ static StatusCode parse_station_config(
         path
     );
     if (status != StatusCode::ok) return status;
-    if (!found_ulength) out.units_length = ULength::kilometer;
 
     bool found_uangle;
     status = parse_opt_units_angle(
@@ -1939,12 +1945,10 @@ static StatusCode parse_station_config(
         path
     );
     if (status != StatusCode::ok) return status;
-    if (!found_uangle) out.units_angle = UAngle::degree;
 
     bool found_anchored;
     status = parse_opt_bool(object, "anchored", found_anchored, out.anchored, path);
     if (status != StatusCode::ok) return status;
-    if (!found_anchored) out.anchored = true;
 
     if (out.anchored) {
         status = parse_req_string(object, "anchor", out.anchor, path);
@@ -1959,7 +1963,6 @@ static StatusCode parse_station_config(
             path
         );
         if (status != StatusCode::ok) return status;
-        if (!found_coord) out.coordinate_type = "detic_llh"; // default
         // TODO: create enum for this?
         if (out.coordinate_type == "detic_llh") {
             status = parse_req_vec3d(object, "llh", out.llh, path);
@@ -1973,7 +1976,6 @@ static StatusCode parse_station_config(
         status
             = parse_opt_string(object, "local_frame", found_frame, out.local_frame, path);
         if (status != StatusCode::ok) return status;
-        if (!found_frame) out.local_frame = "ENU";
 
         out.propagation.translation = true;
         out.propagation.attitude = true;
@@ -2022,6 +2024,7 @@ static StatusCode parse_scenario_schema(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioSchemaConfig{};
 
     StatusCode status;
     const json* child = nullptr;
@@ -2043,6 +2046,7 @@ static StatusCode parse_metadata_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioMetadataConfig{};
 
     StatusCode status;
     const json* child = nullptr;
@@ -2055,7 +2059,72 @@ static StatusCode parse_metadata_config(
     bool found_rng;
     status = parse_opt_u32(*child, "rng_seed", found_rng, out.rng_seed, path);
     if (status != StatusCode::ok) return status;
-    if (!found_rng) out.rng_seed = 12345;
+
+    return StatusCode::ok;
+}
+
+static StatusCode parse_opt_world_adaptive_config(
+    const json& object,
+    bool& found,
+    ScenarioWorldAdaptiveConfig& out,
+    const string& path
+) {
+    if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioWorldAdaptiveConfig{};
+
+    AdaptiveIntegratorConfig& opts = out.opts;
+
+    StatusCode status;
+    const json* child = nullptr;
+    status = get_opt_child(object, "adaptive", child, found, path);
+    if (status != StatusCode::ok) return status;
+    if (!found) return StatusCode::ok;
+
+    bool found_child;
+
+    status = parse_opt_bool(*child, "use_substeps", found_child, out.use_substeps, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "rel_tol", found_child, opts.rel_tol, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "abs_tol_r", found_child, opts.abs_tol_r, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "abs_tol_v", found_child, opts.abs_tol_v, path);
+    if (status != StatusCode::ok) return status;
+
+    status
+        = parse_opt_f64(*child, "abs_tol_angle", found_child, opts.abs_tol_angle, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "abs_tol_w", found_child, opts.abs_tol_w, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "dt_initial", found_child, opts.dt_initial, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "dt_min", found_child, opts.dt_min, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "dt_max", found_child, opts.dt_max, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "safety", found_child, opts.safety, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "scale_min", found_child, opts.scale_min, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_f64(*child, "scale_max", found_child, opts.scale_max, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_i64(*child, "max_attempts", found_child, opts.max_attempts, path);
+    if (status != StatusCode::ok) return status;
+
+    status
+        = parse_opt_i64(*child, "max_rejections", found_child, opts.max_rejections, path);
+    if (status != StatusCode::ok) return status;
 
     return StatusCode::ok;
 }
@@ -2068,21 +2137,17 @@ static StatusCode parse_opt_world_stepper_config(
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
 
+    out = ScenarioWorldStepperConfig{};
+
     StatusCode status;
     const json* child = nullptr;
     status = get_opt_child(object, "world_stepper", child, found, path);
     if (status != StatusCode::ok) return status;
-    if (!found) {
-        out = ScenarioWorldStepperConfig{}; // defaults
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     bool found_paused;
     status = parse_opt_bool(*child, "paused", found_paused, out.paused, path);
     if (status != StatusCode::ok) return status;
-    if (!found_paused) {
-        out.paused = false;
-    }
 
     bool found_int_tr;
     status = parse_opt_integrator_type(
@@ -2108,15 +2173,21 @@ static StatusCode parse_opt_world_stepper_config(
 
     status = parse_opt_u32(*child, "substeps", temp_found, out.substeps, path);
     if (status != StatusCode::ok) return status;
-    if (!temp_found) out.substeps = 1;
 
     status = parse_opt_u32(*child, "ticks", temp_found, out.ticks, path);
     if (status != StatusCode::ok) return status;
-    if (!temp_found) out.ticks = 1;
 
     status = parse_opt_f64(*child, "dt_scale", temp_found, out.dt_scale, path);
     if (status != StatusCode::ok) return status;
-    if (!temp_found) out.dt_scale = 1.0;
+
+    status = parse_opt_bool(*child, "step_translation", temp_found, out.step_tr, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_bool(*child, "step_attitude", temp_found, out.step_att, path);
+    if (status != StatusCode::ok) return status;
+
+    status = parse_opt_world_adaptive_config(*child, temp_found, out.adaptive, path);
+    if (status != StatusCode::ok) return status;
 
     return StatusCode::ok;
 }
@@ -2128,33 +2199,24 @@ static StatusCode parse_opt_time_config(
     const string& path
 ) {
     if (!object.is_object()) return StatusCode::invalid_input;
+    out = ScenarioTimeConfig{};
 
     StatusCode status;
     const json* time = nullptr;
     status = get_opt_child(object, "time", time, found, path);
     if (status != StatusCode::ok) return status;
-    if (!found) {
-        out = ScenarioTimeConfig{}; // defaults
-        return StatusCode::ok;
-    }
+    if (!found) return StatusCode::ok;
 
     status = parse_opt_f64(*time, "t0", found, out.t0, path);
     if (status != StatusCode::ok) return status;
-    if (!found) out.t0 = 0.0; // default
 
     const json* date = nullptr;
     status = get_opt_child(*time, "date", date, found, path);
-    if (!found) out.time_scale = TimeScale::utc;
-    if (!found) {
-        out.time_scale = TimeScale::utc;
-        out.date_type = DateType::jd;
-        out.jd = JulianDate{};
-        return StatusCode::ok;
-    }
+    if (status != StatusCode::ok) return status;
+    if (!found) return StatusCode::ok;
 
     status = parse_opt_time_scale(*date, "time_scale", found, out.time_scale, path);
     if (status != StatusCode::ok) return status;
-    if (!found) out.time_scale = TimeScale::utc;
 
     status = parse_req_date_type(*date, "input_type", out.date_type, path);
     if (status != StatusCode::ok) return status;
@@ -2164,9 +2226,7 @@ static StatusCode parse_opt_time_config(
         const json* cal = nullptr;
         status = get_opt_child(*date, "cal", cal, found, path);
         if (status != StatusCode::ok) return status;
-        if (!found) {
-            out.cal = CalendarTime{};
-        } else {
+        if (found) {
             status = parse_req_cal_style(*cal, "input_type", out.cal_style, path);
             if (status != StatusCode::ok) return status;
 
@@ -2214,9 +2274,7 @@ static StatusCode parse_opt_time_config(
         const json* jd = nullptr;
         status = get_opt_child(*date, "jd", jd, found, path);
         if (status != StatusCode::ok) return status;
-        if (!found) {
-            out.jd = JulianDate{};
-        } else {
+        if (found) {
             status = parse_req_f64(*jd, "day", out.jd.day, path);
             if (status != StatusCode::ok) return status;
             status = parse_req_f64(*jd, "frac", out.jd.frac, path);
@@ -2226,9 +2284,7 @@ static StatusCode parse_opt_time_config(
         const json* mjd = nullptr;
         status = get_opt_child(*date, "mjd", mjd, found, path);
         if (status != StatusCode::ok) return status;
-        if (!found) {
-            out.mjd = ModifiedJulianDate{};
-        } else {
+        if (found) {
             status = parse_req_f64(*mjd, "day", out.mjd.day, path);
             if (status != StatusCode::ok) return status;
             status = parse_req_f64(*mjd, "frac", out.mjd.frac, path);
@@ -2794,6 +2850,13 @@ StatusCode validate_scenario_config(const ScenarioConfig& cfg) {
         return StatusCode::invalid_input;
     }
 
+    status = validate_adaptive_integrator_config(cfg.world_stepper.adaptive.opts);
+    if (status != StatusCode::ok) return status;
+
+    if (cfg.world_stepper.step_tr && cfg.world_stepper.step_att
+        && cfg.world_stepper.integrator_tr != cfg.world_stepper.integrator_att) {
+        return StatusCode::unsupported_method;
+    }
     return StatusCode::ok;
 }
 
@@ -3285,6 +3348,11 @@ StatusCode build_world_from_scenario_config(
     stepper.ticks = cfg.world_stepper.ticks;
     stepper.paused = cfg.world_stepper.paused;
 
+    stepper.step_tr = cfg.world_stepper.step_tr;
+    stepper.step_att = cfg.world_stepper.step_att;
+    stepper.adaptive.use_substeps = cfg.world_stepper.adaptive.use_substeps;
+    stepper.adaptive.opts = cfg.world_stepper.adaptive.opts;
+
     for (const auto& cel_cfg : cfg.celestials) {
         auto cel = std::make_unique<Celestial>();
         status = apply_celestial_config(cfg, cel_cfg, *cel);
@@ -3384,6 +3452,11 @@ StatusCode build_scenario_config_from_world(
     cfg_stepper.substeps = stepper.substeps;
     cfg_stepper.ticks = stepper.ticks;
     cfg_stepper.dt_scale = stepper.dt_scale;
+
+    cfg_stepper.step_tr = stepper.step_tr;
+    cfg_stepper.step_att = stepper.step_att;
+    cfg_stepper.adaptive.use_substeps = stepper.adaptive.use_substeps;
+    cfg_stepper.adaptive.opts = stepper.adaptive.opts;
 
     cfg.time.t0 = world.t_sim();
     // world.
@@ -3934,6 +4007,25 @@ json json_from_scenario_config(const ScenarioConfig& cfg) {
     world_stepper["ticks"] = cfg.world_stepper.ticks;
     world_stepper["dt_scale"] = cfg.world_stepper.dt_scale;
     world_stepper["paused"] = cfg.world_stepper.paused;
+    world_stepper["step_translation"] = cfg.world_stepper.step_tr;
+    world_stepper["step_attitude"] = cfg.world_stepper.step_att;
+    json adaptive;
+    adaptive["use_substeps"] = cfg.world_stepper.adaptive.use_substeps;
+    adaptive["rel_tol"] = cfg.world_stepper.adaptive.opts.rel_tol;
+    adaptive["abs_tol_r"] = cfg.world_stepper.adaptive.opts.abs_tol_r;
+    adaptive["abs_tol_v"] = cfg.world_stepper.adaptive.opts.abs_tol_v;
+    adaptive["abs_tol_angle"] = cfg.world_stepper.adaptive.opts.abs_tol_angle;
+    adaptive["abs_tol_w"] = cfg.world_stepper.adaptive.opts.abs_tol_w;
+    adaptive["dt_initial"] = cfg.world_stepper.adaptive.opts.dt_initial;
+    adaptive["dt_min"] = cfg.world_stepper.adaptive.opts.dt_min;
+    adaptive["dt_max"] = cfg.world_stepper.adaptive.opts.dt_max;
+    adaptive["safety"] = cfg.world_stepper.adaptive.opts.safety;
+    adaptive["scale_min"] = cfg.world_stepper.adaptive.opts.scale_min;
+    adaptive["scale_max"] = cfg.world_stepper.adaptive.opts.scale_max;
+    adaptive["max_attempts"] = cfg.world_stepper.adaptive.opts.max_attempts;
+    adaptive["max_rejections"] = cfg.world_stepper.adaptive.opts.max_rejections;
+
+    world_stepper["adaptive"] = adaptive;
     scenario["world_stepper"] = world_stepper;
 
     json graphics_settings;

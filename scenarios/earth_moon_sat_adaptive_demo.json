@@ -1,0 +1,154 @@
+{
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "metadata": {
+        "name": "earth_moon_sat_adaptive_demo",
+        "rng_seed": 12345
+    },
+    "providers": {
+        "gravity": [
+            {
+                "id": "EGM2008_gfc",
+                "path": "/assets/earth/EGM2008.gfc.txt",
+                "normalized": true,
+                "format": "gfc",
+                "lineskips": 0
+            },
+            {
+                "id": "JGL165P1_gfc",
+                "path": "assets/moon/JGL165P1.gfc.txt",
+                "normalized": true,
+                "format": "gfc",
+                "lineskips": 0
+            }
+        ]
+    },
+    "celestials": [
+        {
+            "id": "earth",
+            "state_tr": {
+                "r": [0.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 0.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "axis": [1.0, 0.0, 0.0],
+                "angle": 0.4014257279586958,
+                "w": [0.0, 0.0, 7.2921159e-05],
+                "input_type": "axis_angle",
+                "units_angle": "radian"
+            },
+            "model": {
+                "id": "wgs84",
+                "gravity": {
+                    "model": "spherical_harmonics",
+                    "degree": 4,
+                    "order": 4,
+                    "coefficients": "EGM2008_gfc",
+                    "units_length": "kilometer"
+                },
+                "units_length": "kilometer"
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            },
+            "name": "earth",
+            "attitude_model": "simple_spin"
+        },
+        {
+            "id": "moon",
+            "state_tr": {
+                "r": [384400.0, 0.0, 0.0],
+                "v": [0.0, 1.022, 0.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 2.6617e-06],
+                "input_type": "quaternion",
+                "units_angle": "radian"
+            },
+            "model": {
+                "id": "custom",
+                "gravity": {
+                    "model": "spherical_harmonics",
+                    "degree": 4,
+                    "order": 4,
+                    "coefficients": "JGL165P1_gfc",
+                    "units_length": "kilometer",
+                    "mu": 4902.800066,
+                    "radius": 1738.1
+                },
+                "units_length": "kilometer",
+                "semimajor_axis": 1738.1,
+                "semiminor_axis": 1736.0
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            },
+            "name": "moon",
+            "attitude_model": "simple_spin"
+        }
+    ],
+    "satellites": [
+        {
+            "id": "sat1",
+            "state_tr": {
+                "r": [7000.0, 0.0, 0.0],
+                "v": [0.0, 7.5, 1.0],
+                "input_type": "pos_vel",
+                "units_length": "kilometer"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 200.0, 300.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            },
+            "name": "sat1"
+        }
+    ],
+    "world_stepper": {
+        "translation_integrator": "dormand_prince54",
+        "attitude_integrator": "dormand_prince54",
+        "substeps": 1,
+        "ticks": 10,
+        "dt_scale": 0.1,
+        "paused": false,
+        "step_translation": true,
+        "step_attitude": true,
+        "adaptive": {
+            "use_substeps": false,
+            "rel_tol": 1.0e-10,
+            "abs_tol_r": 1.0e-9,
+            "abs_tol_v": 1.0e-12,
+            "abs_tol_angle": 1.0e-12,
+            "abs_tol_w": 1.0e-12,
+            "dt_initial": 0.01,
+            "dt_min": 1.0e-9,
+            "dt_max": 100.0,
+            "safety": 0.9,
+            "scale_min": 0.2,
+            "scale_max": 5.0,
+            "max_attempts": 100000,
+            "max_rejections": 1000
+        }
+    },
+    "graphics_settings": {
+        "target_fps": 60,
+        "background_color": [30, 30, 30, 255],
+        "draw_inertial_axes": true
+    }
+}

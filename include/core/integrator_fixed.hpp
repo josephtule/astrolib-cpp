@@ -3,42 +3,10 @@
 
 #pragma once
 
-#include "core/integrator_common.hpp"
+#include "core/integrator_tableaus.hpp"
 
 // generic (unstaged) explicit integrator steps live here
 
-enum struct IntegratorTypeFixed : i32 {
-    rk1,
-    rk2,
-    rk2_heun,
-    rk2_ralston,
-    rk3,
-    rk4,
-};
-
-inline string integrator_name(IntegratorTypeFixed type) {
-    switch (type) {
-    case IntegratorTypeFixed::rk1: return "RK1";
-    case IntegratorTypeFixed::rk2: return "RK2";
-    case IntegratorTypeFixed::rk2_heun: return "RK2 Heun";
-    case IntegratorTypeFixed::rk2_ralston: return "RK2 Ralston";
-    case IntegratorTypeFixed::rk3: return "RK3";
-    case IntegratorTypeFixed::rk4: return "RK4";
-    }
-    return "Unknown";
-}
-
-inline string integrator_str(IntegratorTypeFixed type) {
-    switch (type) {
-    case IntegratorTypeFixed::rk1: return "rk1";
-    case IntegratorTypeFixed::rk2: return "rk2";
-    case IntegratorTypeFixed::rk2_heun: return "rk2_heun";
-    case IntegratorTypeFixed::rk2_ralston: return "rk2_ralston";
-    case IntegratorTypeFixed::rk3: return "rk3";
-    case IntegratorTypeFixed::rk4: return "rk4";
-    }
-    return "unknown";
-}
 
 template <typename State, typename Deriv, typename Func>
 inline std::pair<f64, State> step_rk1(Func&& f, f64 t, const State& x, f64 dt) {
@@ -102,6 +70,19 @@ inline std::pair<f64, State> step_rk4(Func&& f, f64 t, const State& x, f64 dt) {
     return {t_new, x_new};
 }
 
+template <typename State, typename Deriv, typename Func, size_t Stages>
+inline std::pair<f64, State> step_rk_tableau(
+    Func&& f,
+    f64 t,
+    const State& x,
+    f64 dt,
+    const RKTableau<Stages>& tableau
+) {
+    GenericRKResult<State, Stages> result
+        = step_generic_rk<State, Deriv>(f, t, x, dt, tableau);
+    return {t + dt, result.x};
+}
+
 template <typename State, typename Deriv, typename Func>
 inline std::pair<f64, State> step_integrator(
     Func&& f,
@@ -119,9 +100,20 @@ inline std::pair<f64, State> step_integrator(
         tx = step_rk2ralston<State, Deriv>(f, t, x, dt);
         break;
     case IntegratorTypeFixed::rk3: tx = step_rk3<State, Deriv>(f, t, x, dt); break;
+    case IntegratorTypeFixed::rk3_ralston:
+        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk3_ralston_tableau);
+        break;
     case IntegratorTypeFixed::rk4: tx = step_rk4<State, Deriv>(f, t, x, dt); break;
+    case IntegratorTypeFixed::rk4_38:
+        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk4_38_tableau);
+        break;
+    case IntegratorTypeFixed::rk5_nystrom:
+        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk5_nystrom_tableau);
+        break;
+    case IntegratorTypeFixed::rk6_butcher:
+        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk6_butcher_tableau);
+        break;
     default: tx = step_rk4<State, Deriv>(f, t, x, dt); break;
     }
     return tx;
 }
-

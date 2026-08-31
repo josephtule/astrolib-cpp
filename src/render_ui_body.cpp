@@ -1,14 +1,15 @@
 // Copyright 2025-2026 Joseph Le
 // SPDX-License-Identifier: Apache-2.0
 
+#include "core/world_stepper.hpp"
 #include "render_ui_internal.hpp"
 
 #include "core/body.hpp"
 #include "core/entity.hpp"
-#include "core/status.hpp"
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
 #include "core/scenario_io.hpp"
+#include "core/status.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "graphics/camera.hpp"
@@ -71,14 +72,8 @@ static void render_celestial_stats_ui(
     ImGuiInputTextFlags flags = 0,
     BodyEditDraft* draft = nullptr
 );
-static void render_satellite_stats_ui(
-    Satellite& sat,
-    ImGuiInputTextFlags flags = 0
-);
-static void render_mass_properties_ui(
-    MassProperties& mp,
-    ImGuiInputTextFlags flags = 0
-);
+static void render_satellite_stats_ui(Satellite& sat, ImGuiInputTextFlags flags = 0);
+static void render_mass_properties_ui(MassProperties& mp, ImGuiInputTextFlags flags = 0);
 static void render_station_stats_ui(
     Station& stat,
     RenderLoopConfig& cfg,
@@ -86,22 +81,14 @@ static void render_station_stats_ui(
     World& world,
     ImGuiInputTextFlags flags = 0
 );
-static void render_station_draft_ui(
-    Station& stat,
-    RenderLoopState& state,
-    World& world
-);
+static void render_station_draft_ui(Station& stat, RenderLoopState& state, World& world);
 static void render_station_instruments_ui(
     Station& stat,
     RenderLoopState& state,
     ImGuiInputTextFlags flags = 0
 );
 static bool body_edit_draft_changed(const BodyEditDraft& draft, const World& world);
-static void render_body_list_row(
-    const Body& body,
-    World& world,
-    RenderLoopConfig& cfg
-);
+static void render_body_list_row(const Body& body, World& world, RenderLoopConfig& cfg);
 static Body* draft_body_ptr(BodyEditDraft& draft) {
     switch (draft.edit_body_type) {
     case BodyType::unknown: return nullptr;
@@ -344,11 +331,7 @@ static void init_add_body_draft_defaults(
     }
 }
 
-void render_body_stats_ui(
-    World& world,
-    RenderLoopConfig& cfg,
-    RenderLoopState& state
-) {
+void render_body_stats_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& state) {
     im::Begin("Body Statistics");
     im::Checkbox("Display Statistics", &cfg.display_body_stats);
     if (cfg.display_body_stats) {
@@ -440,12 +423,10 @@ void render_body_stats_ui(
                     if (edited_body == nullptr) {
                         state.draft.edit_body_status = StatusCode::body_not_found;
                     } else {
-                        state.draft.edit_body_status = sync_scenario_body(
-                            state.scenario,
-                            *edited_body,
-                            world
-                        );
+                        state.draft.edit_body_status
+                            = sync_scenario_body(state.scenario, *edited_body, world);
                     }
+                    // invalidate_stepper_wksp(wksp);
                 }
                 if (state.draft.edit_body_status == StatusCode::ok) {
                     state.scenario.dirty = true;
@@ -959,7 +940,14 @@ static void render_celestial_stats_ui(
         case GravityModel::pointmass: break;
         case GravityModel::zonal: {
             im::Text("Reference Radius:");
-            im::InputDouble("##referenceradius", &cel.ref_radius, 0.0, 0.0, "%.3f", flags);
+            im::InputDouble(
+                "##referenceradius",
+                &cel.ref_radius,
+                0.0,
+                0.0,
+                "%.3f",
+                flags
+            );
             im::InputInt("Degree", &cel.degree, 1, 100, flags);
             im::TextWrapped("Zonal Coefficients (J):");
             im::SetNextItemWidth(-FLT_MIN);

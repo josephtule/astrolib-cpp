@@ -48,6 +48,7 @@
 #include "rlgl.h"
 
 #include <chrono>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <random>
@@ -890,8 +891,13 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
                         const ODDynamicsConfig* dyn_cfg = nullptr) {
         const ODDynamicsConfig& selected_dyn_cfg = dyn_cfg ? *dyn_cfg : cfg;
         auto time_start = std::chrono::steady_clock::now();
-        auto result
-            = propagate_tr_od_adaptive(t0, x0, interval, selected_dyn_cfg, integrator_cfg);
+        auto result = propagate_tr_od_adaptive(
+            t0,
+            x0,
+            interval,
+            selected_dyn_cfg,
+            integrator_cfg
+        );
         auto time_end = std::chrono::steady_clock::now();
         f64 runtime_us
             = std::chrono::duration<f64, std::micro>(time_end - time_start).count();
@@ -937,8 +943,7 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
         );
     };
 
-    auto [adaptive_res, adaptive_runtime_us]
-        = run_case(adaptive_cfg, x1, t_interval);
+    auto [adaptive_res, adaptive_runtime_us] = run_case(adaptive_cfg, x1, t_interval);
 
     StateTr x2_err = x2_truth - x2_prop;
 
@@ -950,13 +955,7 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
         dt,
         n_steps * 4
     );
-    print_result(
-        "Adaptive result:",
-        adaptive_res,
-        adaptive_runtime_us,
-        tf,
-        &x2_truth
-    );
+    print_result("Adaptive result:", adaptive_res, adaptive_runtime_us, tf, &x2_truth);
     std::println(
         "Step growth observed: {}",
         adaptive_res.stats.max_accepted_dt > adaptive_cfg.dt_initial
@@ -965,8 +964,7 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
         "Stats consistent: {}",
         adaptive_res.stats.attempted_steps
                 == adaptive_res.stats.accepted_steps + adaptive_res.stats.rejected_steps
-            && adaptive_res.stats.deriv_evals
-                == adaptive_res.stats.attempted_steps * 7
+            && adaptive_res.stats.deriv_evals == adaptive_res.stats.attempted_steps * 7
     );
 
     std::println("\nOversized Initial Step -------------------------------------");
@@ -976,8 +974,7 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
     oversized_cfg.abs_tol_v = 1e-15;
     oversized_cfg.dt_initial = tof;
     oversized_cfg.dt_max = tof;
-    auto [oversized_res, oversized_runtime_us]
-        = run_case(oversized_cfg, x1, t_interval);
+    auto [oversized_res, oversized_runtime_us] = run_case(oversized_cfg, x1, t_interval);
     print_result(
         "Oversized-step result:",
         oversized_res,
@@ -1046,21 +1043,15 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
         backward_runtime_us
             = std::chrono::duration<f64, std::micro>(time_end - time_start).count();
     }
-    print_result(
-        "Forward/backward closure:",
-        backward_res,
-        backward_runtime_us,
-        t0,
-        &x1
-    );
+    print_result("Forward/backward closure:", backward_res, backward_runtime_us, t0, &x1);
 
     std::println("\nInvalid Configuration --------------------------------------");
-    auto run_invalid_config = [&](const std::string& label,
-                                  const AdaptiveIntegratorConfig& invalid_cfg) {
-        auto [result, runtime_us] = run_case(invalid_cfg, x1, t_interval);
-        print_result(label, result, runtime_us, tf);
-        print_status_check(result.status, StatusCode::invalid_input);
-    };
+    auto run_invalid_config
+        = [&](const std::string& label, const AdaptiveIntegratorConfig& invalid_cfg) {
+              auto [result, runtime_us] = run_case(invalid_cfg, x1, t_interval);
+              print_result(label, result, runtime_us, tf);
+              print_status_check(result.status, StatusCode::invalid_input);
+          };
 
     AdaptiveIntegratorConfig zero_tolerance_cfg = adaptive_cfg;
     zero_tolerance_cfg.rel_tol = 0.0;
@@ -1104,40 +1095,25 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
     rejection_limit_cfg.max_rejections = 1;
     auto [rejection_limit_res, rejection_limit_runtime_us]
         = run_case(rejection_limit_cfg, x1, t_interval);
-    print_result(
-        "Rejection limit:",
-        rejection_limit_res,
-        rejection_limit_runtime_us,
-        tf
-    );
-    print_status_check(
-        rejection_limit_res.status,
-        StatusCode::max_rejections_reached
-    );
+    print_result("Rejection limit:", rejection_limit_res, rejection_limit_runtime_us, tf);
+    print_status_check(rejection_limit_res.status, StatusCode::max_rejections_reached);
 
     AdaptiveIntegratorConfig attempt_limit_cfg = oversized_cfg;
     attempt_limit_cfg.max_attempts = 1;
     attempt_limit_cfg.max_rejections = 1000;
     auto [attempt_limit_res, attempt_limit_runtime_us]
         = run_case(attempt_limit_cfg, x1, t_interval);
-    print_result(
-        "Attempt limit:",
-        attempt_limit_res,
-        attempt_limit_runtime_us,
-        tf
-    );
+    print_result("Attempt limit:", attempt_limit_res, attempt_limit_runtime_us, tf);
     print_status_check(attempt_limit_res.status, StatusCode::max_steps_reached);
 
     AdaptiveIntegratorConfig underflow_cfg = oversized_cfg;
     underflow_cfg.dt_min = tof * 0.5;
-    auto [underflow_res, underflow_runtime_us]
-        = run_case(underflow_cfg, x1, t_interval);
+    auto [underflow_res, underflow_runtime_us] = run_case(underflow_cfg, x1, t_interval);
     print_result("Step underflow:", underflow_res, underflow_runtime_us, tf);
     print_status_check(underflow_res.status, StatusCode::step_size_underflow);
 
     std::println("\nZero Duration ----------------------------------------------");
-    auto [zero_duration_res, zero_duration_runtime_us]
-        = run_case(adaptive_cfg, x1, 0.0);
+    auto [zero_duration_res, zero_duration_runtime_us] = run_case(adaptive_cfg, x1, 0.0);
     print_result(
         "Zero-duration result:",
         zero_duration_res,
@@ -1969,10 +1945,12 @@ void run_world_stepper_diag() {
 
         // world stepper
         WorldStepperStats stats;
-        stats.success = true;
+        StatusCode step_status = StatusCode::ok;
         for (i32 i = 0; i < n_steps; ++i) {
-            stats += step_world(world, dt, cfg);
-            if (!stats.success) break;
+            WorldStepResult step_result = step_world(world, dt, cfg);
+            stats += step_result.stats;
+            step_status = step_result.status;
+            if (step_status != StatusCode::ok) break;
         }
 
         StateTr x_err = x_OD - sat->x_tr;
@@ -1981,7 +1959,11 @@ void run_world_stepper_diag() {
         f64 pos_rel_err = pos_err / x_OD.r.norm();
         f64 vel_rel_err = vel_err / x_OD.v.norm();
 
-        std::println("{} Success = {}", integrator_name(integrator_tr), stats.success);
+        std::println(
+            "{} Success = {}",
+            integrator_name(integrator_tr),
+            step_status == StatusCode::ok
+        );
         std::println("{} Position Error = {}", integrator_name(integrator_tr), pos_err);
         std::println("{} Velocity Error = {}", integrator_name(integrator_tr), vel_err);
         std::println(
@@ -2035,16 +2017,18 @@ void run_body_fixed_gravity_timing_diag() {
         cfg.dt_scale = 1.0;
 
         WorldStepperStats stats;
-        stats.success = true;
+        StatusCode step_status = StatusCode::ok;
         for (i32 i = 0; i < n_steps; ++i) {
-            stats += step_world(world, dt, cfg);
-            if (!stats.success) break;
+            WorldStepResult step_result = step_world(world, dt, cfg);
+            stats += step_result.stats;
+            step_status = step_result.status;
+            if (step_status != StatusCode::ok) break;
         }
 
         f64 theta = spin_rate * world.t_sim();
         vec4d q_expected{0.0, 0.0, std::sin(theta / 2.0), std::cos(theta / 2.0)};
 
-        std::println("Simple Spin Success = {}", stats.success);
+        std::println("Simple Spin Success = {}", step_status == StatusCode::ok);
         std::println("Simple Spin Final Time = {}", world.t_sim());
         std::println("Simple Spin q = {}", earth->x_att.q);
         std::println("Simple Spin Expected q = {}", q_expected);
@@ -2093,11 +2077,15 @@ void run_body_fixed_gravity_timing_diag() {
         WorldStateSnapshot world_snapshot = world.capture_checkpoint();
 
         WorldStepperStats stats;
+        StatusCode step_status = StatusCode::ok;
         auto prop = [&]() {
-            stats.success = true;
+            stats = WorldStepperStats{};
+            step_status = StatusCode::ok;
             for (i32 i = 0; i < n_steps; ++i) {
-                stats += step_world(world, dt, cfg);
-                if (!stats.success) break;
+                WorldStepResult step_result = step_world(world, dt, cfg);
+                stats += step_result.stats;
+                step_status = step_result.status;
+                if (step_status != StatusCode::ok) break;
             }
         };
 
@@ -2296,8 +2284,10 @@ void run_moving_source_world_diag() {
     i32 print_i = 25000;
     i32 csv_i = 10;
     WorldStepperStats stats;
+    StatusCode step_status = StatusCode::ok;
     auto prop = [&](bool write_csv, bool print_progress) {
-        stats.success = true;
+        stats = WorldStepperStats{};
+        step_status = StatusCode::ok;
         for (i32 i = 0; i < n_steps; ++i) {
             if (write_csv && output_csv && i % csv_i == 0) {
                 file << i << "," << earth->x_tr.r(0) << "," << earth->x_tr.r(1) << ","
@@ -2312,8 +2302,10 @@ void run_moving_source_world_diag() {
                 std::println("Urath Position = {}", urath->x_tr.r);
                 std::println("Satellite Position = {}", sat->x_tr.r);
             }
-            stats += step_world(world, dt, cfg);
-            if (!stats.success) break;
+            WorldStepResult step_result = step_world(world, dt, cfg);
+            stats += step_result.stats;
+            step_status = step_result.status;
+            if (step_status != StatusCode::ok) break;
         }
     };
 
@@ -2327,6 +2319,7 @@ void run_moving_source_world_diag() {
     StateTr x_sat_moving = sat->x_tr;
     f64 t_moving = world.t_sim();
     WorldStepperStats stats_moving = stats;
+    StatusCode status_moving = step_status;
 
     // fixed earth and urath
     world.restore_checkpoint_state(world_snapshot);
@@ -2339,9 +2332,10 @@ void run_moving_source_world_diag() {
     StateTr x_sat_fixed = sat->x_tr;
     f64 t_fixed = world.t_sim();
     WorldStepperStats stats_fixed = stats;
+    StatusCode status_fixed = step_status;
 
-    std::println("Moving Source Success = {}", stats_moving.success);
-    std::println("Fixed Source Success = {}", stats_fixed.success);
+    std::println("Moving Source Success = {}", status_moving == StatusCode::ok);
+    std::println("Fixed Source Success = {}", status_fixed == StatusCode::ok);
     std::println("Moving Source Final Time = {}", t_moving);
     std::println("Fixed Source Final Time = {}", t_fixed);
     std::println("Earth Displacement = {}", (x_earth_moving.r - x_earth0.r).norm());
@@ -2589,11 +2583,15 @@ void run_staged_attitude_gravity_diag() {
     WorldStateSnapshot world_snapshot = world.capture_checkpoint();
 
     WorldStepperStats stats;
+    StatusCode step_status = StatusCode::ok;
     auto prop = [&]() {
-        stats.success = true;
+        stats = WorldStepperStats{};
+        step_status = StatusCode::ok;
         for (i32 i = 0; i < n_steps; ++i) {
-            stats += step_world(world, dt, cfg);
-            if (!stats.success) break;
+            WorldStepResult step_result = step_world(world, dt, cfg);
+            stats += step_result.stats;
+            step_status = step_result.status;
+            if (step_status != StatusCode::ok) break;
         }
     };
 
@@ -2605,6 +2603,7 @@ void run_staged_attitude_gravity_diag() {
         prop();
         StateTr xf_fixed = sat->x_tr;
         WorldStepperStats stats_fixed = stats;
+        StatusCode status_fixed = step_status;
 
         world.restore_checkpoint_state(world_snapshot);
         earth->gravity_model = gravity_model;
@@ -2613,11 +2612,12 @@ void run_staged_attitude_gravity_diag() {
         prop();
         StateTr xf_rot = sat->x_tr;
         WorldStepperStats stats_rot = stats;
+        StatusCode status_rot = step_status;
 
         StateTr x_err = xf_fixed - xf_rot;
 
-        std::println("{} Fixed Success = {}", name, stats_fixed.success);
-        std::println("{} Rotating Success = {}", name, stats_rot.success);
+        std::println("{} Fixed Success = {}", name, status_fixed == StatusCode::ok);
+        std::println("{} Rotating Success = {}", name, status_rot == StatusCode::ok);
         std::println("{} Position Difference = {}", name, x_err.r.norm());
         std::println("{} Velocity Difference = {}", name, x_err.v.norm());
         std::println();
@@ -2732,7 +2732,7 @@ void run_render_pipeline_diag() {
     f64 dt = 1.0 / cfg.ticks * cfg.dt_scale;
     world.reset_time(t0);
     WorldStepperStats stats;
-    stats.success = true;
+    StatusCode step_status = StatusCode::ok;
     WorldStepperWorkspace wksp;
 
     // windowing and graphics
@@ -2794,8 +2794,10 @@ void run_render_pipeline_diag() {
             paused = !paused;
         }
         if (!paused) {
-            stats += step_world(world, dt, cfg, wksp);
-            if (!stats.success) {
+            WorldStepResult step_result = step_world(world, dt, cfg, wksp);
+            stats += step_result.stats;
+            step_status = step_result.status;
+            if (step_status != StatusCode::ok) {
                 std::println("Simulation Failure");
                 break;
             }
@@ -2875,7 +2877,7 @@ void run_world_workspace_diag() {
     world.reset_time(t0);
 
     WorldStepperStats stats;
-    stats.success = true;
+    StatusCode step_status = StatusCode::ok;
 
     WorldStepperWorkspace wksp;
 
@@ -2892,15 +2894,17 @@ void run_world_workspace_diag() {
     print_workspace("WORLD WKSP Initial");
 
     for (i32 i = 0; i < n_steps; ++i) {
-        stats += step_world(world, dt, cfg, wksp);
-        if (!stats.success) {
+        WorldStepResult step_result = step_world(world, dt, cfg, wksp);
+        stats += step_result.stats;
+        step_status = step_result.status;
+        if (step_status != StatusCode::ok) {
             std::println("Integration Failed");
             break;
         }
     }
 
     print_workspace("WORLD WKSP Final");
-    std::println("WORLD WKSP Success = {}", stats.success);
+    std::println("WORLD WKSP Success = {}", step_status == StatusCode::ok);
     std::println("WORLD WKSP Ticks Completed = {}", stats.ticks_completed);
     std::println("WORLD WKSP Substeps Completed = {}", stats.substeps_completed);
     std::println("WORLD WKSP Time Advanced = {}", stats.dt_sim_advanced);
@@ -3064,11 +3068,15 @@ void run_iod_lumve_ekf_init_diag() {
     f64 dt;
 
     WorldStepperStats stats;
+    StatusCode step_status = StatusCode::ok;
     auto prop = [&]() {
-        stats.success = true;
+        stats = WorldStepperStats{};
+        step_status = StatusCode::ok;
         for (i32 i = 0; i < n_steps; ++i) {
-            stats += step_world(world, dt, cfg);
-            if (!stats.success) break;
+            WorldStepResult step_result = step_world(world, dt, cfg);
+            stats += step_result.stats;
+            step_status = step_result.status;
+            if (step_status != StatusCode::ok) break;
         }
     };
 
@@ -3136,8 +3144,10 @@ void run_iod_lumve_ekf_init_diag() {
     // create measurements
     for (i32 i = 0; i < split_idx; ++i) {
         dt = t_meas(i) - world.t_sim();
-        stats += step_world(world, dt, cfg);
-        if (!stats.success) break;
+        WorldStepResult step_result = step_world(world, dt, cfg);
+        stats += step_result.stats;
+        step_status = step_result.status;
+        if (step_status != StatusCode::ok) break;
 
         // stat1 -> radec + range
         StateTr x_tr_obsv1 = world.stat_x_tr_inertial(stat1_id);
@@ -3220,8 +3230,10 @@ void run_iod_lumve_ekf_init_diag() {
 
     for (i32 i = split_idx; i < N_meas; ++i) {
         dt = t_meas(i) - world.t_sim();
-        stats += step_world(world, dt, cfg);
-        if (!stats.success) break;
+        WorldStepResult step_result = step_world(world, dt, cfg);
+        stats += step_result.stats;
+        step_status = step_result.status;
+        if (step_status != StatusCode::ok) break;
         // stat1 -> radec + range
         StateTr x_tr_obsv1 = world.stat_x_tr_inertial(stat1_id);
 
@@ -3814,7 +3826,7 @@ void run_realtime_ekf_world_update_diag() {
     cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t_span = 1000.0;
-    i32 n_steps = 1000;
+    i32 n_steps = 10000;
     f64 dt = t_span / n_steps;
     i32 prop_steps = 100;
     mat6d Q = mat6d1 * 1e-5; // process noise
@@ -3909,7 +3921,12 @@ void run_realtime_ekf_world_update_diag() {
         last_result
             = copy_od_ekf_result<ODRealtimeEKFResult, ODEKFStepResult>(realtime_result);
 
-        step_world(world, dt, cfg);
+        WorldStepResult step_result = step_world(world, dt, cfg);
+        if (step_result.status != StatusCode::ok) {
+            last_result.status = step_result.status;
+            ++failed_updates;
+            break;
+        }
     }
 
     // last ekf update after final world step
@@ -4163,7 +4180,11 @@ void run_world_history_diag() {
     for (i32 i = 0; i < n_steps1 + n_steps2; ++i) {
         dt = i < n_steps1 ? dt1 : dt2;
 
-        step_world(world, dt, cfg);
+        WorldStepResult step_result = step_world(world, dt, cfg);
+        if (step_result.status != StatusCode::ok) {
+            std::println("World Step Status = {}", status_string(step_result.status));
+            return;
+        }
 
         if (i == (n_steps1 - 1)) {
             sample1 = capture_world_history_sample(world);
@@ -4602,7 +4623,12 @@ void run_world_history_ekf_diag() {
         last_result
             = copy_od_ekf_result<ODRealtimeEKFResult, ODEKFStepResult>(realtime_result);
 
-        step_world(world, dt, cfg);
+        WorldStepResult step_result = step_world(world, dt, cfg);
+        if (step_result.status != StatusCode::ok) {
+            last_result.status = step_result.status;
+            ++failed_updates;
+            break;
+        }
 
         sample = capture_world_history_sample(world);
         push_world_history_sample(history, sample);
@@ -5024,9 +5050,6 @@ void run_scenario_render_diag() {
     f64 t0 = 0.0;
     f64 dt = 1.0;
     world.reset_time(t0);
-    WorldStepperStats stats;
-    stats.success = true;
-    WorldStepperWorkspace wksp;
 
     // windowing and graphics
     // TODO: make build_render_config
@@ -5050,4 +5073,510 @@ void run_scenario_render_diag() {
     run_world_render_loop(world, render_cfg, dt, std::move(scenario));
 
     print_diag_title();
+}
+
+void run_world_dopri54_rk4_diag() {
+    print_diag_title("World DOPRI5(4) vs RK4");
+
+    ScenarioConfig rk4_scenario_cfg;
+    StatusCode status = load_scenario_json(
+        pwd + "/scenarios/earth_moon_sat_demo.json",
+        rk4_scenario_cfg
+    );
+    if (status != StatusCode::ok) {
+        std::println("RK4 Scenario Load Status = {}", status_string(status));
+        return;
+    }
+
+    status = validate_scenario_config(rk4_scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("RK4 Scenario Validation Status = {}", status_string(status));
+        return;
+    }
+
+    ScenarioConfig adaptive_scenario_cfg;
+    status = load_scenario_json(
+        pwd + "/scenarios/earth_moon_sat_adaptive_demo.json",
+        adaptive_scenario_cfg
+    );
+    if (status != StatusCode::ok) {
+        std::println("Adaptive Scenario Load Status = {}", status_string(status));
+        return;
+    }
+
+    status = validate_scenario_config(adaptive_scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Adaptive Scenario Validation Status = {}", status_string(status));
+        return;
+    }
+
+    const std::filesystem::path roundtrip_filepath
+        = std::filesystem::temp_directory_path()
+        / "astrolib_earth_moon_sat_adaptive_roundtrip.json";
+
+    status = save_scenario_json(roundtrip_filepath.string(), adaptive_scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Adaptive Scenario Save Status = {}", status_string(status));
+        return;
+    }
+
+    ScenarioConfig adaptive_roundtrip_cfg;
+    status = load_scenario_json(roundtrip_filepath.string(), adaptive_roundtrip_cfg);
+    std::error_code remove_error;
+    std::filesystem::remove(roundtrip_filepath, remove_error);
+    if (status != StatusCode::ok) {
+        std::println("Adaptive Scenario Reload Status = {}", status_string(status));
+        return;
+    }
+
+    auto same_adaptive_opts = [](
+                                  const AdaptiveIntegratorConfig& lhs,
+                                  const AdaptiveIntegratorConfig& rhs
+                              ) {
+        return lhs.rel_tol == rhs.rel_tol && lhs.abs_tol_r == rhs.abs_tol_r
+            && lhs.abs_tol_v == rhs.abs_tol_v
+            && lhs.abs_tol_angle == rhs.abs_tol_angle && lhs.abs_tol_w == rhs.abs_tol_w
+            && lhs.dt_initial == rhs.dt_initial && lhs.dt_min == rhs.dt_min
+            && lhs.dt_max == rhs.dt_max && lhs.safety == rhs.safety
+            && lhs.scale_min == rhs.scale_min && lhs.scale_max == rhs.scale_max
+            && lhs.max_attempts == rhs.max_attempts
+            && lhs.max_rejections == rhs.max_rejections;
+    };
+
+    auto same_stepper_config = [&](
+                                   const ScenarioWorldStepperConfig& lhs,
+                                   const ScenarioWorldStepperConfig& rhs
+                               ) {
+        return lhs.integrator_tr == rhs.integrator_tr
+            && lhs.integrator_att == rhs.integrator_att
+            && lhs.adaptive.use_substeps == rhs.adaptive.use_substeps
+            && same_adaptive_opts(lhs.adaptive.opts, rhs.adaptive.opts)
+            && lhs.paused == rhs.paused && lhs.step_tr == rhs.step_tr
+            && lhs.step_att == rhs.step_att && lhs.substeps == rhs.substeps
+            && lhs.ticks == rhs.ticks && lhs.dt_scale == rhs.dt_scale;
+    };
+
+    bool roundtrip_match = same_stepper_config(
+        adaptive_scenario_cfg.world_stepper,
+        adaptive_roundtrip_cfg.world_stepper
+    );
+    if (!roundtrip_match) {
+        std::println("Adaptive Scenario Stepper Round Trip Match = false");
+        return;
+    }
+
+    World rk4_world;
+    WorldStepperConfig rk4_cfg;
+    ScenarioBuildResult rk4_build;
+    status
+        = build_world_from_scenario_config(rk4_scenario_cfg, rk4_world, rk4_build, rk4_cfg);
+    if (status != StatusCode::ok) {
+        std::println("RK4 World Build Status = {}", status_string(status));
+        return;
+    }
+
+    World dopri_world;
+    WorldStepperConfig dopri_stepper_cfg;
+    ScenarioBuildResult dopri_build;
+    status = build_world_from_scenario_config(
+        adaptive_roundtrip_cfg,
+        dopri_world,
+        dopri_build,
+        dopri_stepper_cfg
+    );
+    if (status != StatusCode::ok) {
+        std::println("DOPRI5(4) World Build Status = {}", status_string(status));
+        return;
+    }
+
+    rk4_cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    rk4_cfg.integrator_att = IntegratorTypeFixed::rk4;
+    f64 t_span = 1000.0;
+    i32 n_steps = 10000;
+    f64 dt = t_span / n_steps;
+
+    bool runtime_config_match
+        = dopri_stepper_cfg.integrator_tr
+              == adaptive_roundtrip_cfg.world_stepper.integrator_tr
+        && dopri_stepper_cfg.integrator_att
+              == adaptive_roundtrip_cfg.world_stepper.integrator_att
+        && dopri_stepper_cfg.adaptive.use_substeps
+              == adaptive_roundtrip_cfg.world_stepper.adaptive.use_substeps
+        && same_adaptive_opts(
+            dopri_stepper_cfg.adaptive.opts,
+            adaptive_roundtrip_cfg.world_stepper.adaptive.opts
+        )
+        && dopri_stepper_cfg.step_tr == adaptive_roundtrip_cfg.world_stepper.step_tr
+        && dopri_stepper_cfg.step_att == adaptive_roundtrip_cfg.world_stepper.step_att
+        && dopri_stepper_cfg.substeps == adaptive_roundtrip_cfg.world_stepper.substeps
+        && dopri_stepper_cfg.ticks == adaptive_roundtrip_cfg.world_stepper.ticks
+        && dopri_stepper_cfg.dt_scale == adaptive_roundtrip_cfg.world_stepper.dt_scale
+        && dopri_stepper_cfg.paused == adaptive_roundtrip_cfg.world_stepper.paused;
+    if (!runtime_config_match) {
+        std::println("Adaptive Runtime Config Match = false");
+        return;
+    }
+
+    WorldStepperWorkspace rk4_wksp;
+    WorldStepperStats rk4_stats;
+    StatusCode rk4_status = StatusCode::ok;
+    auto rk4_start = std::chrono::high_resolution_clock::now();
+    for (i32 i = 0; i < n_steps; ++i) {
+        WorldStepResult step_result = step_world(rk4_world, dt, rk4_cfg, rk4_wksp);
+        rk4_stats += step_result.stats;
+        rk4_status = step_result.status;
+        if (rk4_status != StatusCode::ok) break;
+    }
+    auto rk4_stop = std::chrono::high_resolution_clock::now();
+    f64 rk4_runtime_ms
+        = std::chrono::duration<f64, std::milli>(rk4_stop - rk4_start).count();
+
+    WorldStepperWorkspace dopri_wksp;
+    auto dopri_start = std::chrono::high_resolution_clock::now();
+    WorldStepResult dopri_result = step_world(
+        dopri_world,
+        t_span,
+        dopri_stepper_cfg,
+        dopri_wksp
+    );
+    auto dopri_stop = std::chrono::high_resolution_clock::now();
+    f64 dopri_runtime_ms
+        = std::chrono::duration<f64, std::milli>(dopri_stop - dopri_start).count();
+
+    if (rk4_status != StatusCode::ok || dopri_result.status != StatusCode::ok) {
+        std::println("RK4 Status = {}", status_string(rk4_status));
+        std::println("DOPRI5(4) Status = {}", status_string(dopri_result.status));
+        std::println("DOPRI5(4) Final Time = {}", dopri_result.t);
+        std::println(
+            "DOPRI5(4) Attempts = {}",
+            dopri_result.stats.adaptive.attempted_steps
+        );
+        std::println(
+            "DOPRI5(4) Derivative Evaluations = {}",
+            dopri_result.stats.adaptive.deriv_evals
+        );
+        return;
+    }
+
+    auto quaternion_error = [](const vec4d& q1, const vec4d& q2) {
+        return std::min((q1 - q2).norm(), (q1 + q2).norm());
+    };
+
+    auto print_body_errors = [&](const string& config_id) {
+        auto rk4_id_it = rk4_build.body_ids.find(config_id);
+        auto dopri_id_it = dopri_build.body_ids.find(config_id);
+        if (rk4_id_it == rk4_build.body_ids.end()
+            || dopri_id_it == dopri_build.body_ids.end()) {
+            std::println("{} Body Mapping Not Found", config_id);
+            return;
+        }
+
+        const Body* rk4_body = rk4_world.body(rk4_id_it->second);
+        const Body* dopri_body = dopri_world.body(dopri_id_it->second);
+        if (rk4_body == nullptr || dopri_body == nullptr) {
+            std::println("{} Body Lookup Failed", config_id);
+            return;
+        }
+
+        std::println("{} State Errors", config_id);
+        std::println("    Position = {}", (rk4_body->x_tr.r - dopri_body->x_tr.r).norm());
+        std::println("    Velocity = {}", (rk4_body->x_tr.v - dopri_body->x_tr.v).norm());
+        std::println(
+            "    Quaternion = {}",
+            quaternion_error(rk4_body->x_att.q, dopri_body->x_att.q)
+        );
+        std::println(
+            "    Angular Velocity = {}",
+            (rk4_body->x_att.w - dopri_body->x_att.w).norm()
+        );
+    };
+
+    print_body_errors("earth");
+    print_body_errors("moon");
+    print_body_errors("sat1");
+
+    std::println("Adaptive Scenario Round Trip");
+    std::println("    Stepper Config Match = {}", roundtrip_match);
+    std::println("    Runtime Config Match = {}", runtime_config_match);
+
+    std::println("RK4 Stats");
+    std::println("    Status = {}", status_string(rk4_status));
+    std::println("    Final Time = {}", rk4_world.t_sim());
+    std::println("    Simulated Time Advanced = {}", rk4_stats.dt_sim_advanced);
+    std::println("    Ticks Completed = {}", rk4_stats.ticks_completed);
+    std::println("    Substeps Completed = {}", rk4_stats.substeps_completed);
+    i64 rk4_deriv_evals = i64(rk4_stats.substeps_completed) * i64(rk4_tableau.c.size());
+    std::println("    Derivative Evaluations = {}", rk4_deriv_evals);
+    std::println("    Runtime (ms) = {}", rk4_runtime_ms);
+
+    std::println("DOPRI5(4) Stats");
+    std::println("    Status = {}", status_string(dopri_result.status));
+    std::println("    Final Time = {}", dopri_result.t);
+    std::println("    Simulated Time Advanced = {}", dopri_result.stats.dt_sim_advanced);
+    std::println("    Ticks Completed = {}", dopri_result.stats.ticks_completed);
+    std::println("    Substeps Completed = {}", dopri_result.stats.substeps_completed);
+    std::println("    Attempts = {}", dopri_result.stats.adaptive.attempted_steps);
+    std::println("    Accepted Steps = {}", dopri_result.stats.adaptive.accepted_steps);
+    std::println("    Rejected Steps = {}", dopri_result.stats.adaptive.rejected_steps);
+    std::println(
+        "    Derivative Evaluations = {}",
+        dopri_result.stats.adaptive.deriv_evals
+    );
+    std::println("    Final Error Norm = {}", dopri_result.final_error_norm);
+    std::println(
+        "    Minimum Accepted dt = {}",
+        dopri_result.stats.adaptive.min_accepted_dt
+    );
+    std::println(
+        "    Maximum Accepted dt = {}",
+        dopri_result.stats.adaptive.max_accepted_dt
+    );
+    std::println(
+        "    Final Accepted dt = {}",
+        dopri_result.stats.adaptive.final_accepted_dt
+    );
+    std::println("    Runtime (ms) = {}", dopri_runtime_ms);
+}
+
+void run_world_tableau_rk4_diag() {
+    print_diag_title("World Tableau RK4 vs Legacy RK4");
+
+    ScenarioConfig scenario_cfg;
+    StatusCode status
+        = load_scenario_json(pwd + "/scenarios/earth_moon_sat_demo.json", scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Scenario Load Status = {}", status_string(status));
+        return;
+    }
+
+    status = validate_scenario_config(scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Scenario Validation Status = {}", status_string(status));
+        return;
+    }
+
+    World legacy_world;
+    WorldStepperConfig legacy_cfg;
+    ScenarioBuildResult legacy_build;
+    status = build_world_from_scenario_config(
+        scenario_cfg,
+        legacy_world,
+        legacy_build,
+        legacy_cfg
+    );
+    if (status != StatusCode::ok) {
+        std::println("Legacy RK4 World Build Status = {}", status_string(status));
+        return;
+    }
+
+    World tableau_world;
+    WorldStepperConfig tableau_cfg;
+    ScenarioBuildResult tableau_build;
+    status = build_world_from_scenario_config(
+        scenario_cfg,
+        tableau_world,
+        tableau_build,
+        tableau_cfg
+    );
+    if (status != StatusCode::ok) {
+        std::println("Tableau RK4 World Build Status = {}", status_string(status));
+        return;
+    }
+
+    legacy_cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    legacy_cfg.integrator_att = IntegratorTypeFixed::rk4;
+    tableau_cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    tableau_cfg.integrator_att = IntegratorTypeFixed::rk4;
+
+    f64 t_span = 1000.0;
+    i32 n_steps = 10000;
+    f64 dt = t_span / n_steps;
+
+    WorldStepperWorkspace legacy_wksp;
+    WorldStepperStats legacy_stats;
+    StatusCode legacy_status = StatusCode::ok;
+    auto legacy_start = std::chrono::high_resolution_clock::now();
+    for (i32 i = 0; i < n_steps; ++i) {
+        WorldStepResult step_result
+            = step_world_legacy(legacy_world, dt, legacy_cfg, legacy_wksp);
+        legacy_stats += step_result.stats;
+        legacy_status = step_result.status;
+        if (legacy_status != StatusCode::ok) break;
+    }
+    auto legacy_stop = std::chrono::high_resolution_clock::now();
+    f64 legacy_runtime_ms
+        = std::chrono::duration<f64, std::milli>(legacy_stop - legacy_start).count();
+
+    WorldStepperWorkspace tableau_wksp;
+    WorldStepperStats tableau_stats;
+    StatusCode tableau_status = StatusCode::ok;
+    auto tableau_start = std::chrono::high_resolution_clock::now();
+    for (i32 i = 0; i < n_steps; ++i) {
+        WorldStepResult step_result
+            = step_world(tableau_world, dt, tableau_cfg, tableau_wksp);
+        tableau_stats += step_result.stats;
+        tableau_status = step_result.status;
+        if (tableau_status != StatusCode::ok) break;
+    }
+    auto tableau_stop = std::chrono::high_resolution_clock::now();
+    f64 tableau_runtime_ms
+        = std::chrono::duration<f64, std::milli>(tableau_stop - tableau_start).count();
+
+    if (legacy_status != StatusCode::ok || tableau_status != StatusCode::ok) {
+        std::println("Legacy RK4 Status = {}", status_string(legacy_status));
+        std::println("Tableau RK4 Status = {}", status_string(tableau_status));
+        return;
+    }
+
+    auto quaternion_error = [](const vec4d& q1, const vec4d& q2) {
+        return std::min((q1 - q2).norm(), (q1 + q2).norm());
+    };
+
+    auto print_body_errors = [&](const string& config_id) {
+        auto legacy_id_it = legacy_build.body_ids.find(config_id);
+        auto tableau_id_it = tableau_build.body_ids.find(config_id);
+        if (legacy_id_it == legacy_build.body_ids.end()
+            || tableau_id_it == tableau_build.body_ids.end()) {
+            std::println("{} Body Mapping Not Found", config_id);
+            return;
+        }
+
+        const Body* legacy_body = legacy_world.body(legacy_id_it->second);
+        const Body* tableau_body = tableau_world.body(tableau_id_it->second);
+        if (legacy_body == nullptr || tableau_body == nullptr) {
+            std::println("{} Body Lookup Failed", config_id);
+            return;
+        }
+
+        std::println("{} State Errors", config_id);
+        std::println(
+            "    Position = {}",
+            (legacy_body->x_tr.r - tableau_body->x_tr.r).norm()
+        );
+        std::println(
+            "    Velocity = {}",
+            (legacy_body->x_tr.v - tableau_body->x_tr.v).norm()
+        );
+        std::println(
+            "    Quaternion = {}",
+            quaternion_error(legacy_body->x_att.q, tableau_body->x_att.q)
+        );
+        std::println(
+            "    Angular Velocity = {}",
+            (legacy_body->x_att.w - tableau_body->x_att.w).norm()
+        );
+    };
+
+    print_body_errors("earth");
+    print_body_errors("moon");
+    print_body_errors("sat1");
+
+    i64 legacy_deriv_evals
+        = i64(legacy_stats.substeps_completed) * i64(rk4_tableau.c.size());
+    i64 tableau_deriv_evals
+        = i64(tableau_stats.substeps_completed) * i64(rk4_tableau.c.size());
+
+    std::println("Legacy RK4 Stats");
+    std::println("    Status = {}", status_string(legacy_status));
+    std::println("    Final Time = {}", legacy_world.t_sim());
+    std::println("    Simulated Time Advanced = {}", legacy_stats.dt_sim_advanced);
+    std::println("    Ticks Completed = {}", legacy_stats.ticks_completed);
+    std::println("    Substeps Completed = {}", legacy_stats.substeps_completed);
+    std::println("    Derivative Evaluations = {}", legacy_deriv_evals);
+    std::println("    Runtime (ms) = {}", legacy_runtime_ms);
+
+    std::println("Tableau RK4 Stats");
+    std::println("    Status = {}", status_string(tableau_status));
+    std::println("    Final Time = {}", tableau_world.t_sim());
+    std::println("    Simulated Time Advanced = {}", tableau_stats.dt_sim_advanced);
+    std::println("    Ticks Completed = {}", tableau_stats.ticks_completed);
+    std::println("    Substeps Completed = {}", tableau_stats.substeps_completed);
+    std::println("    Derivative Evaluations = {}", tableau_deriv_evals);
+    std::println("    Runtime (ms) = {}", tableau_runtime_ms);
+}
+
+void run_world_embedded_rk_diag() {
+    print_diag_title("World Tableau RK4 vs Legacy RK4");
+
+    ScenarioConfig scenario_cfg;
+    StatusCode status
+        = load_scenario_json(pwd + "/scenarios/earth_moon_sat_demo.json", scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Scenario Load Status = {}", status_string(status));
+        return;
+    }
+
+    status = validate_scenario_config(scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Scenario Validation Status = {}", status_string(status));
+        return;
+    }
+
+    World reference_world;
+    WorldStepperConfig reference_cfg;
+    ScenarioBuildResult reference_build;
+    status = build_world_from_scenario_config(
+        scenario_cfg,
+        reference_world,
+        reference_build,
+        reference_cfg
+    );
+    if (status != StatusCode::ok) {
+        std::println("Tableau RK4 World Build Status = {}", status_string(status));
+        return;
+    }
+
+    reference_cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    reference_cfg.integrator_att = IntegratorTypeFixed::rk4;
+
+    f64 t_span = 1000.0;
+    i32 n_steps = 10000;
+    f64 dt = t_span / n_steps;
+
+    // set up and propagate with reference: rk4
+    WorldStepperWorkspace reference_wksp;
+    WorldStepperStats reference_stats;
+    StatusCode reference_status = StatusCode::ok;
+    auto reference_start = std::chrono::high_resolution_clock::now();
+    for (i32 i = 0; i < n_steps; ++i) {
+        WorldStepResult step_result
+            = step_world(reference_world, dt, reference_cfg, reference_wksp);
+        reference_stats += step_result.stats;
+        reference_status = step_result.status;
+        if (reference_status != StatusCode::ok) break;
+    }
+    auto reference_stop = std::chrono::high_resolution_clock::now();
+    f64 reference_runtime_ms
+        = std::chrono::duration<f64, std::milli>(reference_stop - reference_start)
+              .count();
+
+    const array<IntegratorTypeAdaptive, 6> methods_embedded{
+        IntegratorTypeAdaptive::rkf12,
+        IntegratorTypeAdaptive::heuneuler21,
+        IntegratorTypeAdaptive::bosha32,
+        IntegratorTypeAdaptive::rkf54,
+        IntegratorTypeAdaptive::cashkarp54,
+        IntegratorTypeAdaptive::dopri54
+    };
+
+    const array<IntegratorTypeFixed, 1> methods_fixed{IntegratorTypeFixed::rk5_nystrom};
+
+    auto make_case_world = [&](IntegratorTypeAdaptive type) {
+        World case_world;
+        WorldStepperConfig case_cfg;
+        ScenarioBuildResult case_build;
+        StatusCode status = build_world_from_scenario_config(
+            scenario_cfg,
+            case_world,
+            case_build,
+            case_cfg
+        );
+        if (status != StatusCode::ok) {
+            std::println(
+                "Tableau {} World Build Status = {}",
+                integrator_name(type),
+                status_string(status)
+            );
+        }
+    };
 }

@@ -4,10 +4,11 @@
 #pragma once
 
 #include "core/entity.hpp"
+#include "core/integrator_adaptive.hpp"
 #include "core/integrator_fixed.hpp"
-#include "core/status.hpp"
 #include "core/observation_type.hpp"
 #include "core/orbital_elements.hpp"
+#include "core/status.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "util/typedefs.hpp"
@@ -95,7 +96,7 @@ struct ScenarioGravityConfig {
 };
 
 struct ScenarioPropagationConfig {
-    bool translation = false;
+    bool translation = true;
     bool attitude = false;
 };
 
@@ -150,7 +151,7 @@ struct ScenarioStateAttConfig {
 };
 
 struct ScenarioCelestialModelConfig {
-    string id;
+    string id = "custom";
 
     // TODO: possibly make this a vector so user can switch between gravity models
     ScenarioGravityConfig gravity_model;
@@ -221,22 +222,32 @@ struct ScenarioStationConfig {
     string coordinate_type = "detic_llh";
     vec3d llh = vec3d0;
     vec3d r_body = vec3d0;
-    string local_frame;
+    string local_frame = "ENU";
     // unanchored
     ScenarioStateTrConfig x_tr;
     ScenarioStateAttConfig x_att;
     ScenarioMassPropertiesConfig mass_properties;
 
-    UAngle units_angle = UAngle::radian;
+    UAngle units_angle = UAngle::degree;
     ULength units_length = ULength::kilometer;
 
     svec<ScenarioInstrumentConfig> instruments;
 };
 
+struct ScenarioWorldAdaptiveConfig {
+    AdaptiveIntegratorConfig opts{};
+    bool use_substeps = false;
+};
+
 struct ScenarioWorldStepperConfig {
-    IntegratorTypeFixed integrator_tr = IntegratorTypeFixed::rk4;
-    IntegratorTypeFixed integrator_att = IntegratorTypeFixed::rk4;
+    IntegratorType integrator_tr = IntegratorTypeFixed::rk4;
+    IntegratorType integrator_att = IntegratorTypeFixed::rk4;
+    ScenarioWorldAdaptiveConfig adaptive{};
+
     bool paused = false;
+    bool step_tr = true;
+    bool step_att = true;
+
     u32 substeps = 1;
     u32 ticks = 1;
     f64 dt_scale = 1.0;

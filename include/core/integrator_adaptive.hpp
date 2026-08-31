@@ -1,43 +1,10 @@
 #pragma once
 
-#include "core/integrator_common.hpp"
+#include "core/integrator_tableaus.hpp"
 #include "core/state.hpp"
 #include "core/status.hpp"
 #include "util/math.hpp"
 #include "util/vecdefs.hpp"
-
-enum struct IntegratorTypeAdaptive : i32 {
-    rkf21,
-    heuneuler21,
-    bosha32,
-    rkf54,
-    cashkarp54,
-    dopri54,
-};
-
-inline string integrator_name(IntegratorTypeAdaptive type) {
-    switch (type) {
-    case IntegratorTypeAdaptive::rkf21: return "Runge-Kutta-Fehlberg 2(1)";
-    case IntegratorTypeAdaptive::heuneuler21: return "Heun-Euler 2(1)";
-    case IntegratorTypeAdaptive::bosha32: return "Bogacki-Shampine 3(2)";
-    case IntegratorTypeAdaptive::rkf54: return "Runge-Kutta-Fehlberg 5(4)";
-    case IntegratorTypeAdaptive::cashkarp54: return "Cash-Karp 5(4)";
-    case IntegratorTypeAdaptive::dopri54: return "Dormand-Prince 5(4)";
-    }
-    return "Unknown";
-}
-
-inline string integrator_str(IntegratorTypeAdaptive type) {
-    switch (type) {
-    case IntegratorTypeAdaptive::rkf21: return "rkf21";
-    case IntegratorTypeAdaptive::heuneuler21: return "heun_euler21";
-    case IntegratorTypeAdaptive::bosha32: return "bogacki_shampine32";
-    case IntegratorTypeAdaptive::rkf54: return "rkf54";
-    case IntegratorTypeAdaptive::cashkarp54: return "cash_karp54";
-    case IntegratorTypeAdaptive::dopri54: return "dopri54";
-    }
-    return "unknown";
-}
 
 struct AdaptiveIntegratorConfig {
     f64 rel_tol = 1e-9;
@@ -129,17 +96,17 @@ inline AdaptiveTrialResult<State, Deriv> step_dopri54_trial(
 
     // TODO: optimize this to be DP54 specific
     array<Deriv, stages> k_trial
-        = rk_generic_stages<State, Deriv>(f, t, x, dt, dopri54_tableau);
+        = rk_generic_stages<State, Deriv>(f, t, x, dt, dopri45_tableau);
 
     State x_high = x;
     for (std::size_t i = 0; i < stages; ++i) {
-        x_high += dt * dopri54_tableau.b_high[i] * k_trial[i];
+        x_high += dt * dopri45_tableau.b_high[i] * k_trial[i];
     }
 
     Deriv error_delta{};
 
     for (std::size_t i = 0; i < stages; ++i) {
-        f64 error_weight = dopri54_tableau.b_high[i] - dopri54_tableau.b_low[i];
+        f64 error_weight = dopri45_tableau.b_high[i] - dopri45_tableau.b_low[i];
 
         error_delta = error_delta + dt * error_weight * k_trial[i];
     }
@@ -180,11 +147,16 @@ inline f64 adaptive_error_norm_state_tr(
     return std::sqrt(weighted_error.squaredNorm() / 6.0);
 }
 
-inline f64 adaptive_step_scale(f64 error_norm, const AdaptiveIntegratorConfig& cfg) {
+inline f64 adaptive_step_scale(
+    f64 error_norm,
+    const AdaptiveIntegratorConfig& cfg,
+    i32 error_estimator_order
+) {
     if (!finite_nonneg(error_norm)) return inf<f64>;
+    if (error_estimator_order <= 0) return inf<f64>;
     if (error_norm == 0.0) return cfg.scale_max;
 
-    f64 exponent = -1.0 / static_cast<f64>(dopri54_tableau.order_low + 1);
+    f64 exponent = -1.0 / static_cast<f64>(error_estimator_order + 1);
 
     f64 scale = cfg.safety * std::pow(error_norm, exponent);
     scale = std::clamp(scale, cfg.scale_min, cfg.scale_max);
@@ -249,7 +221,7 @@ AdaptivePropagationResult<State> propagate_dopri54(
         }
         bool accepted = error_norm <= 1.0;
 
-        f64 scale = adaptive_step_scale(error_norm, cfg);
+        f64 scale = adaptive_step_scale(error_norm, cfg, dopri45_tableau.order_low);
         if (!accepted) {
             ++result.stats.rejected_steps;
             if (result.stats.rejected_steps >= cfg.max_rejections) {

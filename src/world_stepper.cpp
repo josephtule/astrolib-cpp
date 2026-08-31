@@ -6,7 +6,9 @@
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
 #include "core/integrator_adaptive.hpp"
+#include "core/integrator_common.hpp"
 #include "core/integrator_fixed.hpp"
+#include "core/integrator_tableaus.hpp"
 #include "core/state.hpp"
 #include "core/status.hpp"
 #include "core/world.hpp"
@@ -14,6 +16,7 @@
 #include "util/typedefs.hpp"
 
 #include <cmath>
+#include <variant>
 
 // NOTE: this is a preliminary implementation
 
@@ -178,15 +181,12 @@ DerivAtt derivatt_world(const World& world, EntityId id, const StateAtt& x) {
 bool step_tr_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg) {
     Body* body = world.body(id);
     if (body == nullptr) return false;
+    const auto* method = std::get_if<IntegratorTypeFixed>(&cfg.integrator_tr);
+    if (method == nullptr) return false;
 
     auto f = [&](f64 t, StateTr x) -> DerivTr { return derivtr_world(world, id, x); };
-    auto tx = step_integrator<StateTr, DerivTr>(
-        f,
-        world.t_sim(),
-        body->x_tr,
-        dt,
-        cfg.integrator_tr
-    );
+    auto tx
+        = step_integrator<StateTr, DerivTr>(f, world.t_sim(), body->x_tr, dt, *method);
     body->x_tr = tx.second;
 
     return true;
@@ -195,6 +195,8 @@ bool step_tr_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& 
 bool step_att_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg) {
     Body* body = world.body(id);
     if (body == nullptr) return false;
+    const auto* method = std::get_if<IntegratorTypeFixed>(&cfg.integrator_att);
+    if (method == nullptr) return false;
 
     switch (body->body_type) {
     case BodyType::celestial: return false;
@@ -210,13 +212,8 @@ bool step_att_world(World& world, EntityId id, f64 dt, const WorldStepperConfig&
     }
 
     auto f = [&](f64 t, StateAtt x) -> DerivAtt { return derivatt_world(world, id, x); };
-    auto tx = step_integrator<StateAtt, DerivAtt>(
-        f,
-        world.t_sim(),
-        body->x_att,
-        dt,
-        cfg.integrator_att
-    );
+    auto tx
+        = step_integrator<StateAtt, DerivAtt>(f, world.t_sim(), body->x_att, dt, *method);
     body->x_att = tx.second;
     normalize_quaternion_inplace<f64>(body->x_att.q);
 
@@ -1175,19 +1172,28 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
 }
 
 static StatusCode validate_adaptive_world_integrator_config(
-    WorldAdaptiveIntegratorConfig cfg,
-    WorldStepperConfig stepper
+    IntegratorTypeAdaptive method,
+    WorldStepperConfig cfg
 ) {
-    StatusCode status = validate_adaptive_integrator_config(cfg.opts);
+    StatusCode status = validate_adaptive_integrator_config(cfg.adaptive.opts);
     if (status != StatusCode::ok) return status;
 
-    // TEMP: temporarily only allow dopri54
-    if (cfg.integrator_tr != IntegratorTypeAdaptive::dopri54
-        || cfg.integrator_att != IntegratorTypeAdaptive::dopri54) {
-        return StatusCode::unsupported_method;
+    if (cfg.adaptive.use_substeps) {
+        if (cfg.substeps < 1) {
+            return StatusCode::invalid_input;
+        }
     }
-    // TEMP:
-    if (cfg.integrator_tr != cfg.integrator_att) return StatusCode::unsupported_method;
+
+    switch (method) {
+    case IntegratorTypeAdaptive::rkf12:
+    case IntegratorTypeAdaptive::heuneuler21:
+    case IntegratorTypeAdaptive::bosha32:
+    case IntegratorTypeAdaptive::rkf54:
+    case IntegratorTypeAdaptive::cashkarp54:
+    case IntegratorTypeAdaptive::dopri54:
+    case IntegratorTypeAdaptive::rkf78: break;
+    default: return StatusCode::unsupported_method;
+    }
 
     return StatusCode::ok;
 }
@@ -1196,7 +1202,7 @@ static f64 adaptive_error_norm_world_tr(
     const StateTr& x_base,
     const StateTr& x_high,
     const StateTr& x_low,
-    const WorldAdaptiveIntegratorConfig& cfg
+    const AdaptiveIntegratorConfig& cfg
 ) {
     if (!finite_state(x_base) || !finite_state(x_high) || !finite_state(x_low)) {
         return inf<f64>;
@@ -1209,11 +1215,11 @@ static f64 adaptive_error_norm_world_tr(
     vec6d error = high_vec - low_vec;
 
     vec6d abs_tol;
-    abs_tol << cfg.opts.abs_tol_r, cfg.opts.abs_tol_r, cfg.opts.abs_tol_r,
-        cfg.opts.abs_tol_v, cfg.opts.abs_tol_v, cfg.opts.abs_tol_v;
+    abs_tol << cfg.abs_tol_r, cfg.abs_tol_r, cfg.abs_tol_r, cfg.abs_tol_v, cfg.abs_tol_v,
+        cfg.abs_tol_v;
 
     vec6d mag = base_vec.cwiseAbs().cwiseMax(high_vec.cwiseAbs());
-    vec6d scale = abs_tol + cfg.opts.rel_tol * mag;
+    vec6d scale = abs_tol + cfg.rel_tol * mag;
     if (!finite_pos(scale)) return inf<f64>;
     vec6d weighted_error = error.cwiseQuotient(scale);
 
@@ -1242,7 +1248,7 @@ static f64 adaptive_error_norm_world_att(
     const StateAtt& x_base,
     const StateAtt& x_high,
     const StateAtt& x_low,
-    const WorldAdaptiveIntegratorConfig& cfg
+    const AdaptiveIntegratorConfig& cfg
 ) {
     if (!finite_state(x_base) || !finite_state(x_high) || !finite_state(x_low)) {
         return inf<f64>;
@@ -1256,13 +1262,12 @@ static f64 adaptive_error_norm_world_att(
         return inf<f64>;
     }
 
-    f64 angle_scale
-        = cfg.opts.abs_tol_angle + cfg.opts.rel_tol * std::max(angle_high, angle_low);
+    f64 angle_scale = cfg.abs_tol_angle + cfg.rel_tol * std::max(angle_high, angle_low);
     f64 weighted_angle = angle_error / angle_scale;
 
     vec3d w_error = x_high.w - x_low.w;
     vec3d w_mag = x_base.w.cwiseAbs().cwiseMax(x_high.w.cwiseAbs());
-    vec3d w_scale = cfg.opts.abs_tol_w * vec3d1 + cfg.opts.rel_tol * w_mag;
+    vec3d w_scale = cfg.abs_tol_w * vec3d1 + cfg.rel_tol * w_mag;
 
     if (!finite_pos(w_scale)) return inf<f64>;
     vec3d weighted_w_error = w_error.cwiseQuotient(w_scale);
@@ -1279,10 +1284,11 @@ static f64 adaptive_error_norm_world(
     const World& world,
     const WorldAdaptiveTrialResult& trial,
     const WorldStepperConfig& stepper_cfg,
-    const WorldAdaptiveIntegratorConfig& adaptive_cfg,
     const WorldStepperWorkspace& wksp
 ) {
     if (trial.status != StatusCode::ok) return inf<f64>;
+
+    const AdaptiveIntegratorConfig& adaptive_cfg = stepper_cfg.adaptive.opts;
 
     f64 world_norm = 0.0;
     bool evaluated_block = false;
@@ -1393,8 +1399,7 @@ static StatusCode step_world_fixed_tableau(
     const WorldStepperConfig& cfg,
     const WorldStepperWorkspace& wksp
 ) {
-    WorldFixedTrialResult trial
-        = step_world_fixed_rk_trial(world, t, dt, tableau, wksp);
+    WorldFixedTrialResult trial = step_world_fixed_rk_trial(world, t, dt, tableau, wksp);
     if (trial.status != StatusCode::ok) return trial.status;
     return commit_world_stage(world, trial.stage, cfg, wksp);
 }
@@ -1413,42 +1418,37 @@ static StatusCode dispatch_world_fixed_tableau(
     case IntegratorTypeFixed::rk2:
         return step_world_fixed_tableau(world, t, dt, rk2_tableau, cfg, wksp);
     case IntegratorTypeFixed::rk2_heun:
-        return step_world_fixed_tableau(
-            world,
-            t,
-            dt,
-            rk2_heun_tableau,
-            cfg,
-            wksp
-        );
+        return step_world_fixed_tableau(world, t, dt, rk2_heun_tableau, cfg, wksp);
     case IntegratorTypeFixed::rk2_ralston:
-        return step_world_fixed_tableau(
-            world,
-            t,
-            dt,
-            rk2_ralston_tableau,
-            cfg,
-            wksp
-        );
+        return step_world_fixed_tableau(world, t, dt, rk2_ralston_tableau, cfg, wksp);
     case IntegratorTypeFixed::rk3:
         return step_world_fixed_tableau(world, t, dt, rk3_tableau, cfg, wksp);
+    case IntegratorTypeFixed::rk3_ralston:
+        return step_world_fixed_tableau(world, t, dt, rk3_ralston_tableau, cfg, wksp);
     case IntegratorTypeFixed::rk4:
         return step_world_fixed_tableau(world, t, dt, rk4_tableau, cfg, wksp);
+    case IntegratorTypeFixed::rk4_38:
+        return step_world_fixed_tableau(world, t, dt, rk4_38_tableau, cfg, wksp);
+    case IntegratorTypeFixed::rk5_nystrom:
+        return step_world_fixed_tableau(world, t, dt, rk5_nystrom_tableau, cfg, wksp);
+    case IntegratorTypeFixed::rk6_butcher:
+        return step_world_fixed_tableau(world, t, dt, rk6_butcher_tableau, cfg, wksp);
     }
 
     return StatusCode::unsupported_method;
 }
 
 template <size_t Stages>
-static WorldAdaptiveStepResult propagate_world_embedded_rk(
+static WorldStepResult propagate_world_embedded_rk(
     World& world,
     f64 tf,
     const RKTableau<Stages>& tableau,
     const WorldStepperConfig& stepper_cfg,
-    const WorldAdaptiveIntegratorConfig& adaptive_cfg,
     const WorldStepperWorkspace& wksp
 ) {
-    WorldAdaptiveStepResult result;
+    WorldStepResult result;
+    AdaptiveIntegratorStats& adaptive_stats = result.stats.adaptive;
+
     result.t = world.t_sim();
     if (!isfinite(result.t) || !isfinite(tf)) {
         result.status = StatusCode::invalid_input;
@@ -1459,8 +1459,7 @@ static WorldAdaptiveStepResult propagate_world_embedded_rk(
         return result;
     }
 
-    result.status = validate_adaptive_world_integrator_config(adaptive_cfg, stepper_cfg);
-    if (result.status != StatusCode::ok) return result;
+    const AdaptiveIntegratorConfig& adaptive_cfg = stepper_cfg.adaptive.opts;
 
     if (!tableau.embedded) {
         result.status = StatusCode::invalid_input;
@@ -1468,15 +1467,12 @@ static WorldAdaptiveStepResult propagate_world_embedded_rk(
     }
 
     f64 dir = tf > world.t_sim() ? 1.0 : -1.0;
-    f64 dt_trial = dir
-                   * std::clamp(
-                       adaptive_cfg.opts.dt_initial,
-                       adaptive_cfg.opts.dt_min,
-                       adaptive_cfg.opts.dt_max
-                   );
+    f64 dt_trial
+        = dir
+          * std::clamp(adaptive_cfg.dt_initial, adaptive_cfg.dt_min, adaptive_cfg.dt_max);
 
     while (true) {
-        if (result.stats.attempted_steps >= adaptive_cfg.opts.max_attempts) {
+        if (adaptive_stats.attempted_steps >= adaptive_cfg.max_attempts) {
             result.status = StatusCode::max_steps_reached;
             return result;
         }
@@ -1495,15 +1491,14 @@ static WorldAdaptiveStepResult propagate_world_embedded_rk(
         }
         WorldAdaptiveTrialResult trial
             = step_world_embedded_rk_trial(world, t, dt_trial, tableau, wksp);
-        ++result.stats.attempted_steps;
-        result.stats.deriv_evals += trial.deriv_evals;
+        ++adaptive_stats.attempted_steps;
+        adaptive_stats.deriv_evals += trial.deriv_evals;
         if (trial.status != StatusCode::ok) {
             result.status = trial.status;
             return result;
         }
 
-        f64 error_norm
-            = adaptive_error_norm_world(world, trial, stepper_cfg, adaptive_cfg, wksp);
+        f64 error_norm = adaptive_error_norm_world(world, trial, stepper_cfg, wksp);
 
         if (!isfinite(error_norm)) {
             result.status = StatusCode::non_finite_result;
@@ -1511,22 +1506,22 @@ static WorldAdaptiveStepResult propagate_world_embedded_rk(
         }
 
         bool accepted = error_norm <= 1.0;
-        f64 scale = adaptive_step_scale(error_norm, adaptive_cfg.opts);
+        f64 scale = adaptive_step_scale(error_norm, adaptive_cfg, tableau.order_low);
         if (!isfinite(scale)) {
             result.status = StatusCode::non_finite_result;
             return result;
         }
 
         if (!accepted) {
-            ++result.stats.rejected_steps;
-            if (result.stats.rejected_steps >= adaptive_cfg.opts.max_rejections) {
+            ++adaptive_stats.rejected_steps;
+            if (adaptive_stats.rejected_steps >= adaptive_cfg.max_rejections) {
                 result.status = StatusCode::max_rejections_reached;
                 return result;
             }
             scale = std::min(scale, 1.0);
             dt_trial *= scale;
 
-            if (std::abs(dt_trial) < adaptive_cfg.opts.dt_min) {
+            if (std::abs(dt_trial) < adaptive_cfg.dt_min) {
                 result.status = StatusCode::step_size_underflow;
                 return result;
             }
@@ -1540,23 +1535,23 @@ static WorldAdaptiveStepResult propagate_world_embedded_rk(
             }
 
             world.advance_time(dt_trial);
-            result.dt_sim_advanced += dt_trial;
+            result.stats.dt_sim_advanced += dt_trial;
             result.t = world.t_sim();
             result.final_error_norm = error_norm;
 
             f64 dt_abs = std::abs(dt_trial);
-            if (result.stats.accepted_steps == 0) {
-                result.stats.min_accepted_dt = dt_abs;
-                result.stats.max_accepted_dt = dt_abs;
+            if (adaptive_stats.accepted_steps == 0) {
+                adaptive_stats.min_accepted_dt = dt_abs;
+                adaptive_stats.max_accepted_dt = dt_abs;
             } else {
-                result.stats.min_accepted_dt
-                    = std::min(dt_abs, result.stats.min_accepted_dt);
-                result.stats.max_accepted_dt
-                    = std::max(dt_abs, result.stats.max_accepted_dt);
+                adaptive_stats.min_accepted_dt
+                    = std::min(dt_abs, adaptive_stats.min_accepted_dt);
+                adaptive_stats.max_accepted_dt
+                    = std::max(dt_abs, adaptive_stats.max_accepted_dt);
             }
 
-            ++result.stats.accepted_steps;
-            result.stats.final_accepted_dt = dt_abs;
+            ++adaptive_stats.accepted_steps;
+            adaptive_stats.final_accepted_dt = dt_abs;
 
             if (final_attempt) {
                 result.t = tf;
@@ -1566,12 +1561,57 @@ static WorldAdaptiveStepResult propagate_world_embedded_rk(
 
             f64 dt_next = std::clamp(
                 std::abs(dt_trial) * scale,
-                adaptive_cfg.opts.dt_min,
-                adaptive_cfg.opts.dt_max
+                adaptive_cfg.dt_min,
+                adaptive_cfg.dt_max
             );
             dt_trial = dir * dt_next;
         }
     }
+}
+
+static WorldStepResult dispatch_world_adaptive_tableau(
+    World& world,
+    f64 tf,
+    IntegratorTypeAdaptive method,
+    const WorldStepperConfig& stepper_cfg,
+    const WorldStepperWorkspace& wksp
+) {
+    const AdaptiveIntegratorConfig& adaptive_cfg = stepper_cfg.adaptive.opts;
+
+    WorldStepResult result;
+
+    switch (method) {
+    case IntegratorTypeAdaptive::rkf12:
+        return propagate_world_embedded_rk(world, tf, rkf12_tableau, stepper_cfg, wksp);
+    case IntegratorTypeAdaptive::heuneuler21:
+        return propagate_world_embedded_rk(
+            world,
+            tf,
+            heuneuler12_tableau,
+            stepper_cfg,
+            wksp
+        );
+    case IntegratorTypeAdaptive::bosha32:
+        return propagate_world_embedded_rk(world, tf, bosha23_tableau, stepper_cfg, wksp);
+    case IntegratorTypeAdaptive::rkf54:
+        return propagate_world_embedded_rk(world, tf, rkf45_tableau, stepper_cfg, wksp);
+    case IntegratorTypeAdaptive::cashkarp54:
+        return propagate_world_embedded_rk(
+            world,
+            tf,
+            cashkarp45_tableau,
+            stepper_cfg,
+            wksp
+        );
+    case IntegratorTypeAdaptive::dopri54:
+        return propagate_world_embedded_rk(world, tf, dopri45_tableau, stepper_cfg, wksp);
+    case IntegratorTypeAdaptive::rkf78:
+        return propagate_world_embedded_rk(world, tf, rkf78_tableau, stepper_cfg, wksp);
+    }
+
+    result.status = StatusCode::unsupported_method;
+    result.t = world.t_sim();
+    return result;
 }
 
 static bool step_tr_world_staged_rk1(
@@ -1847,12 +1887,13 @@ static bool step_tr_world_staged(
     World& world,
     f64 t,
     f64 dt,
+    IntegratorTypeFixed method,
     const WorldStepperConfig& cfg,
     const WorldStepperWorkspace& wksp
 ) {
     bool stage_source_att = cfg.step_att;
 
-    switch (cfg.integrator_tr) {
+    switch (method) {
     case IntegratorTypeFixed::rk1:
         return step_tr_world_staged_rk1(world, t, dt, wksp, stage_source_att);
     case IntegratorTypeFixed::rk2:
@@ -1865,30 +1906,49 @@ static bool step_tr_world_staged(
         return step_tr_world_staged_rk3(world, t, dt, wksp, stage_source_att);
     case IntegratorTypeFixed::rk4:
         return step_tr_world_staged_rk4(world, t, dt, wksp, stage_source_att);
+    case IntegratorTypeFixed::rk3_ralston:
+    case IntegratorTypeFixed::rk4_38:
+    case IntegratorTypeFixed::rk5_nystrom:
+    case IntegratorTypeFixed::rk6_butcher: return false;
     }
 
     return false;
 }
 
-WorldStepperStats step_world(World& world, f64 dt, const WorldStepperConfig& cfg) {
+WorldStepResult step_world_legacy(World& world, f64 dt, const WorldStepperConfig& cfg) {
     WorldStepperWorkspace wksp;
-    return step_world(world, dt, cfg, wksp);
+    return step_world_legacy(world, dt, cfg, wksp);
 }
 
-WorldStepperStats step_world(
+WorldStepResult step_world_legacy(
     World& world,
     f64 dt,
     const WorldStepperConfig& cfg,
     WorldStepperWorkspace& wksp
 ) {
-    WorldStepperStats stats{.success = false};
+    WorldStepResult result;
+    result.t = world.t_sim();
+
+    const auto* method_tr = std::get_if<IntegratorTypeFixed>(&cfg.integrator_tr);
+    const auto* method_att = std::get_if<IntegratorTypeFixed>(&cfg.integrator_att);
+    if ((cfg.step_tr && method_tr == nullptr)
+        || (cfg.step_att && method_att == nullptr)) {
+        result.status = StatusCode::unsupported_method;
+        return result;
+    }
+
     if (wksp.dirty) {
         rebuild_world_stepper_workspace(world, wksp);
     }
 
-    if (cfg.substeps < 1) return stats;
-    if (cfg.ticks < 1) return stats;
-    if (!std::isfinite(cfg.dt_scale) || cfg.dt_scale <= 0.0) return stats;
+    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+    if (!finite_pos(cfg.dt_scale)) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
 
     f64 dt_tick = dt * cfg.dt_scale;
     f64 dt_sub = dt_tick / cfg.substeps;
@@ -1900,11 +1960,18 @@ WorldStepperStats step_world(
         for (i32 substep = 0; substep < cfg.substeps; ++substep) {
             // translational
             if (cfg.step_tr) {
-                bool step_ok
-                    = step_tr_world_staged(world, world.t_sim(), dt_sub, cfg, wksp);
+                bool step_ok = step_tr_world_staged(
+                    world,
+                    world.t_sim(),
+                    dt_sub,
+                    *method_tr,
+                    cfg,
+                    wksp
+                );
                 if (!step_ok) {
-                    stats.success = step_ok;
-                    return stats;
+                    result.status = StatusCode::invalid_state;
+                    result.t = world.t_sim();
+                    return result;
                 }
             }
 
@@ -1913,8 +1980,9 @@ WorldStepperStats step_world(
                 if (cfg.step_att) {
                     bool step_ok = step_att_world(world, id, dt_sub, cfg);
                     if (!step_ok) {
-                        stats.success = step_ok;
-                        return stats;
+                        result.status = StatusCode::invalid_att_state;
+                        result.t = world.t_sim();
+                        return result;
                     }
                 }
             }
@@ -1924,54 +1992,48 @@ WorldStepperStats step_world(
                 if (cfg.step_att) {
                     bool step_ok = step_cel_att_world(world, id, dt_sub);
                     if (!step_ok) {
-                        stats.success = step_ok;
-                        return stats;
+                        result.status = StatusCode::invalid_att_state;
+                        result.t = world.t_sim();
+                        return result;
                     }
                 }
             }
 
             world.advance_time(dt_sub);
-            stats.dt_sim_advanced += dt_sub;
-            stats.substeps_completed += 1;
+            result.stats.dt_sim_advanced += dt_sub;
+            ++result.stats.substeps_completed;
         }
-        stats.ticks_completed += 1;
+        ++result.stats.ticks_completed;
     }
 
-    stats.success = true;
-    return stats;
+    result.status = StatusCode::ok;
+    result.t = world.t_sim();
+    return result;
 }
 
-WorldStepperStats step_world_tableau(
+static WorldStepResult step_world_fixed_impl(
     World& world,
     f64 dt,
-    const WorldStepperConfig& cfg
-) {
-    WorldStepperWorkspace wksp;
-    return step_world_tableau(world, dt, cfg, wksp);
-}
-
-WorldStepperStats step_world_tableau(
-    World& world,
-    f64 dt,
+    IntegratorTypeFixed method,
     const WorldStepperConfig& cfg,
     WorldStepperWorkspace& wksp
 ) {
-    WorldStepperStats stats{.success = false};
+    WorldStepResult result;
+    result.t = world.t_sim();
 
-    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1) return stats;
-    if (!finite_pos(cfg.dt_scale)) return stats;
-    if (cfg.step_tr && cfg.step_att && cfg.integrator_tr != cfg.integrator_att) {
-        return stats;
+    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+    if (!finite_pos(cfg.dt_scale)) {
+        result.status = StatusCode::invalid_input;
+        return result;
     }
 
     if (wksp.dirty) rebuild_world_stepper_workspace(world, wksp);
 
     f64 dt_tick = dt * cfg.dt_scale;
     f64 dt_sub = dt_tick / cfg.substeps;
-
-    IntegratorTypeFixed integrator = cfg.step_att && !cfg.step_tr
-                                         ? cfg.integrator_att
-                                         : cfg.integrator_tr;
 
     for (i32 tick = 0; tick < cfg.ticks; ++tick) {
         for (i32 substep = 0; substep < cfg.substeps; ++substep) {
@@ -1980,22 +2042,27 @@ WorldStepperStats step_world_tableau(
                     world,
                     world.t_sim(),
                     dt_sub,
-                    integrator,
+                    method,
                     cfg,
                     wksp
                 );
-                if (status != StatusCode::ok) return stats;
+                if (status != StatusCode::ok) {
+                    result.status = status;
+                    result.t = world.t_sim();
+                    return result;
+                }
             }
 
             world.advance_time(dt_sub);
-            stats.dt_sim_advanced += dt_sub;
-            ++stats.substeps_completed;
+            result.stats.dt_sim_advanced += dt_sub;
+            ++result.stats.substeps_completed;
         }
-        ++stats.ticks_completed;
+        ++result.stats.ticks_completed;
     }
 
-    stats.success = true;
-    return stats;
+    result.status = StatusCode::ok;
+    result.t = world.t_sim();
+    return result;
 }
 
 static void accumulate_adaptive_stats(
@@ -2021,16 +2088,18 @@ static void accumulate_adaptive_stats(
     total.final_accepted_dt = current.final_accepted_dt;
 }
 
-WorldAdaptiveStepResult step_world_adaptive(
+static WorldStepResult step_world_adaptive_impl(
     World& world,
     f64 dt,
+    IntegratorTypeAdaptive method,
     const WorldStepperConfig& stepper_cfg,
-    const WorldAdaptiveIntegratorConfig& adaptive_cfg,
     WorldStepperWorkspace& wksp
 ) {
-    WorldAdaptiveStepResult result;
+    WorldStepResult result;
 
-    result.status = validate_adaptive_world_integrator_config(adaptive_cfg, stepper_cfg);
+    const AdaptiveIntegratorConfig& adaptive_cfg = stepper_cfg.adaptive.opts;
+
+    result.status = validate_adaptive_world_integrator_config(method, stepper_cfg);
     if (result.status != StatusCode::ok) return result;
 
     if (!isfinite(dt) || !finite_pos(stepper_cfg.dt_scale)) {
@@ -2050,7 +2119,7 @@ WorldAdaptiveStepResult step_world_adaptive(
     f64 dt_tick = dt * stepper_cfg.dt_scale;
     f64 dt_sub = 0.0;
     i32 subs;
-    if (adaptive_cfg.use_substeps) {
+    if (stepper_cfg.adaptive.use_substeps) {
         subs = stepper_cfg.substeps;
     } else {
         subs = 1;
@@ -2061,31 +2130,19 @@ WorldAdaptiveStepResult step_world_adaptive(
         for (i32 substep = 0; substep < subs; ++substep) {
             f64 tf_sub = world.t_sim() + dt_sub;
 
-            WorldAdaptiveStepResult sub_result;
-
-            switch (adaptive_cfg.integrator_tr) {
-            // TEMP: only dopri for now
-            case IntegratorTypeAdaptive::dopri54: {
-                sub_result = propagate_world_embedded_rk(
-                    world,
-                    tf_sub,
-                    dopri54_tableau,
-                    stepper_cfg,
-                    adaptive_cfg,
-                    wksp
-                );
-            } break;
-            default: {
-                sub_result.status = StatusCode::unsupported_method;
-                sub_result.t = world.t_sim();
-            } break;
-            }
+            WorldStepResult sub_result = dispatch_world_adaptive_tableau(
+                world,
+                tf_sub,
+                method,
+                stepper_cfg,
+                wksp
+            );
 
             result.t = sub_result.t;
-            result.dt_sim_advanced += sub_result.dt_sim_advanced;
-            accumulate_adaptive_stats(result.stats, sub_result.stats);
+            result.stats.dt_sim_advanced += sub_result.stats.dt_sim_advanced;
+            accumulate_adaptive_stats(result.stats.adaptive, sub_result.stats.adaptive);
 
-            if (sub_result.stats.accepted_steps > 0) {
+            if (sub_result.stats.adaptive.accepted_steps > 0) {
                 result.final_error_norm = sub_result.final_error_norm;
             }
 
@@ -2095,10 +2152,10 @@ WorldAdaptiveStepResult step_world_adaptive(
                 return result;
             }
 
-            ++result.substeps_completed;
+            ++result.stats.substeps_completed;
         }
 
-        ++result.ticks_completed;
+        ++result.stats.ticks_completed;
     }
 
     result.status = StatusCode::ok;
@@ -2106,14 +2163,73 @@ WorldAdaptiveStepResult step_world_adaptive(
     return result;
 }
 
-WorldAdaptiveStepResult step_world_adaptive(
+static WorldStepResult step_world_adaptive_impl(
     World& world,
     f64 dt,
-    const WorldStepperConfig& stepper_cfg,
-    const WorldAdaptiveIntegratorConfig& adaptive_cfg
+    IntegratorTypeAdaptive method,
+    const WorldStepperConfig& stepper_cfg
 ) {
     WorldStepperWorkspace wksp;
-    return step_world_adaptive(world, dt, stepper_cfg, adaptive_cfg, wksp);
+    return step_world_adaptive_impl(world, dt, method, stepper_cfg, wksp);
+}
+
+WorldStepResult step_world(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& cfg,
+    WorldStepperWorkspace& wksp
+) {
+    WorldStepResult result;
+    result.t = world.t_sim();
+
+    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1
+        || !finite_pos(cfg.dt_scale)) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+
+    if (cfg.step_tr && cfg.step_att && cfg.integrator_tr != cfg.integrator_att) {
+        result.status = StatusCode::unsupported_method;
+        return result;
+    }
+
+    if (!cfg.step_att && !cfg.step_tr) {
+        f64 dt_sub = dt * cfg.dt_scale / cfg.substeps;
+        for (i32 tick = 0; tick < cfg.ticks; ++tick) {
+            for (i32 substep = 0; substep < cfg.substeps; ++substep) {
+                world.advance_time(dt_sub);
+                result.stats.dt_sim_advanced += dt_sub;
+                ++result.stats.substeps_completed;
+            }
+            ++result.stats.ticks_completed;
+        }
+
+        result.t = world.t_sim();
+        result.status = StatusCode::ok;
+        return result;
+    }
+
+    IntegratorType method = cfg.integrator_tr;
+    if (cfg.step_tr && !cfg.step_att) {
+        method = cfg.integrator_tr;
+    } else if (cfg.step_att && !cfg.step_tr) {
+        method = cfg.integrator_att;
+    }
+
+    if (const auto* fixed = std::get_if<IntegratorTypeFixed>(&method)) {
+        return step_world_fixed_impl(world, dt, *fixed, cfg, wksp);
+    }
+
+    if (const auto* adaptive = std::get_if<IntegratorTypeAdaptive>(&method)) {
+        return step_world_adaptive_impl(world, dt, *adaptive, cfg, wksp);
+    }
+
+    return result;
+}
+
+WorldStepResult step_world(World& world, f64 dt, const WorldStepperConfig& cfg) {
+    WorldStepperWorkspace wksp;
+    return step_world(world, dt, cfg, wksp);
 }
 
 void rebuild_world_stepper_workspace(const World& world, WorldStepperWorkspace& wksp) {
@@ -2125,4 +2241,15 @@ void rebuild_world_stepper_workspace(const World& world, WorldStepperWorkspace& 
     wksp.source_att_ids = source_att_ids(world);
     wksp.staged_att_ids = staged_att_ids(wksp.propagated_att_ids, wksp.celestial_att_ids);
     wksp.dirty = false;
+
+    /*
+    Mark dirty = true after:
+    Adding, removing, activating, or deactivating bodies.
+    Changing propagate_tr or propagate_att.
+    Anchoring or freeing a station.
+    Changing mass-properties active.
+    Changing emits_gravity or has_atmosphere.
+    Changing a celestial attitude model between fixed and propagated/provider-driven.
+    Replacing or reloading the world.
+    */
 }

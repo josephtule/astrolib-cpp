@@ -198,12 +198,12 @@ void render_simulation_ui(World& world, RenderLoopConfig& cfg, RenderLoopState& 
                         state.dt,
                         remaining / (stepper.dt_scale * stepper.ticks)
                     );
-                    WorldStepperStats step_stats
+                    WorldStepResult step_result
                         = step_world(world, dt_call, stepper, state.wksp);
-                    state.stats += step_stats;
-                    if (!step_stats.success) break;
+                    state.stats += step_result.stats;
+                    if (step_result.status != StatusCode::ok) break;
 
-                    remaining -= step_stats.dt_sim_advanced;
+                    remaining -= step_result.stats.dt_sim_advanced;
                     if (remaining < tol12) remaining = 0.0;
                 }
             }
