@@ -175,10 +175,23 @@ inline bool finite_state_att(const StateAtt& x) {
     return finite_vec(x.q) && finite_vec(x.w) && finite_norm_nonzero(x.q, tol12);
 }
 
+inline bool finite_state(const StateTr& x) { return finite_vec(x.r) && finite_vec(x.v); }
+
+inline bool finite_state(const StateAtt& x) {
+    return finite_vec(x.q) && finite_vec(x.w) && finite_norm_nonzero(x.q, tol12);
+}
 inline bool finite_deriv_tr(const DerivTr& dx) {
     return finite_vec(dx.dr) && finite_vec(dx.dv);
 }
 
 inline bool finite_deriv_att(const DerivAtt& dx) {
+    return finite_vec(dx.dq) && finite_vec(dx.dw);
+}
+
+inline bool finite_deriv(const DerivTr& dx) {
+    return finite_vec(dx.dr) && finite_vec(dx.dv);
+}
+
+inline bool finite_deriv(const DerivAtt& dx) {
     return finite_vec(dx.dq) && finite_vec(dx.dw);
 }

@@ -919,7 +919,7 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
             result.stats.accepted_steps,
             result.stats.rejected_steps
         );
-        std::println("Derivative evaluations: {}", result.stats.derivative_evaluations);
+        std::println("Derivative evaluations: {}", result.stats.deriv_evals);
         std::println(
             "Min/max/final dt: {} / {} / {}",
             result.stats.min_accepted_dt,
@@ -965,7 +965,7 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
         "Stats consistent: {}",
         adaptive_res.stats.attempted_steps
                 == adaptive_res.stats.accepted_steps + adaptive_res.stats.rejected_steps
-            && adaptive_res.stats.derivative_evaluations
+            && adaptive_res.stats.deriv_evals
                 == adaptive_res.stats.attempted_steps * 7
     );
 
@@ -1150,7 +1150,7 @@ void run_od_prop_adaptive_diag(const Celestial& body) {
         zero_duration_res.stats.attempted_steps == 0
             && zero_duration_res.stats.accepted_steps == 0
             && zero_duration_res.stats.rejected_steps == 0
-            && zero_duration_res.stats.derivative_evaluations == 0
+            && zero_duration_res.stats.deriv_evals == 0
     );
 }
 
@@ -1898,19 +1898,7 @@ void run_ekf_world_diag() {
 void run_world_stepper_diag() {
     print_diag_title("World Stepper");
 
-    auto integrator_name = [](IntegratorType integrator) -> std::string {
-        switch (integrator) {
-        case IntegratorType::rk1: return "RK1";
-        case IntegratorType::rk2: return "RK2";
-        case IntegratorType::rk2_heun: return "RK2 Heun";
-        case IntegratorType::rk2_ralston: return "RK2 Ralston";
-        case IntegratorType::rk3: return "RK3";
-        case IntegratorType::rk4: return "RK4";
-        }
-        return "Unknown";
-    };
-
-    auto run_case = [&](IntegratorType integrator_tr) {
+    auto run_case = [&](IntegratorTypeFixed integrator_tr) {
         vec3d llh = vec3d{0.0, 0.0, 0.0}; // [lat, lon, h] = [deg, deg, sim units]
         EarthStationSatScenario scenario = make_earth_station_sat_scenario(llh);
         World& world = scenario.world;
@@ -1961,7 +1949,7 @@ void run_world_stepper_diag() {
         cfg.ticks = 10;
         cfg.dt_scale = 1.0 / cfg.ticks;
         cfg.integrator_tr = integrator_tr;
-        cfg.integrator_att = IntegratorType::rk4;
+        cfg.integrator_att = IntegratorTypeFixed::rk4;
 
         f64 t_span = 100.0;
         f64 t0 = 0.0;
@@ -2010,12 +1998,12 @@ void run_world_stepper_diag() {
         std::println();
     };
 
-    run_case(IntegratorType::rk1);
-    run_case(IntegratorType::rk2);
-    run_case(IntegratorType::rk2_heun);
-    run_case(IntegratorType::rk2_ralston);
-    run_case(IntegratorType::rk3);
-    run_case(IntegratorType::rk4);
+    run_case(IntegratorTypeFixed::rk1);
+    run_case(IntegratorTypeFixed::rk2);
+    run_case(IntegratorTypeFixed::rk2_heun);
+    run_case(IntegratorTypeFixed::rk2_ralston);
+    run_case(IntegratorTypeFixed::rk3);
+    run_case(IntegratorTypeFixed::rk4);
 }
 
 void run_body_fixed_gravity_timing_diag() {
@@ -2040,8 +2028,8 @@ void run_body_fixed_gravity_timing_diag() {
         WorldStepperConfig cfg;
         cfg.step_tr = false;
         cfg.step_att = true;
-        cfg.integrator_tr = IntegratorType::rk1;
-        cfg.integrator_att = IntegratorType::rk4;
+        cfg.integrator_tr = IntegratorTypeFixed::rk1;
+        cfg.integrator_att = IntegratorTypeFixed::rk4;
         cfg.substeps = 1;
         cfg.ticks = 1;
         cfg.dt_scale = 1.0;
@@ -2093,8 +2081,8 @@ void run_body_fixed_gravity_timing_diag() {
         cfg.substeps = 1;
         cfg.ticks = 10;
         cfg.dt_scale = 1.0 / cfg.ticks;
-        cfg.integrator_tr = IntegratorType::rk1;
-        cfg.integrator_att = IntegratorType::rk4;
+        cfg.integrator_tr = IntegratorTypeFixed::rk1;
+        cfg.integrator_att = IntegratorTypeFixed::rk4;
 
         f64 t_span = 100.0;
         f64 t0 = 0.0;
@@ -2280,8 +2268,8 @@ void run_moving_source_world_diag() {
     cfg.substeps = 10;
     cfg.ticks = 1;
     cfg.dt_scale = 1.0;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t_span = period;
     f64 t0 = 0.0;
@@ -2589,8 +2577,8 @@ void run_staged_attitude_gravity_diag() {
     cfg.substeps = 1;
     cfg.ticks = 1;
     cfg.dt_scale = 1.0;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t_span = 10000;
     f64 t0 = 0.0;
@@ -2737,8 +2725,8 @@ void run_render_pipeline_diag() {
     cfg.substeps = 1;
     cfg.ticks = 100;
     cfg.dt_scale = 2.0;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t0 = 0.0;
     f64 dt = 1.0 / cfg.ticks * cfg.dt_scale;
@@ -2877,8 +2865,8 @@ void run_world_workspace_diag() {
     cfg.substeps = 1;
     cfg.ticks = 1;
     cfg.dt_scale = 1.0;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t_span = 10000;
     f64 t0 = 0.0;
@@ -3066,8 +3054,8 @@ void run_iod_lumve_ekf_init_diag() {
     cfg.substeps = 1;
     cfg.ticks = 10;
     cfg.dt_scale = 1.0 / cfg.ticks;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
     // radec + range measurements only
 
     WorldStateSnapshot world_snapshot = world.capture_checkpoint();
@@ -3822,8 +3810,8 @@ void run_realtime_ekf_world_update_diag() {
     cfg.substeps = 1;
     cfg.ticks = 10;
     cfg.dt_scale = 1.0 / cfg.ticks;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t_span = 1000.0;
     i32 n_steps = 1000;
@@ -4150,8 +4138,8 @@ void run_world_history_diag() {
     cfg.substeps = 1;
     cfg.ticks = 10;
     cfg.dt_scale = 1.0 / cfg.ticks;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t0 = 0.0;
     f64 t1 = 30.0;
@@ -4484,8 +4472,8 @@ void run_world_history_ekf_diag() {
     cfg.substeps = 1;
     cfg.ticks = 10;
     cfg.dt_scale = 1.0 / cfg.ticks;
-    cfg.integrator_tr = IntegratorType::rk4;
-    cfg.integrator_att = IntegratorType::rk4;
+    cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    cfg.integrator_att = IntegratorTypeFixed::rk4;
 
     f64 t_span = 1000.0;
     i32 n_steps = 1000;

@@ -55,7 +55,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::duplicate_id:
     case StatusCode::inactive_entity:
     case StatusCode::invalid_state:
-    case StatusCode::invalid_attitude_state:
+    case StatusCode::invalid_att_state:
     case StatusCode::invalid_mass_properties:
     case StatusCode::invalid_shape:
     case StatusCode::anchor_not_found:

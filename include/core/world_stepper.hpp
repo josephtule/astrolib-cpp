@@ -4,13 +4,14 @@
 #pragma once
 
 #include "core/entity.hpp"
-#include "core/integrator_common.hpp"
+#include "core/integrator_adaptive.hpp"
+#include "core/integrator_fixed.hpp"
 #include "core/state.hpp"
 #include "core/world.hpp"
 
 struct WorldStepperConfig {
-    IntegratorType integrator_tr = IntegratorType::rk2;
-    IntegratorType integrator_att = IntegratorType::rk4;
+    IntegratorTypeFixed integrator_tr = IntegratorTypeFixed::rk2;
+    IntegratorTypeFixed integrator_att = IntegratorTypeFixed::rk4;
     i32 substeps = 1;   // subdivisions per tick
     i32 ticks = 1;      // repeated integration ticks per call
     f64 dt_scale = 1.0; // simulated-time multiplier applied to input dt
@@ -20,11 +21,12 @@ struct WorldStepperConfig {
 };
 
 struct WorldStepperWorkspace {
-    svec<EntityId> propagated_tr_ids;
-    svec<EntityId> propagated_att_ids;
-    svec<EntityId> celestial_att_ids;
-    svec<EntityId> gravity_source_ids;
-    svec<EntityId> source_att_ids;
+    svec<EntityId> propagated_tr_ids;  // all propagated tr
+    svec<EntityId> propagated_att_ids; // satellites, free-stations
+    svec<EntityId> celestial_att_ids;  // celestials with simple-spin/provided
+    svec<EntityId> gravity_source_ids; // gravity sources
+    svec<EntityId> source_att_ids;     // sources requiring attitude
+    svec<EntityId> staged_att_ids; // union of propagated_att_ids and celestial_att_ids
     bool dirty = true;
 };
 
@@ -69,4 +71,54 @@ WorldStepperStats step_world(
     f64 dt,
     const WorldStepperConfig& cfg,
     WorldStepperWorkspace& wksp
+);
+
+WorldStepperStats step_world_tableau(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& cfg
+);
+
+WorldStepperStats step_world_tableau(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& cfg,
+    WorldStepperWorkspace& wksp
+);
+
+struct WorldAdaptiveIntegratorConfig {
+    IntegratorTypeAdaptive integrator_tr = IntegratorTypeAdaptive::dopri54;
+    // IntegratorTypeAdaptive integrator_tr = IntegratorTypeAdaptive::bosha32;
+    IntegratorTypeAdaptive integrator_att = IntegratorTypeAdaptive::dopri54;
+
+    AdaptiveIntegratorConfig opts{};
+    bool use_substeps = false;
+};
+
+struct WorldAdaptiveStepResult {
+    StatusCode status = StatusCode::invalid_input;
+
+    f64 t = 0.0;
+    f64 dt_sim_advanced = 0.0;
+
+    f64 final_error_norm = 0.0;
+
+    i32 ticks_completed = 0;
+    i32 substeps_completed = 0;
+    AdaptiveIntegratorStats stats{};
+};
+
+WorldAdaptiveStepResult step_world_adaptive(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& stepper_cfg,
+    const WorldAdaptiveIntegratorConfig& adaptive_cfg,
+    WorldStepperWorkspace& wksp
+);
+
+WorldAdaptiveStepResult step_world_adaptive(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& stepper_cfg,
+    const WorldAdaptiveIntegratorConfig& adaptive_cfg
 );

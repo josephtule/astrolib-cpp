@@ -10,6 +10,7 @@
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
 #include <cmath>
+#include <type_traits>
 
 /**
  * @brief Computes the power of an input
@@ -171,7 +172,7 @@ inline T cosd(T val) {
 inline f64 clamp_unit(f64 x) { return std::clamp(x, -1.0, 1.0); }
 
 template <typename T>
-inline void normalize_quaternion_inplace(vec4d& q, T tol = tol12) {
+inline void normalize_quaternion_inplace(vec4<T>& q, T tol = tol12) {
     T q_mag = q.norm();
     if (q_mag <= tol) return;
     q /= q_mag;
@@ -187,11 +188,13 @@ inline mat3<T> matrix_cross(const vec3<T>& v) {
 // scalar checks
 
 template <class T>
+    requires std::is_arithmetic_v<T>
 inline bool finite_pos(T val) {
     return std::isfinite(val) && val > T(0);
 }
 
 template <class T>
+    requires std::is_arithmetic_v<T>
 inline bool finite_nonneg(T val) {
     return std::isfinite(val) && val >= T(0);
 }
@@ -232,6 +235,24 @@ inline bool finite_inrange(
 template <class Derived>
 inline bool finite_dense(const eig::DenseBase<Derived>& x) {
     return x.allFinite();
+}
+
+template <class Derived>
+    requires requires(const Derived& x) {
+        x.allFinite();
+        x.array();
+    }
+inline bool finite_pos(const Derived& x) {
+    return x.allFinite() && (x.array() > 0).all();
+}
+
+template <class Derived>
+    requires requires(const Derived& x) {
+        x.allFinite();
+        x.array();
+    }
+inline bool finite_nonneg(const Derived& x) {
+    return x.allFinite() && (x.array() >= 0).all();
 }
 
 template <class Derived>

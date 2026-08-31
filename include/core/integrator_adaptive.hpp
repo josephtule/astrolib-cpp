@@ -6,10 +6,45 @@
 #include "util/math.hpp"
 #include "util/vecdefs.hpp"
 
+enum struct IntegratorTypeAdaptive : i32 {
+    rkf21,
+    heuneuler21,
+    bosha32,
+    rkf54,
+    cashkarp54,
+    dopri54,
+};
+
+inline string integrator_name(IntegratorTypeAdaptive type) {
+    switch (type) {
+    case IntegratorTypeAdaptive::rkf21: return "Runge-Kutta-Fehlberg 2(1)";
+    case IntegratorTypeAdaptive::heuneuler21: return "Heun-Euler 2(1)";
+    case IntegratorTypeAdaptive::bosha32: return "Bogacki-Shampine 3(2)";
+    case IntegratorTypeAdaptive::rkf54: return "Runge-Kutta-Fehlberg 5(4)";
+    case IntegratorTypeAdaptive::cashkarp54: return "Cash-Karp 5(4)";
+    case IntegratorTypeAdaptive::dopri54: return "Dormand-Prince 5(4)";
+    }
+    return "Unknown";
+}
+
+inline string integrator_str(IntegratorTypeAdaptive type) {
+    switch (type) {
+    case IntegratorTypeAdaptive::rkf21: return "rkf21";
+    case IntegratorTypeAdaptive::heuneuler21: return "heun_euler21";
+    case IntegratorTypeAdaptive::bosha32: return "bogacki_shampine32";
+    case IntegratorTypeAdaptive::rkf54: return "rkf54";
+    case IntegratorTypeAdaptive::cashkarp54: return "cash_karp54";
+    case IntegratorTypeAdaptive::dopri54: return "dopri54";
+    }
+    return "unknown";
+}
+
 struct AdaptiveIntegratorConfig {
     f64 rel_tol = 1e-9;
     f64 abs_tol_r = 1e-9;
     f64 abs_tol_v = 1e-12;
+    f64 abs_tol_angle = 1e-12;
+    f64 abs_tol_w = 1e-12;
 
     f64 dt_initial = 10.0;
     f64 dt_min = 1e-9;
@@ -29,6 +64,8 @@ inline StatusCode validate_adaptive_integrator_config(
     if (!finite_pos(cfg.rel_tol)) return StatusCode::invalid_input;
     if (!finite_pos(cfg.abs_tol_r)) return StatusCode::invalid_input;
     if (!finite_pos(cfg.abs_tol_v)) return StatusCode::invalid_input;
+    if (!finite_pos(cfg.abs_tol_angle)) return StatusCode::invalid_input;
+    if (!finite_pos(cfg.abs_tol_w)) return StatusCode::invalid_input;
 
     if (!finite_pos(cfg.dt_initial)) return StatusCode::invalid_input;
     if (!finite_pos(cfg.dt_min)) return StatusCode::invalid_input;
@@ -51,7 +88,7 @@ struct AdaptiveIntegratorStats {
     i64 attempted_steps = 0;
     i64 accepted_steps = 0;
     i64 rejected_steps = 0;
-    i64 derivative_evaluations = 0;
+    i64 deriv_evals = 0;
 
     f64 min_accepted_dt = 0.0;
     f64 max_accepted_dt = 0.0;
@@ -199,7 +236,7 @@ AdaptivePropagationResult<State> propagate_dopri54(
         AdaptiveTrialResult<State, Deriv> trial
             = step_dopri54_trial<State, Deriv>(f, result.t, result.x, dt);
         ++result.stats.attempted_steps;
-        result.stats.derivative_evaluations += trial.derivative_evaluations;
+        result.stats.deriv_evals += trial.derivative_evaluations;
         if (trial.status != StatusCode::ok) {
             result.status = trial.status;
             return result;

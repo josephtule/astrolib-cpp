@@ -884,20 +884,20 @@ static StatusCode parse_opt_gravity_model(
     return parse_gravity_model(model_str, out);
 }
 
-static StatusCode parse_integrator_type(string str, IntegratorType& out) {
+static StatusCode parse_integrator_type(string str, IntegratorTypeFixed& out) {
     // NOTE: update if adding more types
     if (str == "rk1")
-        out = IntegratorType::rk1;
+        out = IntegratorTypeFixed::rk1;
     else if (str == "rk2")
-        out = IntegratorType::rk2;
+        out = IntegratorTypeFixed::rk2;
     else if (str == "rk2_heun")
-        out = IntegratorType::rk2_heun;
+        out = IntegratorTypeFixed::rk2_heun;
     else if (str == "rk2_ralston")
-        out = IntegratorType::rk2_ralston;
+        out = IntegratorTypeFixed::rk2_ralston;
     else if (str == "rk3")
-        out = IntegratorType::rk3;
+        out = IntegratorTypeFixed::rk3;
     else if (str == "rk4")
-        out = IntegratorType::rk4;
+        out = IntegratorTypeFixed::rk4;
     else
         return StatusCode::invalid_input;
 
@@ -907,7 +907,7 @@ static StatusCode parse_integrator_type(string str, IntegratorType& out) {
 static StatusCode parse_req_integrator_type(
     const json& object,
     const string& key,
-    IntegratorType& out,
+    IntegratorTypeFixed& out,
     const string& path
 ) {
     string integrator_type_str;
@@ -921,14 +921,14 @@ static StatusCode parse_opt_integrator_type(
     const json& object,
     const string& key,
     bool& found,
-    IntegratorType& out,
+    IntegratorTypeFixed& out,
     const string& path
 ) {
     string integrator_type_str;
     StatusCode status = parse_opt_string(object, key, found, integrator_type_str, path);
     if (status != StatusCode::ok) return status;
     if (!found) {
-        out = IntegratorType::rk4;
+        out = IntegratorTypeFixed::rk4;
         return StatusCode::ok;
     }
 
@@ -2652,7 +2652,7 @@ static StatusCode validate_celestial_config(
     if (string_empty(cel.id)) return StatusCode::invalid_input;
     StatusCode status = validate_state_tr_config(cfg, cel.x_tr);
     if (status != StatusCode::ok) return status;
-    if (!finite_state_att(cel.x_att)) return StatusCode::invalid_attitude_state;
+    if (!finite_state_att(cel.x_att)) return StatusCode::invalid_att_state;
     if (string_empty(cel.model.id)) return StatusCode::invalid_input;
 
     status = validate_gravity_config(cfg, cel.model);
@@ -2686,7 +2686,7 @@ static StatusCode validate_satellite_config(
     if (string_empty(sat.id)) return StatusCode::invalid_input;
     StatusCode status = validate_state_tr_config(cfg, sat.x_tr);
     if (status != StatusCode::ok) return status;
-    if (!finite_state_att(sat.x_att)) return StatusCode::invalid_attitude_state;
+    if (!finite_state_att(sat.x_att)) return StatusCode::invalid_att_state;
 
     return validate_mass_properties(sat.mass_properties, sat.propagation.attitude);
 }
@@ -2720,7 +2720,7 @@ static StatusCode validate_station_config(
     } else {
         StatusCode status = validate_state_tr_config(cfg, stat.x_tr);
         if (status != StatusCode::ok) return status;
-        if (!finite_state_att(stat.x_att)) return StatusCode::invalid_attitude_state;
+        if (!finite_state_att(stat.x_att)) return StatusCode::invalid_att_state;
 
         status
             = validate_mass_properties(stat.mass_properties, stat.propagation.attitude);
@@ -2870,7 +2870,7 @@ static StatusCode apply_state_att_config(
         return StatusCode::attitude_type_not_found;
     }
     }
-    if (x_att.q.norm() <= tol12) return StatusCode::invalid_attitude_state;
+    if (x_att.q.norm() <= tol12) return StatusCode::invalid_att_state;
     x_att.q.normalize();
     x_att.w = cfg.w;
 

@@ -7,6 +7,7 @@
 #include "core/dynamics_rotational.hpp"
 #include "core/dynamics_translational.hpp"
 #include "core/integrator_adaptive.hpp"
+#include "core/integrator_common.hpp"
 #include "core/integrator_fixed.hpp"
 #include "core/state.hpp"
 #include "core/transform.hpp"
@@ -50,7 +51,7 @@ struct ODDynamicsConfig {
     vec4d q_cb0 = q_identity;
     vec3d w_cb = vec3d0;
     bool update_body_attitude = false;
-    IntegratorType integrator = IntegratorType::rk4;
+    IntegratorTypeFixed integrator = IntegratorTypeFixed::rk4;
 };
 
 inline ODDynamicsConfig make_od_cfg_from_celestial(const Celestial& cel) {

@@ -14,7 +14,7 @@ enum struct StatusCode {
     duplicate_id,
     inactive_entity,
     invalid_state,
-    invalid_attitude_state,
+    invalid_att_state,
     invalid_mass_properties,
     invalid_shape,
     empty_measurements,
@@ -69,7 +69,7 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::duplicate_id: return "Duplicate ID";
     case StatusCode::inactive_entity: return "Inactive Entity";
     case StatusCode::invalid_state: return "Invalid State";
-    case StatusCode::invalid_attitude_state: return "Invalid Attitude State";
+    case StatusCode::invalid_att_state: return "Invalid Attitude State";
     case StatusCode::invalid_mass_properties: return "Invalid Mass Properties";
     case StatusCode::invalid_shape: return "Invalid Shape";
     case StatusCode::anchor_not_found: return "Anchor not found";

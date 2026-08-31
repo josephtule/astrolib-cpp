@@ -4,8 +4,8 @@
 #pragma once
 
 #include "core/entity.hpp"
+#include "core/integrator_fixed.hpp"
 #include "core/status.hpp"
-#include "core/integrator_common.hpp"
 #include "core/observation_type.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/time.hpp"
@@ -234,8 +234,8 @@ struct ScenarioStationConfig {
 };
 
 struct ScenarioWorldStepperConfig {
-    IntegratorType integrator_tr = IntegratorType::rk4;
-    IntegratorType integrator_att = IntegratorType::rk4;
+    IntegratorTypeFixed integrator_tr = IntegratorTypeFixed::rk4;
+    IntegratorTypeFixed integrator_att = IntegratorTypeFixed::rk4;
     bool paused = false;
     u32 substeps = 1;
     u32 ticks = 1;
