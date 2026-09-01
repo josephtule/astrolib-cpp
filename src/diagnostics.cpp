@@ -12,7 +12,9 @@
 #include "core/history_io.hpp"
 #include "core/ingest.hpp"
 #include "core/integrator_adaptive.hpp"
+#include "core/integrator_common.hpp"
 #include "core/integrator_fixed.hpp"
+#include "core/integrator_tableaus.hpp"
 #include "core/interpolation.hpp"
 #include "core/measurement.hpp"
 #include "core/measurement_world.hpp"
@@ -25,6 +27,7 @@
 #include "core/scenario_io.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
+#include "core/status.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
@@ -52,6 +55,7 @@
 #include <limits>
 #include <memory>
 #include <random>
+#include <variant>
 
 void print_diag_title(const std::string& title = "") {
     std::string line = "-----------------------------------------------------------";
@@ -2920,8 +2924,7 @@ void run_world_workspace_diag() {
     stats += add_step_result.stats;
     step_status = add_step_result.status;
     ++workspace_test_steps;
-    bool add_rebuilt = !wksp.dirty
-        && contains_id(wksp.propagated_tr_ids, added_sat_id);
+    bool add_rebuilt = !wksp.dirty && contains_id(wksp.propagated_tr_ids, added_sat_id);
 
     if (step_status != StatusCode::ok) {
         std::println("Added Body Step Status = {}", status_string(step_status));
@@ -2939,8 +2942,8 @@ void run_world_workspace_diag() {
     stats += inactive_step_result.stats;
     step_status = inactive_step_result.status;
     ++workspace_test_steps;
-    bool inactive_rebuilt = !wksp.dirty
-        && !contains_id(wksp.propagated_tr_ids, added_sat_id);
+    bool inactive_rebuilt
+        = !wksp.dirty && !contains_id(wksp.propagated_tr_ids, added_sat_id);
 
     if (step_status != StatusCode::ok) {
         std::println("Inactive Body Step Status = {}", status_string(step_status));
@@ -2959,8 +2962,8 @@ void run_world_workspace_diag() {
     std::println("    State Change Kept Cache Clean = {}", state_change_kept_clean);
     std::println(
         "    Passed = {}",
-        add_marked_dirty && add_rebuilt && inactive_marked_dirty
-            && inactive_rebuilt && state_change_kept_clean
+        add_marked_dirty && add_rebuilt && inactive_marked_dirty && inactive_rebuilt
+            && state_change_kept_clean
     );
 
     for (i32 i = 0; i < n_steps; ++i) {
@@ -2979,7 +2982,10 @@ void run_world_workspace_diag() {
     std::println("WORLD WKSP Substeps Completed = {}", stats.substeps_completed);
     std::println("WORLD WKSP Time Advanced = {}", stats.dt_sim_advanced);
     std::println("WORLD WKSP Final Time = {}", world.t_sim());
-    std::println("WORLD WKSP Expected Time = {}", t0 + t_span + workspace_test_steps * dt);
+    std::println(
+        "WORLD WKSP Expected Time = {}",
+        t0 + t_span + workspace_test_steps * dt
+    );
 }
 
 void run_world_measurement_context_diag() {
@@ -5182,7 +5188,7 @@ void run_world_dopri54_rk4_diag() {
 
     const std::filesystem::path roundtrip_filepath
         = std::filesystem::temp_directory_path()
-        / "astrolib_earth_moon_sat_adaptive_roundtrip.json";
+          / "astrolib_earth_moon_sat_adaptive_roundtrip.json";
 
     status = save_scenario_json(roundtrip_filepath.string(), adaptive_scenario_cfg);
     if (status != StatusCode::ok) {
@@ -5199,31 +5205,26 @@ void run_world_dopri54_rk4_diag() {
         return;
     }
 
-    auto same_adaptive_opts = [](
-                                  const AdaptiveIntegratorConfig& lhs,
-                                  const AdaptiveIntegratorConfig& rhs
-                              ) {
+    auto same_adaptive_opts = [](const AdaptiveIntegratorConfig& lhs,
+                                 const AdaptiveIntegratorConfig& rhs) {
         return lhs.rel_tol == rhs.rel_tol && lhs.abs_tol_r == rhs.abs_tol_r
-            && lhs.abs_tol_v == rhs.abs_tol_v
-            && lhs.abs_tol_angle == rhs.abs_tol_angle && lhs.abs_tol_w == rhs.abs_tol_w
-            && lhs.dt_initial == rhs.dt_initial && lhs.dt_min == rhs.dt_min
-            && lhs.dt_max == rhs.dt_max && lhs.safety == rhs.safety
-            && lhs.scale_min == rhs.scale_min && lhs.scale_max == rhs.scale_max
-            && lhs.max_attempts == rhs.max_attempts
-            && lhs.max_rejections == rhs.max_rejections;
+               && lhs.abs_tol_v == rhs.abs_tol_v && lhs.abs_tol_angle == rhs.abs_tol_angle
+               && lhs.abs_tol_w == rhs.abs_tol_w && lhs.dt_initial == rhs.dt_initial
+               && lhs.dt_min == rhs.dt_min && lhs.dt_max == rhs.dt_max
+               && lhs.safety == rhs.safety && lhs.scale_min == rhs.scale_min
+               && lhs.scale_max == rhs.scale_max && lhs.max_attempts == rhs.max_attempts
+               && lhs.max_rejections == rhs.max_rejections;
     };
 
-    auto same_stepper_config = [&](
-                                   const ScenarioWorldStepperConfig& lhs,
-                                   const ScenarioWorldStepperConfig& rhs
-                               ) {
+    auto same_stepper_config = [&](const ScenarioWorldStepperConfig& lhs,
+                                   const ScenarioWorldStepperConfig& rhs) {
         return lhs.integrator_tr == rhs.integrator_tr
-            && lhs.integrator_att == rhs.integrator_att
-            && lhs.adaptive.use_substeps == rhs.adaptive.use_substeps
-            && same_adaptive_opts(lhs.adaptive.opts, rhs.adaptive.opts)
-            && lhs.paused == rhs.paused && lhs.step_tr == rhs.step_tr
-            && lhs.step_att == rhs.step_att && lhs.substeps == rhs.substeps
-            && lhs.ticks == rhs.ticks && lhs.dt_scale == rhs.dt_scale;
+               && lhs.integrator_att == rhs.integrator_att
+               && lhs.adaptive.use_substeps == rhs.adaptive.use_substeps
+               && same_adaptive_opts(lhs.adaptive.opts, rhs.adaptive.opts)
+               && lhs.paused == rhs.paused && lhs.step_tr == rhs.step_tr
+               && lhs.step_att == rhs.step_att && lhs.substeps == rhs.substeps
+               && lhs.ticks == rhs.ticks && lhs.dt_scale == rhs.dt_scale;
     };
 
     bool roundtrip_match = same_stepper_config(
@@ -5238,8 +5239,12 @@ void run_world_dopri54_rk4_diag() {
     World rk4_world;
     WorldStepperConfig rk4_cfg;
     ScenarioBuildResult rk4_build;
-    status
-        = build_world_from_scenario_config(rk4_scenario_cfg, rk4_world, rk4_build, rk4_cfg);
+    status = build_world_from_scenario_config(
+        rk4_scenario_cfg,
+        rk4_world,
+        rk4_build,
+        rk4_cfg
+    );
     if (status != StatusCode::ok) {
         std::println("RK4 World Build Status = {}", status_string(status));
         return;
@@ -5268,20 +5273,20 @@ void run_world_dopri54_rk4_diag() {
     bool runtime_config_match
         = dopri_stepper_cfg.integrator_tr
               == adaptive_roundtrip_cfg.world_stepper.integrator_tr
-        && dopri_stepper_cfg.integrator_att
-              == adaptive_roundtrip_cfg.world_stepper.integrator_att
-        && dopri_stepper_cfg.adaptive.use_substeps
-              == adaptive_roundtrip_cfg.world_stepper.adaptive.use_substeps
-        && same_adaptive_opts(
-            dopri_stepper_cfg.adaptive.opts,
-            adaptive_roundtrip_cfg.world_stepper.adaptive.opts
-        )
-        && dopri_stepper_cfg.step_tr == adaptive_roundtrip_cfg.world_stepper.step_tr
-        && dopri_stepper_cfg.step_att == adaptive_roundtrip_cfg.world_stepper.step_att
-        && dopri_stepper_cfg.substeps == adaptive_roundtrip_cfg.world_stepper.substeps
-        && dopri_stepper_cfg.ticks == adaptive_roundtrip_cfg.world_stepper.ticks
-        && dopri_stepper_cfg.dt_scale == adaptive_roundtrip_cfg.world_stepper.dt_scale
-        && dopri_stepper_cfg.paused == adaptive_roundtrip_cfg.world_stepper.paused;
+          && dopri_stepper_cfg.integrator_att
+                 == adaptive_roundtrip_cfg.world_stepper.integrator_att
+          && dopri_stepper_cfg.adaptive.use_substeps
+                 == adaptive_roundtrip_cfg.world_stepper.adaptive.use_substeps
+          && same_adaptive_opts(
+              dopri_stepper_cfg.adaptive.opts,
+              adaptive_roundtrip_cfg.world_stepper.adaptive.opts
+          )
+          && dopri_stepper_cfg.step_tr == adaptive_roundtrip_cfg.world_stepper.step_tr
+          && dopri_stepper_cfg.step_att == adaptive_roundtrip_cfg.world_stepper.step_att
+          && dopri_stepper_cfg.substeps == adaptive_roundtrip_cfg.world_stepper.substeps
+          && dopri_stepper_cfg.ticks == adaptive_roundtrip_cfg.world_stepper.ticks
+          && dopri_stepper_cfg.dt_scale == adaptive_roundtrip_cfg.world_stepper.dt_scale
+          && dopri_stepper_cfg.paused == adaptive_roundtrip_cfg.world_stepper.paused;
     if (!runtime_config_match) {
         std::println("Adaptive Runtime Config Match = false");
         return;
@@ -5303,12 +5308,8 @@ void run_world_dopri54_rk4_diag() {
 
     WorldStepperWorkspace dopri_wksp;
     auto dopri_start = std::chrono::high_resolution_clock::now();
-    WorldStepResult dopri_result = step_world(
-        dopri_world,
-        t_span,
-        dopri_stepper_cfg,
-        dopri_wksp
-    );
+    WorldStepResult dopri_result
+        = step_world(dopri_world, t_span, dopri_stepper_cfg, dopri_wksp);
     auto dopri_stop = std::chrono::high_resolution_clock::now();
     f64 dopri_runtime_ms
         = std::chrono::duration<f64, std::milli>(dopri_stop - dopri_start).count();
@@ -5566,7 +5567,7 @@ void run_world_tableau_rk4_diag() {
 }
 
 void run_world_embedded_rk_diag() {
-    print_diag_title("World Tableau RK4 vs Legacy RK4");
+    print_diag_title("World Fixed/Embedded RK Comparison");
 
     ScenarioConfig scenario_cfg;
     StatusCode status
@@ -5596,21 +5597,33 @@ void run_world_embedded_rk_diag() {
         return;
     }
 
-    reference_cfg.integrator_tr = IntegratorTypeFixed::rk4;
-    reference_cfg.integrator_att = IntegratorTypeFixed::rk4;
+    IntegratorTypeFixed reference_method = IntegratorTypeFixed::rk6_butcher;
+    reference_cfg.integrator_tr = reference_method;
+    reference_cfg.integrator_att = reference_method;
 
+    reference_cfg.ticks = 1;
+    reference_cfg.substeps = 1;
+    reference_cfg.dt_scale = 1.0;
+    reference_cfg.step_tr = true;
+    reference_cfg.step_att = true;
+    reference_cfg.adaptive.use_substeps = false;
+
+    i32 n_reference_steps = 10000;
+    i32 n_case_steps = 1000;
     f64 t_span = 1000.0;
-    i32 n_steps = 10000;
-    f64 dt = t_span / n_steps;
+    f64 t0 = reference_world.t_sim();
+    f64 tf = t0 + t_span;
+    f64 dt_reference = t_span / n_reference_steps;
+    f64 dt_case = t_span / n_case_steps;
 
-    // set up and propagate with reference: rk4
+    // set up and propagate with reference
     WorldStepperWorkspace reference_wksp;
     WorldStepperStats reference_stats;
     StatusCode reference_status = StatusCode::ok;
     auto reference_start = std::chrono::high_resolution_clock::now();
-    for (i32 i = 0; i < n_steps; ++i) {
+    for (i32 i = 0; i < n_reference_steps; ++i) {
         WorldStepResult step_result
-            = step_world(reference_world, dt, reference_cfg, reference_wksp);
+            = step_world(reference_world, dt_reference, reference_cfg, reference_wksp);
         reference_stats += step_result.stats;
         reference_status = step_result.status;
         if (reference_status != StatusCode::ok) break;
@@ -5620,33 +5633,221 @@ void run_world_embedded_rk_diag() {
         = std::chrono::duration<f64, std::milli>(reference_stop - reference_start)
               .count();
 
-    const array<IntegratorTypeAdaptive, 6> methods_embedded{
+    const array<IntegratorTypeAdaptive, 7> methods_embedded{
         IntegratorTypeAdaptive::rkf12,
         IntegratorTypeAdaptive::heuneuler21,
         IntegratorTypeAdaptive::bosha32,
         IntegratorTypeAdaptive::rkf54,
         IntegratorTypeAdaptive::cashkarp54,
-        IntegratorTypeAdaptive::dopri54
+        IntegratorTypeAdaptive::dopri54,
+        IntegratorTypeAdaptive::rkf78
     };
 
-    const array<IntegratorTypeFixed, 1> methods_fixed{IntegratorTypeFixed::rk5_nystrom};
+    const array<IntegratorTypeFixed, 10> methods_fixed{
+        IntegratorTypeFixed::rk1,
+        IntegratorTypeFixed::rk2,
+        IntegratorTypeFixed::rk2_heun,
+        IntegratorTypeFixed::rk2_ralston,
+        IntegratorTypeFixed::rk3,
+        IntegratorTypeFixed::rk3_ralston,
+        IntegratorTypeFixed::rk4,
+        IntegratorTypeFixed::rk4_38,
+        IntegratorTypeFixed::rk5_nystrom,
+        IntegratorTypeFixed::rk6_butcher
+    };
 
-    auto make_case_world = [&](IntegratorTypeAdaptive type) {
-        World case_world;
-        WorldStepperConfig case_cfg;
-        ScenarioBuildResult case_build;
+    auto build_case = [&](const IntegratorType& method,
+                          World& case_world,
+                          WorldStepperConfig& case_cfg,
+                          ScenarioBuildResult& case_build) -> StatusCode {
         StatusCode status = build_world_from_scenario_config(
             scenario_cfg,
             case_world,
             case_build,
             case_cfg
         );
-        if (status != StatusCode::ok) {
-            std::println(
-                "Tableau {} World Build Status = {}",
-                integrator_name(type),
-                status_string(status)
-            );
-        }
+        if (status != StatusCode::ok) return status;
+
+        case_cfg.integrator_tr = method;
+        case_cfg.integrator_att = method;
+        case_cfg.ticks = 1;
+        case_cfg.substeps = 1;
+        case_cfg.dt_scale = 1.0;
+        case_cfg.step_tr = true;
+        case_cfg.step_att = true;
+        case_cfg.adaptive.use_substeps = false;
+
+        return StatusCode::ok;
     };
+
+    if (reference_status != StatusCode::ok) {
+        std::println("Reference Status = {}", status_string(reference_status));
+        return;
+    }
+
+    f64 time_tol = tol9 * std::max(1.0, std::abs(tf));
+    if (!std::isfinite(reference_world.t_sim())
+        || std::abs(reference_world.t_sim() - tf) > time_tol) {
+        std::println("Reference Final Time Check = false");
+        return;
+    }
+
+    auto quaternion_error = [](const vec4d& q1, const vec4d& q2) {
+        return std::min((q1 - q2).norm(), (q1 + q2).norm());
+    };
+
+    auto run_case = [&](const IntegratorType& method) -> StatusCode {
+        World case_world;
+        WorldStepperConfig case_cfg;
+        ScenarioBuildResult case_build;
+        WorldStepperWorkspace case_wksp;
+        WorldStepResult case_result;
+        StatusCode status = build_case(method, case_world, case_cfg, case_build);
+
+        const string method_name = integrator_name(method);
+        IntegratorFamily family = integrator_family(method);
+        if (status != StatusCode::ok) {
+            std::println("{} Build Status = {}", method_name, status_string(status));
+            return status;
+        }
+
+        auto clock_start = std::chrono::high_resolution_clock::now();
+        switch (family) {
+        case IntegratorFamily::fixed: {
+            case_result.status = StatusCode::ok;
+            case_result.t = case_world.t_sim();
+            for (i32 i = 0; i < n_case_steps; ++i) {
+                WorldStepResult step_result
+                    = step_world(case_world, dt_case, case_cfg, case_wksp);
+                case_result.stats += step_result.stats;
+                case_result.status = step_result.status;
+                case_result.t = step_result.t;
+                case_result.final_error_norm = step_result.final_error_norm;
+                if (case_result.status != StatusCode::ok) break;
+            }
+        } break;
+        case IntegratorFamily::adaptive: {
+            case_result = step_world(case_world, t_span, case_cfg, case_wksp);
+        } break;
+        }
+        auto stop = std::chrono::high_resolution_clock::now();
+        f64 runtime_ms
+            = std::chrono::duration<f64, std::milli>(stop - clock_start).count();
+
+        i64 deriv_evals = case_result.stats.adaptive.deriv_evals;
+        if (const auto* type_fixed = std::get_if<IntegratorTypeFixed>(&method)) {
+            i32 stages = stage_count_fixed(*type_fixed);
+            if (stages <= 0) {
+                std::println("{} Stage Count Check = false", method_name);
+                return StatusCode::unsupported_method;
+            }
+            deriv_evals = i64(case_result.stats.substeps_completed) * i64(stages);
+        }
+
+        bool final_time_ok
+            = std::isfinite(case_result.t) && std::abs(case_result.t - tf) <= time_tol;
+        bool stats_finite = std::isfinite(case_result.stats.dt_sim_advanced)
+                            && std::isfinite(runtime_ms);
+        bool case_passed
+            = case_result.status == StatusCode::ok && final_time_ok && stats_finite;
+
+        // TODO: create world stepper stats printout function
+        std::println("{} ({})", method_name, integrator_name(family));
+        std::println("    Status = {}", status_string(case_result.status));
+        // std::println("    Final Time = {}", case_result.t);
+        // std::println("    Expected Time = {}", tf);
+        std::println("    Final Time Check = {}", final_time_ok);
+        // std::println("    Simulated Time Advanced = {}",
+        // case_result.stats.dt_sim_advanced);
+        std::println("    Ticks Completed = {}", case_result.stats.ticks_completed);
+        std::println("    Substeps Completed = {}", case_result.stats.substeps_completed);
+        std::println("    Derivative Evaluations = {}", deriv_evals);
+        std::println("    Runtime (ms) = {}", runtime_ms);
+
+        if (family == IntegratorFamily::adaptive) {
+            const AdaptiveIntegratorStats& adaptive = case_result.stats.adaptive;
+            bool adaptive_stats_ok
+                = adaptive.accepted_steps > 0
+                  && adaptive.attempted_steps
+                         == adaptive.accepted_steps + adaptive.rejected_steps
+                  && std::isfinite(case_result.final_error_norm)
+                  && std::isfinite(adaptive.min_accepted_dt)
+                  && std::isfinite(adaptive.max_accepted_dt)
+                  && std::isfinite(adaptive.final_accepted_dt);
+            case_passed = case_passed && adaptive_stats_ok;
+
+            // std::println("    Attempted Steps = {}", adaptive.attempted_steps);
+            // std::println("    Accepted Steps = {}", adaptive.accepted_steps);
+            // std::println("    Rejected Steps = {}", adaptive.rejected_steps);
+            // std::println("    Final Error Norm = {}", case_result.final_error_norm);
+            std::println("    Minimum Accepted dt = {}", adaptive.min_accepted_dt);
+            std::println("    Maximum Accepted dt = {}", adaptive.max_accepted_dt);
+            // std::println("    Final Accepted dt = {}", adaptive.final_accepted_dt);
+            std::println("    Adaptive Stats Check = {}", adaptive_stats_ok);
+        }
+
+        // const array<string, 3> body_config_ids{"earth", "moon", "sat1"};
+        const array<string, 1> body_config_ids{"sat1"};
+        for (const string& config_id : body_config_ids) {
+            auto reference_id_it = reference_build.body_ids.find(config_id);
+            auto case_id_it = case_build.body_ids.find(config_id);
+            if (reference_id_it == reference_build.body_ids.end()
+                || case_id_it == case_build.body_ids.end()) {
+                std::println("    {} Body Mapping Check = false", config_id);
+                case_passed = false;
+                continue;
+            }
+
+            const Body* reference_body = reference_world.body(reference_id_it->second);
+            const Body* case_body = case_world.body(case_id_it->second);
+            if (reference_body == nullptr || case_body == nullptr) {
+                std::println("    {} Body Lookup Check = false", config_id);
+                case_passed = false;
+                continue;
+            }
+
+            f64 r_error = (reference_body->x_tr.r - case_body->x_tr.r).norm();
+            f64 v_error = (reference_body->x_tr.v - case_body->x_tr.v).norm();
+            f64 q_error = quaternion_error(reference_body->x_att.q, case_body->x_att.q);
+            f64 w_error = (reference_body->x_att.w - case_body->x_att.w).norm();
+            bool errors_finite = std::isfinite(r_error) && std::isfinite(v_error)
+                                 && std::isfinite(q_error) && std::isfinite(w_error);
+            case_passed = case_passed && errors_finite;
+
+            std::println("    {} State Errors", config_id);
+            std::println("        Position = {}", r_error);
+            std::println("        Velocity = {}", v_error);
+            std::println("        Quaternion = {}", q_error);
+            std::println("        Angular Velocity = {}", w_error);
+            std::println("        Finite = {}", errors_finite);
+        }
+
+        std::println("    Passed = {}\n", case_passed);
+        if (case_passed) return StatusCode::ok;
+        if (case_result.status != StatusCode::ok) return case_result.status;
+        return StatusCode::validation_failed;
+    };
+
+    i64 reference_deriv_evals = i64(reference_stats.substeps_completed)
+                                * i64(stage_count_fixed(reference_method));
+    std::println("{} Reference", integrator_name(reference_method));
+    std::println("    Status = {}", status_string(reference_status));
+    std::println("    Final Time = {}", reference_world.t_sim());
+    std::println("    Expected Time = {}", tf);
+    std::println("    Simulated Time Advanced = {}", reference_stats.dt_sim_advanced);
+    std::println("    Ticks Completed = {}", reference_stats.ticks_completed);
+    std::println("    Substeps Completed = {}", reference_stats.substeps_completed);
+    std::println("    Derivative Evaluations = {}", reference_deriv_evals);
+    std::println("    Runtime (ms) = {}", reference_runtime_ms);
+    std::println();
+
+    bool all_passed = true;
+    for (IntegratorTypeFixed method : methods_fixed) {
+        all_passed = run_case(IntegratorType{method}) == StatusCode::ok && all_passed;
+    }
+    for (IntegratorTypeAdaptive method : methods_embedded) {
+        all_passed = run_case(IntegratorType{method}) == StatusCode::ok && all_passed;
+    }
+
+    std::println("World Fixed/Embedded RK Comparison Passed = {}", all_passed);
 }

@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include "core/integrator_common.hpp"
 #include "core/integrator_tableaus.hpp"
 
 // generic (unstaged) explicit integrator steps live here
-
 
 template <typename State, typename Deriv, typename Func>
 inline std::pair<f64, State> step_rk1(Func&& f, f64 t, const State& x, f64 dt) {
@@ -95,7 +95,9 @@ inline std::pair<f64, State> step_integrator(
     switch (type) {
     case IntegratorTypeFixed::rk1: tx = step_rk1<State, Deriv>(f, t, x, dt); break;
     case IntegratorTypeFixed::rk2: tx = step_rk2<State, Deriv>(f, t, x, dt); break;
-    case IntegratorTypeFixed::rk2_heun: tx = step_rk2heun<State, Deriv>(f, t, x, dt); break;
+    case IntegratorTypeFixed::rk2_heun:
+        tx = step_rk2heun<State, Deriv>(f, t, x, dt);
+        break;
     case IntegratorTypeFixed::rk2_ralston:
         tx = step_rk2ralston<State, Deriv>(f, t, x, dt);
         break;
@@ -116,4 +118,20 @@ inline std::pair<f64, State> step_integrator(
     default: tx = step_rk4<State, Deriv>(f, t, x, dt); break;
     }
     return tx;
+}
+
+inline i32 stage_count_fixed(IntegratorTypeFixed method) {
+    switch (method) {
+    case IntegratorTypeFixed::rk1: return 1;
+    case IntegratorTypeFixed::rk2:
+    case IntegratorTypeFixed::rk2_heun:
+    case IntegratorTypeFixed::rk2_ralston: return 2;
+    case IntegratorTypeFixed::rk3:
+    case IntegratorTypeFixed::rk3_ralston: return 3;
+    case IntegratorTypeFixed::rk4:
+    case IntegratorTypeFixed::rk4_38: return 4;
+    case IntegratorTypeFixed::rk5_nystrom: return 6;
+    case IntegratorTypeFixed::rk6_butcher: return 7;
+    }
+    return 0;
 }

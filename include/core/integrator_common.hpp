@@ -10,6 +10,8 @@
 enum struct IntegratorFamily : i32 {
     fixed,
     adaptive,
+    // history,
+    // symplectic,
 };
 
 inline string integrator_name(IntegratorFamily family) {

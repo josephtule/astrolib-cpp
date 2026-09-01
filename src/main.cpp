@@ -109,6 +109,8 @@ int main() {
     // run_station_instrument_diag();
     // run_world_history_diag();
     // run_scenario_loader_diag();
+    // run_world_dopri54_rk4_diag();
+    // run_world_tableau_rk4_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
@@ -119,8 +121,7 @@ int main() {
     // run_build_world_from_scenario();
     // run_scenario_render_diag();
 
-    run_world_dopri54_rk4_diag();
-    run_world_tableau_rk4_diag();
+    run_world_embedded_rk_diag();
 
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");

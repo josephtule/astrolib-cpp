@@ -105,6 +105,12 @@
                 "input_type": "pos_vel",
                 "units_length": "kilometer"
             },
+            "state_att": {
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [1.0e-6, 2.5e-3, 1.0e-6],
+                "input_type": "quaternion",
+                "units_angle": "radian"
+            },
             "mass_properties": {
                 "mass": 100.0,
                 "inertia_tensor": {
