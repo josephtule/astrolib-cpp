@@ -234,12 +234,39 @@ struct TimeOffsets {
     f64 tai_gps = 19.0;  // TAI - GPS [s]
 };
 
+inline f64 tdb_tt_sec(f64 tdb_sec) {
+    // SPICE approximation, accurate to about 30 microseconds.
+    constexpr f64 K = 1.657e-3;
+    constexpr f64 EB = 1.671e-2;
+    constexpr f64 M0 = 6.239996;
+    constexpr f64 M1 = 1.99096871e-7;
+
+    f64 M = M0 + M1 * tdb_sec;
+    f64 E = M + EB * std::sin(M);
+    return K * std::sin(E);
+}
+
+inline f64 tt_to_tdb(f64 tt_sec) {
+    f64 tdb_sec = tt_sec;
+
+    // fixed point iteration
+    for (i32 i = 0; i < 3; ++i) {
+        tdb_sec = tt_sec + tdb_tt_sec(tdb_sec);
+    }
+    return tdb_sec;
+}
+
+inline f64 tdb_to_tt(f64 tdb_sec) { return tdb_sec - tdb_tt_sec(tdb_sec); }
+
 inline f64 time_scale_convert(
     f64 t,
     TimeScale scale_in,
     TimeScale scale_out,
     TimeOffsets offsets = TimeOffsets{}
 ) {
+    if (scale_in == scale_out) return t;
+
+    // https://gssc.esa.int/navipedia/index.php/Transformations_between_Time_Systems
     // convert input to TAI
     switch (scale_in) {
     case TimeScale::ut1: {
@@ -259,8 +286,12 @@ inline f64 time_scale_convert(
         t -= offsets.tt_tai;
         break;
     }
+    case TimeScale::tdb: {
+        t = tdb_to_tt(t);    // TDB -> TT
+        t -= offsets.tt_tai; // TT -> TAI
+        break;
+    }
     case TimeScale::tai: break;
-    case TimeScale::tdb: break; // TODO: not sure what to do here
     default: break;
     }
 
@@ -283,8 +314,12 @@ inline f64 time_scale_convert(
         t += offsets.tt_tai;
         break;
     }
+    case TimeScale::tdb: {
+        t += offsets.tt_tai; // TAI -> TT
+        t = tt_to_tdb(t);    // TT -> TDB
+        break;
+    }
     case TimeScale::tai: break;
-    case TimeScale::tdb: break; // TODO: not sure what to do here
     default: break;
     }
 
@@ -297,9 +332,19 @@ inline JulianDate jd_scale_convert(
     TimeScale scale_out,
     TimeOffsets offsets = TimeOffsets{}
 ) {
-    f64 jd_new_scalar = jd_to_scalar(jd);
-    f64 dt = time_scale_convert(0.0, scale_in, scale_out, offsets) / 86400.0;
-    return jd_from_scalar(jd_new_scalar + dt);
+    constexpr f64 seconds_per_day = 86400.0;
+    constexpr f64 jd_j2000 = 2451545.0;
+
+    JulianDate jd_norm = normalize_jd(jd);
+    f64 t_in = ((jd_norm.day - jd_j2000) + jd_norm.frac) * seconds_per_day;
+    f64 t_out = time_scale_convert(t_in, scale_in, scale_out, offsets);
+
+    return normalize_jd(
+        JulianDate{
+            .day = jd_j2000,
+            .frac = t_out / seconds_per_day,
+        }
+    );
 }
 
 inline CalendarTime cal_scale_convert(
