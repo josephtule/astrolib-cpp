@@ -12,9 +12,11 @@ inline string uangle_str(UAngle type){
     case UAngle::radian: return "radian";
     case UAngle::degree: return "degree";
     case UAngle::arcminute: return "arcminute";
-    case UAngle::arcsecond: return "arcseconds";
+    case UAngle::arcsecond: return "arcsecond";
     case UAngle::milliarcsecond: return "milliarcsecond";
     }
+
+    return "unknown";
 }
 
 enum struct ULength : i32 {
@@ -40,6 +42,8 @@ inline string ulength_str(ULength type) {
     case ULength::mile: return "mile";
     case ULength::au: return "au";
     }
+
+    return "unknown";
 }
 inline constexpr ULength length_default = ULength::kilometer;
 
@@ -54,7 +58,54 @@ enum struct UTime : i32 {
     microsecond,
     nanosecond,
 };
+inline string utime_str(UTime type) {
+    switch (type) {
+    case UTime::year: return "year";
+    case UTime::month: return "month";
+    case UTime::day: return "day";
+    case UTime::hour: return "hour";
+    case UTime::minute: return "minute";
+    case UTime::second: return "second";
+    case UTime::millisecond: return "millisecond";
+    case UTime::microsecond: return "microsecond";
+    case UTime::nanosecond: return "nanosecond";
+    }
+
+    return "unknown";
+}
 inline constexpr UTime time_default = UTime::second;
+
+template <typename T>
+constexpr bool time_factor(UTime unit, T& factor) {
+    switch (unit) {
+    case UTime::day: factor = static_cast<T>(86400.0); break;
+    case UTime::hour: factor = static_cast<T>(3600.0); break;
+    case UTime::minute: factor = static_cast<T>(60.0); break;
+    case UTime::second: factor = static_cast<T>(1.0); break;
+    case UTime::millisecond: factor = static_cast<T>(1e-3); break;
+    case UTime::microsecond: factor = static_cast<T>(1e-6); break;
+    case UTime::nanosecond: factor = static_cast<T>(1e-9); break;
+    case UTime::year:
+    case UTime::month: return false;
+    }
+
+    return true;
+}
+
+template <typename T>
+bool convert_time(T val, UTime uin, UTime uout, T& converted) {
+    if (uin == uout) {
+        converted = val;
+        return true;
+    }
+
+    T factor_in;
+    T factor_out;
+    if (!time_factor(uin, factor_in) || !time_factor(uout, factor_out)) return false;
+
+    converted = val * factor_in / factor_out;
+    return true;
+}
 
 enum struct UMass : i32 {
     MICROGRAM,

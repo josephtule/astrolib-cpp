@@ -62,6 +62,8 @@ static Color status_color(const StatusCode code) {
     case StatusCode::size_mismatch:
     case StatusCode::time_mismatch:
     case StatusCode::invalid_covariance:
+    case StatusCode::invalid_ephemeris_metadata:
+    case StatusCode::non_monotonic_time:
     case StatusCode::unsupported_method:
     case StatusCode::parse_failed: return ORANGE;
 
@@ -76,7 +78,8 @@ static Color status_color(const StatusCode code) {
     case StatusCode::sample_not_found:
     case StatusCode::empty_measurements:
     case StatusCode::empty_history:
-    case StatusCode::empty_events: return YELLOW;
+    case StatusCode::empty_events:
+    case StatusCode::empty_ephemeris: return YELLOW;
 
     // Runtime/solver/IO failures
     case StatusCode::propagation_failed:

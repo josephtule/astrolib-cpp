@@ -57,6 +57,10 @@ enum struct StatusCode {
     max_rejections_reached,
     non_finite_derivative,
     non_finite_result,
+
+    empty_ephemeris,
+    invalid_ephemeris_metadata,
+    non_monotonic_time,
 };
 
 inline std::string status_string(StatusCode status) {
@@ -108,6 +112,9 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::max_rejections_reached: return "Max rejections reached";
     case StatusCode::non_finite_derivative: return "Non-finite derivative";
     case StatusCode::non_finite_result: return "Non-finite result";
+    case StatusCode::empty_ephemeris: return "Empty ephemeris";
+    case StatusCode::invalid_ephemeris_metadata: return "Invalid ephemeris metadata";
+    case StatusCode::non_monotonic_time: return "Non-monotonic time";
     }
 
     return "Unknown Status";
