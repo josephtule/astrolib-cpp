@@ -9,27 +9,48 @@
 #include <algorithm>
 #include <cmath>
 
-enum struct HistoryInterpolation {
+enum struct InterpolationMethod {
     nearest,
     linear,
     slerp,
-    // hermite,
+    cubic_hermite,
     // lagrange,
     // chebyshev,
+    // cubic_catrom
+    // cubic_kobar
 };
 
-enum struct HistoryExtrapolation {
+inline string interp_str(InterpolationMethod method) {
+    switch (method) {
+    case InterpolationMethod::nearest: return "nearest";
+    case InterpolationMethod::linear: return "linear";
+    case InterpolationMethod::slerp: return "slerp";
+    case InterpolationMethod::cubic_hermite: return "cubic_hermite";
+    }
+    return "unknown";
+}
+
+enum struct ExtrapolationMethod {
     reject,
     hold,
     constant_velocity, // both linear and angular
     // TODO: add more
 };
 
-struct HistorySampleOptions {
-    HistoryInterpolation tr_interp = HistoryInterpolation::linear;
-    HistoryInterpolation att_interp = HistoryInterpolation::slerp;
-    HistoryExtrapolation tr_extrap = HistoryExtrapolation::reject;
-    HistoryExtrapolation att_extrap = HistoryExtrapolation::reject;
+inline string extrap_str(ExtrapolationMethod method) {
+    switch (method) {
+    case ExtrapolationMethod::reject: return "reject";
+    case ExtrapolationMethod::hold: return "hold";
+    case ExtrapolationMethod::constant_velocity: return "constant_velocity";
+    }
+    return "unknown";
+}
+
+struct StateSampleOptions {
+    InterpolationMethod tr_interp = InterpolationMethod::linear;
+    InterpolationMethod att_interp = InterpolationMethod::slerp;
+    ExtrapolationMethod tr_extrap = ExtrapolationMethod::reject;
+    ExtrapolationMethod att_extrap = ExtrapolationMethod::reject;
     f64 tol = tol12;
 };
 

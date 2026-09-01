@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/interpolation.hpp"
 #include "core/state.hpp"
 #include "core/status.hpp"
 #include "core/time.hpp"
@@ -39,6 +40,7 @@ struct CartesianEphemerisUnitMetadata {
 struct EphemerisSource {
     string source_type;
     // TODO: "native_csv","ccsds_oem","cspice_spk","generated","world_history"
+    // currently only support native_csv
     string source_name;
     string source_path;
     string description;
@@ -53,12 +55,19 @@ struct CartesianEphemerisMetadata {
 
 struct CartesianEphemerisTable {
     CartesianEphemerisMetadata metadata{};
-    svec<f64> dt;
+    svec<f64> dt; // sec from ref epoch, prevent precision loss from using JD
     svec<StateTr> states;
     bool has_velocity = true;
 };
 
 StatusCode validate_cartesian_ephemeris_table(const CartesianEphemerisTable& table);
+
+StatusCode sample_cartesian_ephemeris(
+    const CartesianEphemerisTable& table,
+    f64 dt,
+    StateTr& out,
+    const StateSampleOptions& opts = StateSampleOptions{}
+);
 
 // Orientation/Attitude --------------------------------------------------------
 enum struct QuaternionComponentOrder { vector_scalar, scalar_vector };
@@ -131,8 +140,14 @@ StatusCode validate_orientation_ephemeris_table(
     f64 quaternion_tol = tol9
 );
 
-
 StatusCode canonicalize_orientation_ephemeris_samples(
     OrientationEphemerisTable& table,
     f64 tol = tol12
+);
+
+StatusCode sample_orientation_ephemeris(
+    const OrientationEphemerisTable& table,
+    f64 dt,
+    StateAtt& out,
+    const StateSampleOptions& opts = StateSampleOptions{}
 );

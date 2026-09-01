@@ -111,6 +111,8 @@ int main() {
     // run_scenario_loader_diag();
     // run_world_dopri54_rk4_diag();
     // run_world_tableau_rk4_diag();
+    // run_build_world_from_scenario();
+    // run_scenario_render_diag();
 
     // Current diagnostic(s)
     std::println("-----------------------------------------------------------");
@@ -118,8 +120,6 @@ int main() {
     // run_render_pipeline_diag();
     // run_world_history_ekf_diag();
 
-    // run_build_world_from_scenario();
-    // run_scenario_render_diag();
 
     run_ephemeris_io_diag();
 

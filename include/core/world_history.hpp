@@ -9,6 +9,7 @@
 #include "core/interpolation.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
+#include "core/status.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "util/typedefs.hpp"
@@ -473,7 +474,7 @@ inline StatusCode sample_tr_history(
     EntityId id,
     f64 t,
     StateTr& out,
-    const HistorySampleOptions& opts
+    const StateSampleOptions& opts
 ) {
     StatusCode status = StatusCode::ok;
     const Body* body = world.body(id);
@@ -481,13 +482,13 @@ inline StatusCode sample_tr_history(
         return StatusCode::body_not_found;
     }
     switch (opts.tr_interp) {
-    case HistoryInterpolation::nearest: {
+    case InterpolationMethod::nearest: {
         if (body->body_type == BodyType::station) {
             return sample_station_tr_nearest(world, history, id, t, out, opts.tol);
         }
         return sample_tr_nearest(history, id, t, out, opts.tol);
     } break;
-    case HistoryInterpolation::linear: {
+    case InterpolationMethod::linear: {
         if (body->body_type == BodyType::station) {
             return sample_station_tr_interp_linear(world, history, id, t, out, opts.tol);
         }
@@ -505,7 +506,7 @@ inline StatusCode sample_att_history(
     EntityId id,
     f64 t,
     StateAtt& out,
-    const HistorySampleOptions& opts
+    const StateSampleOptions& opts
 ) {
     StatusCode status = StatusCode::ok;
 
@@ -513,18 +514,18 @@ inline StatusCode sample_att_history(
     if (body == nullptr) {
         return StatusCode::body_not_found;
     }
-    switch (opts.att_interp) {
 
-    case HistoryInterpolation::nearest: {
+    switch (opts.att_interp) {
+    case InterpolationMethod::nearest: {
         if (body->body_type == BodyType::station) {
             status = sample_station_att_nearest(world, history, id, t, out, opts.tol);
             return status;
         }
         return sample_att_nearest(history, id, t, out, opts.tol);
     } break;
-    case HistoryInterpolation::linear:
+    case InterpolationMethod::linear:
         [[fallthrough]]; // NOTE: maybe do normalized linear instead of slerp?
-    case HistoryInterpolation::slerp: {
+    case InterpolationMethod::slerp: {
         if (body->body_type == BodyType::station) {
             status
                 = sample_station_att_interp_linear(world, history, id, t, out, opts.tol);
@@ -532,6 +533,9 @@ inline StatusCode sample_att_history(
         }
         status = sample_att_interp_linear(history, id, t, out, opts.tol);
         return status;
+    } break;
+    case InterpolationMethod::cubic_hermite: {
+        return StatusCode::unsupported_method;
     } break;
     }
 

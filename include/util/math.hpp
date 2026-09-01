@@ -188,13 +188,13 @@ inline mat3<T> matrix_cross(const vec3<T>& v) {
 // scalar checks
 
 template <class T>
-    requires std::is_arithmetic_v<T>
-inline bool finite_pos(T val) {
-    return std::isfinite(val) && val > T(0);
+requires std::is_arithmetic_v<T>
+inline bool finite_pos(T val, T tol = T(0)) {
+    return std::isfinite(val) && val > tol;
 }
 
 template <class T>
-    requires std::is_arithmetic_v<T>
+requires std::is_arithmetic_v<T>
 inline bool finite_nonneg(T val) {
     return std::isfinite(val) && val >= T(0);
 }
@@ -238,19 +238,19 @@ inline bool finite_dense(const eig::DenseBase<Derived>& x) {
 }
 
 template <class Derived>
-    requires requires(const Derived& x) {
-        x.allFinite();
-        x.array();
-    }
+requires requires(const Derived& x) {
+    x.allFinite();
+    x.array();
+}
 inline bool finite_pos(const Derived& x) {
     return x.allFinite() && (x.array() > 0).all();
 }
 
 template <class Derived>
-    requires requires(const Derived& x) {
-        x.allFinite();
-        x.array();
-    }
+requires requires(const Derived& x) {
+    x.allFinite();
+    x.array();
+}
 inline bool finite_nonneg(const Derived& x) {
     return x.allFinite() && (x.array() >= 0).all();
 }
@@ -288,6 +288,11 @@ inline bool finite_norm_nonzero(const eig::MatrixBase<Derived>& v, T tol = tol12
 template <class Derived>
 inline bool finite_norm_pos(const eig::MatrixBase<Derived>& v) {
     return finite_dense(v) && finite_pos(v.norm());
+}
+
+template <class T>
+inline bool equal_tol(T a, T b, T tol = T(tol12)) {
+    return std::abs(a - b) < tol;
 }
 
 // integer operations
