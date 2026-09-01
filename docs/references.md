@@ -26,3 +26,8 @@
 
 - [Purdue AAE 533, *Space Traffic Management* notes](https://engineering.purdue.edu/online/courses/tagged_items/space-traffic-management).
 - [Purdue AAE 440, *Spacecraft Attitude Dynamics* notes](https://catalog.purdue.edu/preview_course_nopop.php?catoid=14&coid=135683).
+
+## Integration & ODE Solvers
+
+- [NodePy](https://nodepy.readthedocs.io/en/latest/rkm.html#create-rkm).
+- [NodyPy Github Page](https://github.com/ketch/nodepy/blob/0f071ac7b9cf41bcd27dedb614ab814fb0a98007/nodepy/runge_kutta_method.py#L2697)

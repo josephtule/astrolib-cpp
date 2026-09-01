@@ -41,3 +41,11 @@ const f64 tol6 = 1e-6;
 const f64 tol9 = 1e-9;
 const f64 tol12 = 1e-12;
 const f64 tol16 = 1e-16;
+
+// f64 values
+constexpr f64 one = 1.0;
+constexpr f64 two = 2.0;
+constexpr f64 half = one / two;
+constexpr f64 quarter = one / 4.0;
+// constexpr f64 third = one / 3.0;
+// constexpr f64 
