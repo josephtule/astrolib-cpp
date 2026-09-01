@@ -5633,13 +5633,14 @@ void run_world_embedded_rk_diag() {
         = std::chrono::duration<f64, std::milli>(reference_stop - reference_start)
               .count();
 
-    const array<IntegratorTypeAdaptive, 7> methods_embedded{
+    const array<IntegratorTypeAdaptive, 8> methods_embedded{
         IntegratorTypeAdaptive::rkf12,
         IntegratorTypeAdaptive::heuneuler21,
         IntegratorTypeAdaptive::bosha32,
         IntegratorTypeAdaptive::rkf54,
         IntegratorTypeAdaptive::cashkarp54,
         IntegratorTypeAdaptive::dopri54,
+        IntegratorTypeAdaptive::tsit54,
         IntegratorTypeAdaptive::rkf78
     };
 

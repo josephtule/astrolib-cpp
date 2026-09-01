@@ -1191,6 +1191,8 @@ static StatusCode validate_adaptive_world_integrator_config(
     case IntegratorTypeAdaptive::rkf54:
     case IntegratorTypeAdaptive::cashkarp54:
     case IntegratorTypeAdaptive::dopri54:
+    case IntegratorTypeAdaptive::tsit54:
+    case IntegratorTypeAdaptive::stepanov54:
     case IntegratorTypeAdaptive::rkf78: break;
     default: return StatusCode::unsupported_method;
     }
@@ -1607,6 +1609,16 @@ static WorldStepResult dispatch_world_adaptive_tableau(
         return propagate_world_embedded_rk(world, tf, dopri45_tableau, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::rkf78:
         return propagate_world_embedded_rk(world, tf, rkf78_tableau, stepper_cfg, wksp);
+    case IntegratorTypeAdaptive::tsit54:
+        return propagate_world_embedded_rk(world, tf, tsit54_tableau, stepper_cfg, wksp);
+    case IntegratorTypeAdaptive::stepanov54:
+        return propagate_world_embedded_rk(
+            world,
+            tf,
+            stepanov54_tableau,
+            stepper_cfg,
+            wksp
+        );
     }
 
     result.status = StatusCode::unsupported_method;
@@ -2182,8 +2194,7 @@ WorldStepResult step_world(
     WorldStepResult result;
     result.t = world.t_sim();
 
-    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1
-        || !finite_pos(cfg.dt_scale)) {
+    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1 || !finite_pos(cfg.dt_scale)) {
         result.status = StatusCode::invalid_input;
         return result;
     }

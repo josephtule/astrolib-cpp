@@ -81,7 +81,9 @@ enum struct IntegratorTypeAdaptive : i32 {
     rkf54,
     cashkarp54,
     dopri54,
+    tsit54,
     rkf78,
+    stepanov54,
 };
 
 inline string integrator_name(IntegratorTypeAdaptive type) {
@@ -93,6 +95,8 @@ inline string integrator_name(IntegratorTypeAdaptive type) {
     case IntegratorTypeAdaptive::cashkarp54: return "Cash-Karp 5(4)";
     case IntegratorTypeAdaptive::dopri54: return "Dormand-Prince 5(4)";
     case IntegratorTypeAdaptive::rkf78: return "Runge-Kutta-Fehlberg 8(7)";
+    case IntegratorTypeAdaptive::tsit54: return "Tsitouras (5)4";
+    case IntegratorTypeAdaptive::stepanov54: return "Stepanov 5(4)";
     }
     return "Unknown";
 }
@@ -106,6 +110,8 @@ inline string integrator_str(IntegratorTypeAdaptive type) {
     case IntegratorTypeAdaptive::cashkarp54: return "cash_karp54";
     case IntegratorTypeAdaptive::dopri54: return "dormand_prince54";
     case IntegratorTypeAdaptive::rkf78: return "rkf78";
+    case IntegratorTypeAdaptive::tsit54: return "tsit54";
+    case IntegratorTypeAdaptive::stepanov54: return "stepanov54";
     }
     return "unknown";
 }
