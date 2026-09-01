@@ -77,6 +77,7 @@ inline constexpr UTime time_default = UTime::second;
 
 template <typename T>
 constexpr bool time_factor(UTime unit, T& factor) {
+    // multiplicative scale factor to convert to seconds
     switch (unit) {
     case UTime::day: factor = static_cast<T>(86400.0); break;
     case UTime::hour: factor = static_cast<T>(3600.0); break;
@@ -144,6 +145,7 @@ T convert_angle(T val, UAngle uin, UAngle uout) {
 
 template <typename T>
 constexpr T length_factor(ULength u) {
+    // multiplicative scale factor to convert to meter
     switch (u) {
     case ULength::kilometer: return static_cast<T>(1000.0);
     case ULength::meter: return static_cast<T>(1.0); // base units

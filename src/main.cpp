@@ -121,7 +121,7 @@ int main() {
     // run_build_world_from_scenario();
     // run_scenario_render_diag();
 
-    run_world_embedded_rk_diag();
+    run_ephemeris_io_diag();
 
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");

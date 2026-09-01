@@ -90,6 +90,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::file_write_failed:
     case StatusCode::file_close_failed:
     case StatusCode::file_open_failed:
+    case StatusCode::file_publish_failed:
     case StatusCode::file_already_exists:
     case StatusCode::matrix_invert_failed:
     case StatusCode::step_size_underflow:

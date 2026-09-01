@@ -39,6 +39,7 @@ enum struct StatusCode {
     file_write_failed,
     file_close_failed,
     file_open_failed,
+    file_publish_failed,
     file_already_exists,
     file_overwritten,
 
@@ -102,6 +103,7 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::gravity_model_not_found: return "Gravity Model not found";
     case StatusCode::attitude_type_not_found: return "Attitude type not found";
     case StatusCode::file_open_failed: return "File open failed";
+    case StatusCode::file_publish_failed: return "File publication failed";
     case StatusCode::parse_failed: return "Parse failed";
     case StatusCode::celestial_model_not_found: return "Celestial Model not found";
     case StatusCode::matrix_invert_failed: return "Matrix inversion failed";

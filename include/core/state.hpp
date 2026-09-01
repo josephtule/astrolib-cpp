@@ -175,6 +175,10 @@ inline bool finite_state_att(const StateAtt& x, const f64 tol = tol12) {
     return finite_vec(x.q) && finite_vec(x.w) && finite_norm_nonzero(x.q, tol);
 }
 
+inline bool valid_quaternion(const vec4d& q, const f64 tol = tol12) {
+    return finite_vec(q) && finite_norm_nonzero(q, tol);
+}
+
 inline bool finite_state(const StateTr& x) { return finite_vec(x.r) && finite_vec(x.v); }
 
 inline bool finite_state(const StateAtt& x, const f64 tol = tol12) {

@@ -506,7 +506,7 @@ StatusCode make_world_measurement_event_history(
     f64 t,
     const matXd& R,
     ODWorldMeasurementEvent& event,
-    const HistorySampleOptions& sample_opts,
+    const StateSampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
     f64 tol
@@ -557,7 +557,7 @@ StatusCode make_world_measurement_event_history_instrument(
     EntityId target_id,
     f64 t,
     ODWorldMeasurementEvent& event,
-    const HistorySampleOptions& sample_opts,
+    const StateSampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
     f64 tol
@@ -603,7 +603,7 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
     f64 t,
     ODWorldMeasurementEvent& event,
     const MeasurementNoiseOptions& noise_opts,
-    const HistorySampleOptions& sample_opts,
+    const StateSampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
     f64 tol

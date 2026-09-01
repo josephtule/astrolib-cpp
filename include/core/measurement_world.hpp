@@ -222,7 +222,7 @@ inline StatusCode world_predict_measurement_history(
     EntityId target_id,
     f64 t,
     vecXd& z_pred,
-    const HistorySampleOptions& sample_opts = HistorySampleOptions{},
+    const StateSampleOptions& sample_opts = StateSampleOptions{},
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
     f64 tol = tol12

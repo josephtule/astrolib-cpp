@@ -8,13 +8,14 @@
 
 struct EphemerisCSVLayout {
     string filepath;
-    char delimiter = ',';
+    string delimiter = ",";
     bool has_header = true;
+    i32 header_lines = 1;
 };
 
 struct EphemerisWriteOptions {
     bool overwrite = false;
-    i32 precision = 12; // not sure which integer type to use
+    i32 precision = 12;
     EphemerisCSVLayout csv{};
 };
 
@@ -25,7 +26,8 @@ StatusCode load_cartesian_ephemeris(
 
 StatusCode load_orientation_ephemeris(
     const string& manifest_filepath,
-    OrientationEphemerisTable& out
+    OrientationEphemerisTable& out,
+    f64 tol = tol12
 );
 
 StatusCode save_cartesian_ephemeris(
