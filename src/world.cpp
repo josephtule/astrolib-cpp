@@ -33,18 +33,22 @@ void World::advance_time(f64 dt) {
     t_sim_ += dt;
 }
 
-void World::set_date(const JulianDate jd_in) {
+void World::set_date(JulianDate jd_in, TimeScale scale) {
     date_active = true;
-    jd = jd_in;
+    time_scale = scale;
+    jd = normalize_jd(jd_in);
 }
-void World::set_date(const ModifiedJulianDate mjd) {
+void World::set_date(ModifiedJulianDate mjd, TimeScale scale) {
     date_active = true;
-    jd = mjd_to_jd(mjd);
+    time_scale = scale;
+    jd = normalize_jd(mjd_to_jd(mjd));
 }
-void World::set_date(const CalendarTime cal) {
+void World::set_date(CalendarTime cal, TimeScale scale) {
     date_active = true;
-    jd = cal_to_jd(cal);
+    time_scale = scale;
+    jd = normalize_jd(cal_to_jd(cal));
 }
+
 JulianDate World::get_date_jd() const { return jd; }
 ModifiedJulianDate World::get_date_mjd() const { return jd_to_mjd(jd); }
 CalendarTime World::get_date_cal() const { return jd_to_cal(jd); }

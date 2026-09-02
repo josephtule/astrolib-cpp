@@ -122,6 +122,9 @@ int main() {
 
 
     run_ephemeris_io_diag();
+    run_ephemeris_sampling_diag();
+    run_ephemeris_provider_diag();
+    run_world_provider_diag();
 
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");

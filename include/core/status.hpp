@@ -62,6 +62,7 @@ enum struct StatusCode {
     empty_ephemeris,
     invalid_ephemeris_metadata,
     non_monotonic_time,
+    provider_coverage_end,
 };
 
 inline std::string status_string(StatusCode status) {
@@ -117,6 +118,7 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::empty_ephemeris: return "Empty ephemeris";
     case StatusCode::invalid_ephemeris_metadata: return "Invalid ephemeris metadata";
     case StatusCode::non_monotonic_time: return "Non-monotonic time";
+    case StatusCode::provider_coverage_end: return "Provider coverage end reached";
     }
 
     return "Unknown Status";

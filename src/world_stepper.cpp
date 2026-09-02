@@ -5,12 +5,14 @@
 #include "core/body.hpp"
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
+#include "core/ephemeris_provider.hpp"
 #include "core/integrator_adaptive.hpp"
 #include "core/integrator_common.hpp"
 #include "core/integrator_fixed.hpp"
 #include "core/integrator_tableaus.hpp"
 #include "core/state.hpp"
 #include "core/status.hpp"
+#include "core/time.hpp"
 #include "core/world.hpp"
 #include "util/math.hpp"
 #include "util/typedefs.hpp"
@@ -26,6 +28,7 @@ static svec<EntityId> propagated_tr_ids(const World& world) {
     for (EntityId id : world.active_entity_ids()) {
         const Body* body = world.body(id);
         if (body == nullptr) continue;
+        if (body->ephemeris_providers.translation != nullptr) continue; // skip provided
         if (!body->propagate_tr) continue;
         if (body->body_type == BodyType::station) {
             const Station* stat = world.station(id);
@@ -112,6 +115,46 @@ static svec<EntityId> source_att_ids(const World& world) {
     return ids;
 }
 
+static svec<EntityId> provider_tr_ids(const World& world) {
+    svec<EntityId> ids;
+
+    for (EntityId id : world.active_entity_ids()) {
+        const Body* body = world.body(id);
+        if (body == nullptr) continue;
+        if (body->ephemeris_providers.translation != nullptr) ids.push_back(id);
+    }
+
+    return ids;
+}
+
+static svec<EntityId> provider_att_ids(const World& world) {
+    svec<EntityId> ids;
+
+    for (EntityId id : world.active_entity_ids()) {
+        const Body* body = world.body(id);
+        if (body == nullptr) continue;
+        if (body->ephemeris_providers.orientation != nullptr) ids.push_back(id);
+    }
+
+    return ids;
+}
+
+static svec<EntityId> staged_tr_ids(
+    const svec<EntityId>& propagated_ids,
+    const svec<EntityId>& provider_ids
+) {
+    svec<EntityId> ids = propagated_ids;
+    ids.reserve(propagated_ids.size() + provider_ids.size());
+
+    for (EntityId id : provider_ids) {
+        if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+            ids.push_back(id);
+        }
+    }
+
+    return ids;
+}
+
 static svec<EntityId> staged_att_ids(
     const svec<EntityId>& propagated_ids,
     const svec<EntityId>& celestial_ids
@@ -127,116 +170,6 @@ static svec<EntityId> staged_att_ids(
     return ids;
 }
 
-DerivTr derivtr_world(const World& world, EntityId id, const StateTr& x) {
-    // TODO: source states still read from world state
-    // not fully staged yet for moving sources
-    DerivTr dx;
-    dx.dr = x.v;
-    dx.dv = world.gravity_accel_on(id, x);
-
-    return dx;
-}
-
-DerivAtt derivatt_world(const World& world, EntityId id, const StateAtt& x) {
-    DerivAtt dx;
-
-    const Body* body = world.body(id);
-    switch (body->body_type) {
-    case BodyType::celestial: break;
-    case BodyType::satellite: {
-        const Satellite* sat = world.satellite(id);
-        if (sat == nullptr || !sat->mass_properties.active) break;
-        if (sat->mass_properties.principal_axes) {
-            dx = d_rigidbody(world.t_sim(), x, sat->mass_properties.I);
-        } else {
-            dx = d_rigidbody(
-                world.t_sim(),
-                x,
-                sat->mass_properties.I,
-                sat->mass_properties.I_inv
-            );
-        }
-    } break;
-    case BodyType::station: {
-        const Station* stat = world.station(id);
-        if (stat == nullptr || stat->anchored || !stat->mass_properties.active) break;
-        if (stat->mass_properties.principal_axes) {
-            dx = d_rigidbody(world.t_sim(), x, stat->mass_properties.I);
-        } else {
-            dx = d_rigidbody(
-                world.t_sim(),
-                x,
-                stat->mass_properties.I,
-                stat->mass_properties.I_inv
-            );
-        }
-    } break;
-
-    case BodyType::unknown: break;
-    }
-
-    return dx;
-}
-
-bool step_tr_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg) {
-    Body* body = world.body(id);
-    if (body == nullptr) return false;
-    const auto* method = std::get_if<IntegratorTypeFixed>(&cfg.integrator_tr);
-    if (method == nullptr) return false;
-
-    auto f = [&](f64 t, StateTr x) -> DerivTr { return derivtr_world(world, id, x); };
-    auto tx
-        = step_integrator<StateTr, DerivTr>(f, world.t_sim(), body->x_tr, dt, *method);
-    body->x_tr = tx.second;
-
-    return true;
-}
-
-bool step_att_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg) {
-    Body* body = world.body(id);
-    if (body == nullptr) return false;
-    const auto* method = std::get_if<IntegratorTypeFixed>(&cfg.integrator_att);
-    if (method == nullptr) return false;
-
-    switch (body->body_type) {
-    case BodyType::celestial: return false;
-    case BodyType::station: {
-        Station* stat = world.station(id);
-        if (stat->anchored || !stat->mass_properties.active) return false;
-    } break;
-    case BodyType::satellite: {
-        Satellite* sat = world.satellite(id);
-        if (!sat->mass_properties.active) return false;
-    } break;
-    default: return false;
-    }
-
-    auto f = [&](f64 t, StateAtt x) -> DerivAtt { return derivatt_world(world, id, x); };
-    auto tx
-        = step_integrator<StateAtt, DerivAtt>(f, world.t_sim(), body->x_att, dt, *method);
-    body->x_att = tx.second;
-    normalize_quaternion_inplace<f64>(body->x_att.q);
-
-    return true;
-}
-
-bool step_cel_att_world(World& world, EntityId id, f64 dt) {
-    Celestial* cel = world.celestial(id);
-    if (cel == nullptr) return false;
-
-    switch (cel->attitude_model) {
-    case CelestialAttitudeModel::fixed: return false;
-    case CelestialAttitudeModel::simple_spin: {
-        cel->x_att.q = step_q_simple_spin(cel->x_att, dt);
-    } break;
-    case CelestialAttitudeModel::provider: {
-        return false; // TODO: add provider later
-    } break;
-    }
-
-    return true;
-}
-
 using WorldTrDerivMap = umap<EntityId, DerivTr>;
 using WorldAttDerivMap = umap<EntityId, DerivAtt>;
 
@@ -244,21 +177,10 @@ struct WorldTrStage {
     svec<EntityId> ids;
     umap<EntityId, StateTr> x;
 };
-struct DerivTrWeight {
-    // K_i in RK integrators (translational)
-    const umap<EntityId, DerivTr>* k = nullptr;
-    f64 scale = 0.0;
-};
-
 struct WorldAttStage {
     svec<EntityId> ids;
     umap<EntityId, StateAtt> x;
 };
-struct DerivAttWeight {
-    const umap<EntityId, DerivAtt>* k = nullptr;
-    f64 scale = 0.0;
-};
-
 struct WorldStage {
     WorldTrStage tr;
     WorldAttStage att;
@@ -275,28 +197,19 @@ static StatusCode build_tr_stage(
     WorldTrStage& stage
 ) {
     WorldTrStage stage_new;
+    stage_new.ids = wksp.staged_tr_ids;
 
-    for (EntityId id : wksp.propagated_tr_ids) {
+    for (EntityId id : wksp.staged_tr_ids) {
         const Body* body = world.body(id);
         if (body == nullptr) return StatusCode::body_not_found;
+        if (body->ephemeris_providers.translation != nullptr) continue; // skip provided
         if (!finite_state_tr(body->x_tr)) return StatusCode::invalid_state;
 
-        stage_new.ids.push_back(id);
         stage_new.x.emplace(id, body->x_tr);
     }
 
     stage = stage_new;
     return StatusCode::ok;
-}
-
-static WorldTrStage build_tr_stage(
-    const World& world,
-    const WorldStepperWorkspace& wksp
-) {
-    WorldTrStage stage;
-    // TODO: update fixed-step RK paths to propagate stage-build statuses.
-    if (build_tr_stage(world, wksp, stage) != StatusCode::ok) return {};
-    return stage;
 }
 
 static StatusCode build_att_stage(
@@ -305,30 +218,21 @@ static StatusCode build_att_stage(
     WorldAttStage& stage
 ) {
     WorldAttStage stage_new;
+    stage_new.ids = wksp.staged_att_ids;
 
     for (EntityId id : wksp.staged_att_ids) {
         const Body* body = world.body(id);
         if (body == nullptr) return StatusCode::body_not_found;
+        if (body->ephemeris_providers.orientation != nullptr) continue; // skip provided
         if (!finite_state_att(body->x_att)) {
             return StatusCode::invalid_att_state;
         }
 
-        stage_new.ids.push_back(id);
         stage_new.x.emplace(id, body->x_att);
     }
 
     stage = stage_new;
     return StatusCode::ok;
-}
-
-static WorldAttStage build_att_stage(
-    const World& world,
-    const WorldStepperWorkspace& wksp
-) {
-    WorldAttStage stage;
-    // TODO: update fixed-step RK paths to propagate stage-build statuses.
-    if (build_att_stage(world, wksp, stage) != StatusCode::ok) return {};
-    return stage;
 }
 
 struct WorldStageBuildResult {
@@ -352,8 +256,107 @@ struct WorldFixedTrialResult {
     i32 deriv_evals = 0;
 };
 
+static StatusCode world_epoch_at_sim_time(
+    const World& world,
+    f64 t_query,
+    JulianDate& epoch
+) {
+    if (!world.is_date_active()) return StatusCode::invalid_input;
+    if (!isfinite(t_query)) return StatusCode::invalid_input;
+
+    epoch = world.get_date_jd();
+    epoch.frac += (t_query - world.t_sim()) / 86400.0;
+    epoch = normalize_jd(epoch);
+
+    return StatusCode::ok;
+}
+
+static StatusCode query_provider_states_at_time(
+    const World& world,
+    f64 t_query,
+    const WorldStepperWorkspace& wksp,
+    WorldStage& stage
+) {
+    StatusCode status;
+    WorldStage temp = stage;
+
+    if (wksp.provider_tr_ids.empty() && wksp.provider_att_ids.empty())
+        return StatusCode::ok;
+
+    JulianDate epoch;
+    status = world_epoch_at_sim_time(world, t_query, epoch);
+    if (status != StatusCode::ok) return status;
+
+    for (EntityId id : wksp.provider_tr_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+        if (body->ephemeris_providers.translation == nullptr)
+            return StatusCode::invalid_input;
+
+        StateTr x_tr;
+        status = query_ephemeris_provider(
+            *body->ephemeris_providers.translation,
+            epoch,
+            world.get_time_scale(),
+            world.get_time_offsets(),
+            x_tr
+        );
+        if (status != StatusCode::ok) return status;
+
+        temp.tr.x.insert_or_assign(id, x_tr);
+    }
+
+    for (EntityId id : wksp.provider_att_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+        if (body->ephemeris_providers.orientation == nullptr)
+            return StatusCode::invalid_input;
+
+        StateAtt x_att;
+        status = query_orientation_provider(
+            *body->ephemeris_providers.orientation,
+            epoch,
+            world.get_time_scale(),
+            world.get_time_offsets(),
+            x_att
+        );
+        if (status != StatusCode::ok) return status;
+
+        temp.att.x.insert_or_assign(id, x_att);
+    }
+
+    stage = std::move(temp);
+    return StatusCode::ok;
+}
+
+static StatusCode copy_provider_states(
+    const WorldStepperWorkspace& wksp,
+    const WorldStage& source,
+    WorldStage& target
+) {
+    WorldStage temp = target;
+
+    for (EntityId id : wksp.provider_tr_ids) {
+        auto it = source.tr.x.find(id);
+        if (it == source.tr.x.end()) return StatusCode::invalid_state;
+        if (!finite_state_tr(it->second)) return StatusCode::invalid_state;
+        temp.tr.x.insert_or_assign(id, it->second);
+    }
+
+    for (EntityId id : wksp.provider_att_ids) {
+        auto it = source.att.x.find(id);
+        if (it == source.att.x.end()) return StatusCode::invalid_att_state;
+        if (!finite_state_att(it->second)) return StatusCode::invalid_att_state;
+        temp.att.x.insert_or_assign(id, it->second);
+    }
+
+    target = std::move(temp);
+    return StatusCode::ok;
+}
+
 static WorldStageBuildResult build_world_stage(
     const World& world,
+    const f64 t,
     const WorldStepperWorkspace& wksp
 ) {
     WorldStageBuildResult result;
@@ -362,6 +365,9 @@ static WorldStageBuildResult build_world_stage(
     if (result.status != StatusCode::ok) return result;
 
     result.status = build_att_stage(world, wksp, result.stage.att);
+    if (result.status != StatusCode::ok) return result;
+
+    result.status = query_provider_states_at_time(world, t, wksp, result.stage);
     if (result.status != StatusCode::ok) return result;
 
     result.status = StatusCode::ok;
@@ -387,9 +393,22 @@ static StatusCode celestial_att_at_stage(
         normalize_quaternion_inplace<f64>(x_att_stage.q);
     } break;
     case CelestialAttitudeModel::provider: {
-        // TODO: do later
-        x_att_stage = x_att_base;
-        return StatusCode::unsupported_method;
+        if (cel->ephemeris_providers.orientation == nullptr) {
+            return StatusCode::invalid_input;
+        }
+
+        JulianDate epoch;
+        StatusCode status = world_epoch_at_sim_time(world, t_stage, epoch);
+        if (status != StatusCode::ok) return status;
+
+        status = query_orientation_provider(
+            *cel->ephemeris_providers.orientation,
+            epoch,
+            world.get_time_scale(),
+            world.get_time_offsets(),
+            x_att_stage
+        );
+        if (status != StatusCode::ok) return status;
     } break;
     }
 
@@ -426,6 +445,10 @@ static StatusCode build_att_tableau_stage(
     }
 
     for (EntityId id : wksp.celestial_att_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+        if (body->ephemeris_providers.orientation != nullptr) continue; // skip provided
+
         StateAtt x_stage = base_stage.x.at(id);
 
         f64 t_stage = t + tableau.c[stage_index] * dt;
@@ -440,48 +463,8 @@ static StatusCode build_att_tableau_stage(
     return StatusCode::ok;
 }
 
-static WorldAttStage build_source_att_stage(
-    const World& world,
-    const WorldStepperWorkspace& wksp,
-    bool stage_source_att
-) {
-    WorldAttStage stage;
-    if (!stage_source_att) return stage;
-
-    svec<EntityId> ids = wksp.source_att_ids;
-    for (EntityId id : ids) {
-        const Celestial* cel = world.celestial(id);
-        if (cel == nullptr || !cel->emits_gravity) {
-            // || cel->gravity_model == GravityModel::pointmass){
-            continue;
-        }
-        // TODO: add has atmosphere and radiation
-        // only bodies that affect force via their attitude used
-
-        stage.ids.push_back(id);
-        stage.x.emplace(id, cel->x_att);
-    }
-
-    return stage;
-}
-
 // Gravity sources use their staged translational state when propagated
 // fixed sources fall back to their stored world state.
-static StateTr source_tr_from_stage_or_world(
-    const World& world,
-    const WorldTrStage& stage,
-    EntityId source_id
-) {
-    // NOTE: currently only celestials are valid gravity emitters.
-    const Celestial* cel = world.celestial(source_id);
-    if (cel == nullptr) return StateTr{};
-
-    auto it = stage.x.find(source_id);
-    if (it == stage.x.end()) return cel->x_tr; // world fallback
-
-    return it->second;
-}
-
 static StatusCode source_tr_from_stage_or_world(
     const World& world,
     const WorldTrStage& stage,
@@ -491,29 +474,21 @@ static StatusCode source_tr_from_stage_or_world(
     const Celestial* cel = world.celestial(source_id);
     if (cel == nullptr) return StatusCode::body_not_found;
 
+    StateTr temp;
+
     auto it = stage.x.find(source_id);
-    if (it == stage.x.end())
-        x_tr_source = cel->x_tr; // return body not found instead?
-    else
-        x_tr_source = it->second;
+    if (it == stage.x.end()) {
+        if (cel->ephemeris_providers.translation != nullptr) {
+            return StatusCode::invalid_state;
+        }
+        temp = cel->x_tr;
+    } else
+        temp = it->second;
 
-    if (!finite_state_tr(x_tr_source)) return StatusCode::invalid_state;
+    if (!finite_state_tr(temp)) return StatusCode::invalid_state;
 
+    x_tr_source = temp;
     return StatusCode::ok;
-}
-
-static StateAtt source_att_from_stage_or_world(
-    const World& world,
-    const WorldAttStage& stage,
-    EntityId source_id
-) {
-    const Body* body = world.body(source_id);
-    if (body == nullptr) return StateAtt{};
-
-    auto it = stage.x.find(source_id);
-    if (it == stage.x.end()) return body->x_att;
-
-    return it->second;
 }
 
 static StatusCode source_att_from_stage_or_world(
@@ -525,44 +500,33 @@ static StatusCode source_att_from_stage_or_world(
     const Celestial* cel = world.celestial(source_id);
     if (cel == nullptr) return StatusCode::body_not_found;
 
+    StateAtt temp;
+
     auto it = stage.x.find(source_id);
-    if (it == stage.x.end())
-        x_att_source = cel->x_att;
-    else
-        x_att_source = it->second;
-
-    if (!finite_state_att(x_att_source)) return StatusCode::invalid_att_state;
-
-    return StatusCode::ok;
-}
-
-static WorldTrStage build_tr_trial_stage(
-    const WorldTrStage& base_stage,
-    std::initializer_list<DerivTrWeight> weights
-) {
-    WorldTrStage trial;
-    trial.ids = base_stage.ids;
-
-    for (EntityId id : base_stage.ids) {
-        StateTr x = base_stage.x.at(id);
-
-        for (const DerivTrWeight& weight : weights) {
-            if (weight.k == nullptr) continue;
-            x += weight.scale * weight.k->at(id);
+    if (it == stage.x.end()) {
+        if (cel->ephemeris_providers.orientation != nullptr) {
+            return StatusCode::invalid_att_state;
         }
-        trial.x.emplace(id, x);
-    }
+        temp = cel->x_att;
+    } else
+        temp = it->second;
 
-    return trial;
+    if (!finite_state_att(temp)) return StatusCode::invalid_att_state;
+
+    x_att_source = temp;
+    return StatusCode::ok;
 }
 
 template <size_t Stages>
 static StatusCode build_tr_tableau_stage(
+    const World& world,
     const WorldTrStage& base_stage,
     const array<WorldStageDeriv, Stages>& k,
     size_t stage_index,
+    f64 t,
     f64 dt,
     const RKTableau<Stages>& tableau,
+    const WorldStepperWorkspace& wksp,
     WorldTrStage& stage
 ) {
     WorldTrStage trial = base_stage;
@@ -570,7 +534,7 @@ static StatusCode build_tr_tableau_stage(
 
     if (stage_index >= Stages) return StatusCode::invalid_input;
 
-    for (EntityId id : base_stage.ids) {
+    for (EntityId id : wksp.propagated_tr_ids) {
         StateTr x_stage = base_stage.x.at(id);
 
         for (i32 j = 0; j < stage_index; ++j) {
@@ -583,70 +547,6 @@ static StatusCode build_tr_tableau_stage(
     stage = trial;
 
     return StatusCode::ok;
-}
-
-static WorldAttStage build_source_att_trial_stage(
-    const World& world,
-    const WorldAttStage& base_stage,
-    const f64 dt_stage
-) {
-    WorldAttStage trial;
-    trial.ids = base_stage.ids;
-
-    for (EntityId id : base_stage.ids) {
-        const Celestial* cel = world.celestial(id);
-        if (cel == nullptr) continue;
-
-        StateAtt x = base_stage.x.at(id);
-
-        switch (cel->attitude_model) {
-        case CelestialAttitudeModel::fixed: break; // no change
-        case CelestialAttitudeModel::simple_spin: {
-            x.q = step_q_simple_spin(x, dt_stage);
-        } break;
-        case CelestialAttitudeModel::provider: {
-            // TODO: add provider here attitude here
-        } break;
-        }
-
-        trial.x.emplace(id, x);
-    }
-
-    return trial;
-}
-
-static vec3d staged_gravity_accel_on(
-    const World& world,
-    const WorldTrStage& stage_tr,
-    const WorldAttStage& stage_att,
-    EntityId target_id,
-    const StateTr& x_tr_target,
-    const WorldStepperWorkspace& wksp
-) {
-    vec3d a = vec3d0;
-    const Body* target = world.body(target_id);
-    if (target == nullptr) return a;
-
-    const svec<EntityId>& source_ids = wksp.gravity_source_ids;
-    for (EntityId source_id : source_ids) {
-        if (target_id == source_id) continue;
-        const Body* body = world.body(source_id);
-        if (body == nullptr || !body->emits_gravity) continue;
-        const Celestial* source = world.celestial(source_id);
-        if (source == nullptr) continue;
-        StateTr x_tr_source = source_tr_from_stage_or_world(world, stage_tr, source_id);
-        StateAtt x_att_source
-            = source_att_from_stage_or_world(world, stage_att, source_id);
-        a += world.gravity_accel_from(
-            target_id,
-            x_tr_target,
-            source_id,
-            x_tr_source,
-            x_att_source
-        );
-    }
-
-    return a;
 }
 
 static StatusCode staged_gravity_accel_on(
@@ -692,28 +592,6 @@ static StatusCode staged_gravity_accel_on(
     return StatusCode::ok;
 }
 
-static DerivTr derivtr_world_staged(
-    const World& world,
-    const WorldTrStage& stage_tr,
-    const WorldAttStage& stage_att,
-    EntityId target_id,
-    const StateTr& x_tr_target,
-    const WorldStepperWorkspace& wksp
-) {
-    // TODO: add other forces later
-    DerivTr dx;
-    dx.dr = x_tr_target.v;
-    dx.dv = staged_gravity_accel_on(
-        world,
-        stage_tr,
-        stage_att,
-        target_id,
-        x_tr_target,
-        wksp
-    );
-    return dx;
-}
-
 static StatusCode derivtr_world_staged(
     const World& world,
     f64 t_stage,
@@ -740,19 +618,6 @@ static StatusCode derivtr_world_staged(
 
     dx = dx_temp;
     return StatusCode::ok;
-}
-
-static DerivTr derivtr_world_staged(
-    const World& world,
-    f64 t_stage,
-    const WorldTrStage& stage_tr,
-    const WorldAttStage& stage_att,
-    EntityId target_id,
-    const StateTr& x_tr_target,
-    const WorldStepperWorkspace& wksp
-) {
-    // TODO: providers will use t_stage, but not yet implemented
-    return derivtr_world_staged(world, stage_tr, stage_att, target_id, x_tr_target, wksp);
 }
 
 static StatusCode derivatt_world_staged(
@@ -889,7 +754,21 @@ static StatusCode build_world_tableau_stage(
     );
     if (status != StatusCode::ok) return status;
 
-    status = build_tr_tableau_stage(base_stage.tr, k, stage_index, dt, tableau, stage.tr);
+    status = build_tr_tableau_stage(
+        world,
+        base_stage.tr,
+        k,
+        stage_index,
+        t,
+        dt,
+        tableau,
+        wksp,
+        stage.tr
+    );
+    if (status != StatusCode::ok) return status;
+
+    f64 t_stage = t + tableau.c[stage_index] * dt;
+    status = query_provider_states_at_time(world, t_stage, wksp, stage);
     if (status != StatusCode::ok) return status;
 
     return StatusCode::ok;
@@ -910,7 +789,7 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
         return result;
     }
 
-    WorldStageBuildResult base_result = build_world_stage(world, wksp);
+    WorldStageBuildResult base_result = build_world_stage(world, t, wksp);
     if (base_result.status != StatusCode::ok) {
         result.status = base_result.status;
         return result;
@@ -999,6 +878,13 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
     }
 
     for (EntityId id : wksp.celestial_att_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) {
+            result.status = StatusCode::body_not_found;
+            return result;
+        }
+        if (body->ephemeris_providers.orientation != nullptr) continue;
+
         auto x_base_it = base_stage.att.x.find(id);
         if (x_base_it == base_stage.att.x.end()) {
             result.status = StatusCode::invalid_att_state;
@@ -1017,6 +903,9 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
 
         stage_next.att.x.at(id) = x_end;
     }
+
+    result.status = query_provider_states_at_time(world, t + dt, wksp, stage_next);
+    if (result.status != StatusCode::ok) return result;
 
     result.stage = std::move(stage_next);
     result.status = StatusCode::ok;
@@ -1039,7 +928,7 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
     }
 
     // base stage
-    WorldStageBuildResult base_result = build_world_stage(world, wksp);
+    WorldStageBuildResult base_result = build_world_stage(world, t, wksp);
     if (base_result.status != StatusCode::ok) {
         result.status = base_result.status;
         return result;
@@ -1144,6 +1033,13 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
     }
 
     for (EntityId id : wksp.celestial_att_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) {
+            result.status = StatusCode::body_not_found;
+            return result;
+        }
+        if (body->ephemeris_providers.orientation != nullptr) continue;
+
         auto x_base_it = base_stage.att.x.find(id);
         if (x_base_it == base_stage.att.x.end()) {
             result.status = StatusCode::invalid_state;
@@ -1164,6 +1060,13 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
         stage_high.att.x.at(id) = x_end;
         stage_low.att.x.at(id) = x_end;
     }
+
+    // stage_high = stage_low for provided -> no error for adaptive
+    result.status = query_provider_states_at_time(world, t + dt, wksp, stage_high);
+    if (result.status != StatusCode::ok) return result;
+
+    result.status = copy_provider_states(wksp, stage_high, stage_low);
+    if (result.status != StatusCode::ok) return result;
 
     result.stage_high = std::move(stage_high);
     result.stage_low = std::move(stage_low);
@@ -1353,7 +1256,7 @@ static StatusCode commit_world_stage(
     const WorldStepperConfig& stepper_cfg,
     const WorldStepperWorkspace& wksp
 ) {
-    // validate
+    // validate every state before mutating the world
     if (stepper_cfg.step_tr) {
         for (EntityId id : wksp.propagated_tr_ids) {
             const Body* body = world.body(id);
@@ -1365,8 +1268,9 @@ static StatusCode commit_world_stage(
             if (!finite_state(x_it->second)) return StatusCode::invalid_state;
         }
     }
+
     if (stepper_cfg.step_att) {
-        for (EntityId id : wksp.staged_att_ids) {
+        for (EntityId id : wksp.propagated_att_ids) {
             const Body* body = world.body(id);
             if (body == nullptr) return StatusCode::body_not_found;
 
@@ -1375,18 +1279,62 @@ static StatusCode commit_world_stage(
 
             if (!finite_state(x_it->second)) return StatusCode::invalid_att_state;
         }
+
+        for (EntityId id : wksp.celestial_att_ids) {
+            const Body* body = world.body(id);
+            if (body == nullptr) return StatusCode::body_not_found;
+            if (body->ephemeris_providers.orientation != nullptr)
+                continue; // skip provided
+
+            auto x_it = accepted_stage.att.x.find(id);
+            if (x_it == accepted_stage.att.x.end()) return StatusCode::invalid_att_state;
+            if (!finite_state_att(x_it->second)) return StatusCode::invalid_att_state;
+        }
     }
 
-    // commit
+    for (EntityId id : wksp.provider_tr_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+
+        auto x_it = accepted_stage.tr.x.find(id);
+        if (x_it == accepted_stage.tr.x.end()) return StatusCode::invalid_state;
+        if (!finite_state_tr(x_it->second)) return StatusCode::invalid_state;
+    }
+
+    for (EntityId id : wksp.provider_att_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+
+        auto x_it = accepted_stage.att.x.find(id);
+        if (x_it == accepted_stage.att.x.end()) return StatusCode::invalid_att_state;
+        if (!finite_state_att(x_it->second)) return StatusCode::invalid_att_state;
+    }
+
+    // commit integrated and simple-model states
     if (stepper_cfg.step_tr) {
         for (EntityId id : wksp.propagated_tr_ids) {
             world.body(id)->x_tr = accepted_stage.tr.x.at(id);
         }
     }
+
     if (stepper_cfg.step_att) {
-        for (EntityId id : wksp.staged_att_ids) {
+        for (EntityId id : wksp.propagated_att_ids) {
             world.body(id)->x_att = accepted_stage.att.x.at(id);
         }
+        for (EntityId id : wksp.celestial_att_ids) {
+            Body* body = world.body(id);
+            if (body->ephemeris_providers.orientation != nullptr)
+                continue; // skip provided
+            world.body(id)->x_att = accepted_stage.att.x.at(id);
+        }
+    }
+
+    // commit provided states
+    for (EntityId id : wksp.provider_tr_ids) {
+        world.body(id)->x_tr = accepted_stage.tr.x.at(id);
+    }
+    for (EntityId id : wksp.provider_att_ids) {
+        world.body(id)->x_att = accepted_stage.att.x.at(id);
     }
 
     return StatusCode::ok;
@@ -1626,6 +1574,945 @@ static WorldStepResult dispatch_world_adaptive_tableau(
     return result;
 }
 
+enum struct ProviderDomain { translation, orientation };
+
+struct ProviderBoundaryEvent {
+    EntityId body_id = kInvalidEntityId;
+    ProviderDomain domain = ProviderDomain::translation;
+    ProviderCoverageAction action = ProviderCoverageAction::reject_step;
+};
+
+struct WorldProviderBoundary {
+    bool found = false;
+    f64 t_boundary = 0.0;
+    f64 tol = 0.0;
+    svec<ProviderBoundaryEvent> events;
+};
+
+static bool provider_action_requires_boundary(ProviderCoverageAction action) {
+    switch (action) {
+    case ProviderCoverageAction::reject_step: [[fallthrough]];
+    case ProviderCoverageAction::handoff_to_dynamics: [[fallthrough]];
+    case ProviderCoverageAction::stop_world: return true;
+    case ProviderCoverageAction::extrapolate: [[fallthrough]];
+    case ProviderCoverageAction::hold_state: return false;
+    }
+
+    return false;
+}
+
+static StatusCode find_world_provider_boundary(
+    const World& world,
+    f64 t_target,
+    const WorldStepperWorkspace& wksp,
+    WorldProviderBoundary& boundary
+) {
+    WorldProviderBoundary temp{};
+    const f64 t_now = world.t_sim();
+
+    if (!isfinite(t_target)) return StatusCode::invalid_input;
+    if (t_target == t_now) {
+        boundary = std::move(temp);
+        return StatusCode::ok;
+    }
+    if (wksp.provider_tr_ids.empty() && wksp.provider_att_ids.empty()) {
+        boundary = std::move(temp);
+        return StatusCode::ok;
+    }
+
+    JulianDate epoch_now;
+    JulianDate epoch_target;
+    StatusCode status = world_epoch_at_sim_time(world, t_now, epoch_now);
+    if (status != StatusCode::ok) return status;
+    status = world_epoch_at_sim_time(world, t_target, epoch_target);
+    if (status != StatusCode::ok) return status;
+
+    const f64 direction = t_target > t_now ? 1.0 : -1.0;
+
+    auto add_boundary = [&](f64 t_candidate, f64 tol, ProviderBoundaryEvent event) {
+        t_candidate = std::clamp(t_candidate, std::min(t_now, t_target), std::max(t_now, t_target));
+
+        if (!temp.found) {
+            temp.found = true;
+            temp.t_boundary = t_candidate;
+            temp.tol = tol;
+            temp.events = {event};
+            return;
+        }
+
+        const f64 distance = std::abs(t_candidate - t_now);
+        const f64 current_distance = std::abs(temp.t_boundary - t_now);
+        const f64 compare_tol = std::max(temp.tol, tol);
+
+        if (distance < current_distance - compare_tol) {
+            temp.t_boundary = t_candidate;
+            temp.tol = tol;
+            temp.events = {event};
+        } else if (std::abs(t_candidate - temp.t_boundary) <= compare_tol) {
+            temp.tol = compare_tol;
+            temp.events.push_back(event);
+        }
+    };
+
+    auto check_provider = [&]<typename Provider>(
+                              EntityId id,
+                              ProviderDomain domain,
+                              const Provider& provider) -> StatusCode {
+        const auto& table = provider.table;
+        const f64 tol = provider.options.tol;
+        if (table.dt.empty()) return StatusCode::empty_ephemeris;
+
+        f64 dt_now;
+        f64 dt_target;
+        StatusCode query_status = ephemeris_query_dt(
+            table.metadata.epoch,
+            epoch_now,
+            world.get_time_scale(),
+            world.get_time_offsets(),
+            dt_now
+        );
+        if (query_status != StatusCode::ok) return query_status;
+        query_status = ephemeris_query_dt(
+            table.metadata.epoch,
+            epoch_target,
+            world.get_time_scale(),
+            world.get_time_offsets(),
+            dt_target
+        );
+        if (query_status != StatusCode::ok) return query_status;
+
+        const f64 lower = table.dt.front();
+        const f64 upper = table.dt.back();
+
+        ProviderCoverageAction action;
+        bool boundary_found = false;
+        bool boundary_at_current = false;
+        f64 dt_boundary = 0.0;
+
+        if (dt_now < lower - tol) {
+            action = provider.coverage.before_start;
+            boundary_found = provider_action_requires_boundary(action);
+            boundary_at_current = boundary_found;
+        } else if (dt_now > upper + tol) {
+            action = provider.coverage.after_end;
+            boundary_found = provider_action_requires_boundary(action);
+            boundary_at_current = boundary_found;
+        }
+
+        if (!boundary_at_current && direction > 0.0) {
+            action = provider.coverage.after_end;
+            bool crosses = dt_target > upper + tol;
+            bool reaches = action != ProviderCoverageAction::reject_step
+                           && dt_target >= upper && dt_now <= upper;
+            boundary_found
+                = provider_action_requires_boundary(action) && (crosses || reaches);
+            dt_boundary = upper;
+        } else if (!boundary_at_current) {
+            action = provider.coverage.before_start;
+            bool crosses = dt_target < lower - tol;
+            bool reaches = action != ProviderCoverageAction::reject_step
+                           && dt_target <= lower && dt_now >= lower;
+            boundary_found
+                = provider_action_requires_boundary(action) && (crosses || reaches);
+            dt_boundary = lower;
+        }
+
+        if (!boundary_found) return StatusCode::ok;
+
+        ProviderBoundaryEvent event{
+            .body_id = id,
+            .domain = domain,
+            .action = action
+        };
+
+        if (boundary_at_current) {
+            add_boundary(t_now, tol, event);
+            return StatusCode::ok;
+        }
+
+        const f64 dt_span = dt_target - dt_now;
+        if (dt_span == 0.0 || !isfinite(dt_span)) return StatusCode::time_mismatch;
+
+        f64 alpha = (dt_boundary - dt_now) / dt_span;
+        if (!isfinite(alpha)) return StatusCode::non_finite_result;
+        f64 t_boundary = t_now + alpha * (t_target - t_now);
+        if (!isfinite(t_boundary)) return StatusCode::non_finite_result;
+
+        add_boundary(t_boundary, tol, event);
+        return StatusCode::ok;
+    };
+
+    for (EntityId id : wksp.provider_tr_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+        if (body->ephemeris_providers.translation == nullptr) {
+            return StatusCode::invalid_input;
+        }
+
+        status = check_provider(
+            id,
+            ProviderDomain::translation,
+            *body->ephemeris_providers.translation
+        );
+        if (status != StatusCode::ok) return status;
+    }
+
+    for (EntityId id : wksp.provider_att_ids) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+        if (body->ephemeris_providers.orientation == nullptr) {
+            return StatusCode::invalid_input;
+        }
+
+        status = check_provider(
+            id,
+            ProviderDomain::orientation,
+            *body->ephemeris_providers.orientation
+        );
+        if (status != StatusCode::ok) return status;
+    }
+
+    boundary = std::move(temp);
+    return StatusCode::ok;
+}
+
+static bool reaches_provider_boundary(
+    f64 t_now,
+    f64 t_target,
+    const WorldProviderBoundary& boundary
+) {
+    if (!boundary.found) return false;
+    if (t_target > t_now) return t_target >= boundary.t_boundary - boundary.tol;
+    if (t_target < t_now) return t_target <= boundary.t_boundary + boundary.tol;
+    return std::abs(t_now - boundary.t_boundary) <= boundary.tol;
+}
+
+static WorldStepResult step_world_fixed_impl(
+    World& world,
+    f64 dt,
+    IntegratorTypeFixed method,
+    const WorldStepperConfig& cfg,
+    WorldStepperWorkspace& wksp,
+    const WorldProviderBoundary* boundary
+) {
+    WorldStepResult result;
+    result.t = world.t_sim();
+
+    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+    if (!finite_pos(cfg.dt_scale)) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+
+    f64 dt_tick = dt * cfg.dt_scale;
+    f64 dt_sub = dt_tick / cfg.substeps;
+
+    for (i32 tick = 0; tick < cfg.ticks; ++tick) {
+        for (i32 substep = 0; substep < cfg.substeps; ++substep) {
+            f64 dt_actual = dt_sub;
+            bool boundary_step = false;
+            if (boundary != nullptr) {
+                f64 t_target = world.t_sim() + dt_sub;
+                boundary_step
+                    = reaches_provider_boundary(world.t_sim(), t_target, *boundary);
+                if (boundary_step) {
+                    dt_actual = boundary->t_boundary - world.t_sim();
+                }
+            }
+
+            if (dt_actual != 0.0 && (cfg.step_tr || cfg.step_att)) {
+                StatusCode status = dispatch_world_fixed_tableau(
+                    world,
+                    world.t_sim(),
+                    dt_actual,
+                    method,
+                    cfg,
+                    wksp
+                );
+                if (status != StatusCode::ok) {
+                    result.status = status;
+                    result.t = world.t_sim();
+                    return result;
+                }
+            }
+
+            world.advance_time(dt_actual);
+            result.stats.dt_sim_advanced += dt_actual;
+            if (dt_actual != 0.0) ++result.stats.substeps_completed;
+
+            if (boundary_step) {
+                result.status = StatusCode::provider_coverage_end;
+                result.t = world.t_sim();
+                return result;
+            }
+        }
+        ++result.stats.ticks_completed;
+    }
+
+    result.status = StatusCode::ok;
+    result.t = world.t_sim();
+    return result;
+}
+
+static void accumulate_adaptive_stats(
+    AdaptiveIntegratorStats& total,
+    const AdaptiveIntegratorStats& current
+) {
+    i64 accepted_before = total.accepted_steps;
+
+    total.attempted_steps += current.attempted_steps;
+    total.accepted_steps += current.accepted_steps;
+    total.rejected_steps += current.rejected_steps;
+    total.deriv_evals += current.deriv_evals;
+
+    if (current.accepted_steps == 0) return;
+
+    if (accepted_before == 0) {
+        total.min_accepted_dt = current.min_accepted_dt;
+        total.max_accepted_dt = current.max_accepted_dt;
+    } else {
+        total.min_accepted_dt = std::min(total.min_accepted_dt, current.min_accepted_dt);
+        total.max_accepted_dt = std::max(total.max_accepted_dt, current.max_accepted_dt);
+    }
+    total.final_accepted_dt = current.final_accepted_dt;
+}
+
+static WorldStepResult step_world_adaptive_impl(
+    World& world,
+    f64 dt,
+    IntegratorTypeAdaptive method,
+    const WorldStepperConfig& stepper_cfg,
+    WorldStepperWorkspace& wksp,
+    const WorldProviderBoundary* boundary
+) {
+    WorldStepResult result;
+
+    const AdaptiveIntegratorConfig& adaptive_cfg = stepper_cfg.adaptive.opts;
+
+    result.status = validate_adaptive_world_integrator_config(method, stepper_cfg);
+    if (result.status != StatusCode::ok) return result;
+
+    if (!isfinite(dt) || !finite_pos(stepper_cfg.dt_scale)) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+    if (stepper_cfg.ticks < 1 || stepper_cfg.substeps < 1) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+
+    result.t = world.t_sim();
+
+    f64 dt_tick = dt * stepper_cfg.dt_scale;
+    f64 dt_sub = 0.0;
+    i32 subs;
+    if (stepper_cfg.adaptive.use_substeps) {
+        subs = stepper_cfg.substeps;
+    } else {
+        subs = 1;
+    }
+    dt_sub = dt_tick / subs;
+
+    for (i32 tick = 0; tick < stepper_cfg.ticks; ++tick) {
+        for (i32 substep = 0; substep < subs; ++substep) {
+            f64 tf_sub = world.t_sim() + dt_sub;
+            bool boundary_step = false;
+            if (boundary != nullptr) {
+                boundary_step
+                    = reaches_provider_boundary(world.t_sim(), tf_sub, *boundary);
+                if (boundary_step) tf_sub = boundary->t_boundary;
+            }
+
+            WorldStepResult sub_result = dispatch_world_adaptive_tableau(
+                world,
+                tf_sub,
+                method,
+                stepper_cfg,
+                wksp
+            );
+
+            result.t = sub_result.t;
+            result.stats.dt_sim_advanced += sub_result.stats.dt_sim_advanced;
+            accumulate_adaptive_stats(result.stats.adaptive, sub_result.stats.adaptive);
+
+            if (sub_result.stats.adaptive.accepted_steps > 0) {
+                result.final_error_norm = sub_result.final_error_norm;
+            }
+
+            if (sub_result.status != StatusCode::ok) {
+                result.status = sub_result.status;
+                result.t = world.t_sim();
+                return result;
+            }
+
+            ++result.stats.substeps_completed;
+            if (boundary_step) {
+                result.status = StatusCode::provider_coverage_end;
+                result.t = world.t_sim();
+                return result;
+            }
+        }
+
+        ++result.stats.ticks_completed;
+    }
+
+    result.status = StatusCode::ok;
+    result.t = world.t_sim();
+    return result;
+}
+
+static WorldStepResult step_world_adaptive_impl(
+    World& world,
+    f64 dt,
+    IntegratorTypeAdaptive method,
+    const WorldStepperConfig& stepper_cfg
+) {
+    WorldStepperWorkspace wksp;
+    return step_world_adaptive_impl(world, dt, method, stepper_cfg, wksp, nullptr);
+}
+
+static StatusCode validate_world_provider_step(
+    const World& world,
+    const WorldStepperWorkspace& wksp
+) {
+    size_t provider_tr_count = 0;
+    size_t provider_att_count = 0;
+
+    for (EntityId id : world.active_entity_ids()) {
+        const Body* body = world.body(id);
+        if (body == nullptr) return StatusCode::body_not_found;
+
+        const bool has_tr_provider = body->ephemeris_providers.translation != nullptr;
+        const bool has_att_provider = body->ephemeris_providers.orientation != nullptr;
+        if (!has_tr_provider && !has_att_provider) {
+            if (body->body_type == BodyType::celestial) {
+                const Celestial* cel = world.celestial(id);
+                if (cel == nullptr) return StatusCode::body_not_found;
+                if (cel->attitude_model == CelestialAttitudeModel::provider) {
+                    return StatusCode::invalid_input;
+                }
+            }
+            continue;
+        }
+
+        if (body->body_type != BodyType::celestial) {
+            return StatusCode::unsupported_type;
+        }
+        if (!world.is_date_active()) return StatusCode::invalid_input;
+
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr) return StatusCode::body_not_found;
+
+        if (has_tr_provider) {
+            StatusCode status
+                = validate_ephemeris_provider(*body->ephemeris_providers.translation);
+            if (status != StatusCode::ok) return status;
+            if (body->propagate_tr) return StatusCode::invalid_input;
+            if (std::find(wksp.provider_tr_ids.begin(), wksp.provider_tr_ids.end(), id)
+                == wksp.provider_tr_ids.end()) {
+                return StatusCode::invalid_state;
+            }
+            if (std::find(wksp.staged_tr_ids.begin(), wksp.staged_tr_ids.end(), id)
+                == wksp.staged_tr_ids.end()) {
+                return StatusCode::invalid_state;
+            }
+            if (std::find(wksp.propagated_tr_ids.begin(), wksp.propagated_tr_ids.end(), id)
+                != wksp.propagated_tr_ids.end()) {
+                return StatusCode::invalid_state;
+            }
+            ++provider_tr_count;
+        }
+
+        if (has_att_provider) {
+            StatusCode status
+                = validate_orientation_provider(*body->ephemeris_providers.orientation);
+            if (status != StatusCode::ok) return status;
+            if (!body->propagate_att
+                || cel->attitude_model != CelestialAttitudeModel::provider) {
+                return StatusCode::invalid_input;
+            }
+            if (std::find(wksp.provider_att_ids.begin(), wksp.provider_att_ids.end(), id)
+                == wksp.provider_att_ids.end()) {
+                return StatusCode::invalid_att_state;
+            }
+            if (std::find(wksp.staged_att_ids.begin(), wksp.staged_att_ids.end(), id)
+                == wksp.staged_att_ids.end()) {
+                return StatusCode::invalid_att_state;
+            }
+            ++provider_att_count;
+        } else if (cel->attitude_model == CelestialAttitudeModel::provider) {
+            return StatusCode::invalid_input;
+        }
+    }
+
+    if (provider_tr_count != wksp.provider_tr_ids.size()) {
+        return StatusCode::invalid_state;
+    }
+    if (provider_att_count != wksp.provider_att_ids.size()) {
+        return StatusCode::invalid_att_state;
+    }
+
+    return StatusCode::ok;
+}
+
+WorldStepResult step_world(
+    World& world,
+    f64 dt,
+    const WorldStepperConfig& cfg,
+    WorldStepperWorkspace& wksp
+) {
+    WorldStepResult result;
+    result.t = world.t_sim();
+
+    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1 || !finite_pos(cfg.dt_scale)) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+
+    if (cfg.step_tr && cfg.step_att && cfg.integrator_tr != cfg.integrator_att) {
+        result.status = StatusCode::unsupported_method;
+        return result;
+    }
+
+    if (wksp.dirty) rebuild_world_stepper_workspace(world, wksp);
+
+    result.status = validate_world_provider_step(world, wksp);
+    if (result.status != StatusCode::ok) return result;
+
+    f64 t_target = world.t_sim() + dt * cfg.dt_scale * cfg.ticks;
+    if (!isfinite(t_target)) {
+        result.status = StatusCode::invalid_input;
+        return result;
+    }
+
+    WorldProviderBoundary boundary;
+    result.status = find_world_provider_boundary(world, t_target, wksp, boundary);
+    if (result.status != StatusCode::ok) return result;
+
+    bool reject_step = false;
+    bool handoff_required = false;
+    bool stop_at_boundary = false;
+    for (const ProviderBoundaryEvent& event : boundary.events) {
+        switch (event.action) {
+        case ProviderCoverageAction::reject_step: reject_step = true; break;
+        case ProviderCoverageAction::handoff_to_dynamics: handoff_required = true; break;
+        case ProviderCoverageAction::stop_world: stop_at_boundary = true; break;
+        case ProviderCoverageAction::extrapolate: [[fallthrough]];
+        case ProviderCoverageAction::hold_state: {
+            result.status = StatusCode::invalid_input;
+            return result;
+        }
+        }
+    }
+
+    if (reject_step) {
+        result.status = StatusCode::sample_not_found;
+        return result;
+    }
+    if (handoff_required) {
+        result.status = StatusCode::unsupported_method;
+        return result;
+    }
+
+    const WorldProviderBoundary* stop_boundary = stop_at_boundary ? &boundary : nullptr;
+
+    if (!cfg.step_att && !cfg.step_tr) {
+        f64 dt_sub = dt * cfg.dt_scale / cfg.substeps;
+        for (i32 tick = 0; tick < cfg.ticks; ++tick) {
+            for (i32 substep = 0; substep < cfg.substeps; ++substep) {
+                f64 dt_actual = dt_sub;
+                bool boundary_step = false;
+                if (stop_boundary != nullptr) {
+                    f64 t_sub_target = world.t_sim() + dt_sub;
+                    boundary_step = reaches_provider_boundary(
+                        world.t_sim(),
+                        t_sub_target,
+                        *stop_boundary
+                    );
+                    if (boundary_step) {
+                        dt_actual = stop_boundary->t_boundary - world.t_sim();
+                    }
+                }
+
+                world.advance_time(dt_actual);
+                result.stats.dt_sim_advanced += dt_actual;
+                if (dt_actual != 0.0) ++result.stats.substeps_completed;
+
+                if (boundary_step) {
+                    result.t = world.t_sim();
+                    result.status = StatusCode::provider_coverage_end;
+                    return result;
+                }
+            }
+            ++result.stats.ticks_completed;
+        }
+
+        result.t = world.t_sim();
+        result.status = StatusCode::ok;
+        return result;
+    }
+
+    IntegratorType method = cfg.integrator_tr;
+    if (cfg.step_tr && !cfg.step_att) {
+        method = cfg.integrator_tr;
+    } else if (cfg.step_att && !cfg.step_tr) {
+        method = cfg.integrator_att;
+    }
+
+    if (const auto* fixed = std::get_if<IntegratorTypeFixed>(&method)) {
+        return step_world_fixed_impl(world, dt, *fixed, cfg, wksp, stop_boundary);
+    }
+
+    if (const auto* adaptive = std::get_if<IntegratorTypeAdaptive>(&method)) {
+        return step_world_adaptive_impl(world, dt, *adaptive, cfg, wksp, stop_boundary);
+    }
+
+    return result;
+}
+
+WorldStepResult step_world(World& world, f64 dt, const WorldStepperConfig& cfg) {
+    WorldStepperWorkspace wksp;
+    return step_world(world, dt, cfg, wksp);
+}
+
+void rebuild_world_stepper_workspace(const World& world, WorldStepperWorkspace& wksp) {
+    // TODO: add conditional/caching
+    wksp.propagated_tr_ids = propagated_tr_ids(world);
+    wksp.propagated_att_ids = propagated_att_ids(world);
+    wksp.celestial_att_ids = celestial_att_ids(world);
+    wksp.gravity_source_ids = gravity_source_ids(world);
+    wksp.source_att_ids = source_att_ids(world);
+    wksp.provider_tr_ids = provider_tr_ids(world);
+    wksp.provider_att_ids = provider_att_ids(world);
+    wksp.staged_tr_ids = staged_tr_ids(wksp.propagated_tr_ids, wksp.provider_tr_ids);
+    wksp.staged_att_ids = staged_att_ids(wksp.propagated_att_ids, wksp.celestial_att_ids);
+    wksp.dirty = false;
+
+    /*
+    Mark dirty = true after:
+    Adding, removing, activating, or deactivating bodies.
+    Changing propagate_tr or propagate_att.
+    Anchoring or freeing a station.
+    Changing mass-properties active.
+    Changing emits_gravity or has_atmosphere.
+    Changing a celestial attitude model between fixed and propagated/provider-driven.
+    Attaching, replacing, or removing a translation/orientation ephemeris provider.
+    Replacing or reloading the world.
+    */
+}
+
+// Legacy Stepping functions ---------------------------------------------------
+
+DerivTr derivtr_world(const World& world, EntityId id, const StateTr& x) {
+    // TODO: source states still read from world state
+    // not fully staged yet for moving sources
+    DerivTr dx;
+    dx.dr = x.v;
+    dx.dv = world.gravity_accel_on(id, x);
+
+    return dx;
+}
+
+DerivAtt derivatt_world(const World& world, EntityId id, const StateAtt& x) {
+    DerivAtt dx;
+
+    const Body* body = world.body(id);
+    switch (body->body_type) {
+    case BodyType::celestial: break;
+    case BodyType::satellite: {
+        const Satellite* sat = world.satellite(id);
+        if (sat == nullptr || !sat->mass_properties.active) break;
+        if (sat->mass_properties.principal_axes) {
+            dx = d_rigidbody(world.t_sim(), x, sat->mass_properties.I);
+        } else {
+            dx = d_rigidbody(
+                world.t_sim(),
+                x,
+                sat->mass_properties.I,
+                sat->mass_properties.I_inv
+            );
+        }
+    } break;
+    case BodyType::station: {
+        const Station* stat = world.station(id);
+        if (stat == nullptr || stat->anchored || !stat->mass_properties.active) break;
+        if (stat->mass_properties.principal_axes) {
+            dx = d_rigidbody(world.t_sim(), x, stat->mass_properties.I);
+        } else {
+            dx = d_rigidbody(
+                world.t_sim(),
+                x,
+                stat->mass_properties.I,
+                stat->mass_properties.I_inv
+            );
+        }
+    } break;
+
+    case BodyType::unknown: break;
+    }
+
+    return dx;
+}
+
+bool step_tr_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg) {
+    Body* body = world.body(id);
+    if (body == nullptr) return false;
+    const auto* method = std::get_if<IntegratorTypeFixed>(&cfg.integrator_tr);
+    if (method == nullptr) return false;
+
+    auto f = [&](f64 t, StateTr x) -> DerivTr { return derivtr_world(world, id, x); };
+    auto tx
+        = step_integrator<StateTr, DerivTr>(f, world.t_sim(), body->x_tr, dt, *method);
+    body->x_tr = tx.second;
+
+    return true;
+}
+
+bool step_att_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg) {
+    Body* body = world.body(id);
+    if (body == nullptr) return false;
+    const auto* method = std::get_if<IntegratorTypeFixed>(&cfg.integrator_att);
+    if (method == nullptr) return false;
+
+    switch (body->body_type) {
+    case BodyType::celestial: return false;
+    case BodyType::station: {
+        Station* stat = world.station(id);
+        if (stat->anchored || !stat->mass_properties.active) return false;
+    } break;
+    case BodyType::satellite: {
+        Satellite* sat = world.satellite(id);
+        if (!sat->mass_properties.active) return false;
+    } break;
+    default: return false;
+    }
+
+    auto f = [&](f64 t, StateAtt x) -> DerivAtt { return derivatt_world(world, id, x); };
+    auto tx
+        = step_integrator<StateAtt, DerivAtt>(f, world.t_sim(), body->x_att, dt, *method);
+    body->x_att = tx.second;
+    normalize_quaternion_inplace<f64>(body->x_att.q);
+
+    return true;
+}
+
+bool step_cel_att_world(World& world, EntityId id, f64 dt) {
+    Celestial* cel = world.celestial(id);
+    if (cel == nullptr) return false;
+
+    switch (cel->attitude_model) {
+    case CelestialAttitudeModel::fixed: return false;
+    case CelestialAttitudeModel::simple_spin: {
+        cel->x_att.q = step_q_simple_spin(cel->x_att, dt);
+    } break;
+    case CelestialAttitudeModel::provider: {
+        return false; // TODO: add provider later
+    } break;
+    }
+
+    return true;
+}
+
+struct DerivTrWeight {
+    // K_i in RK integrators (translational)
+    const umap<EntityId, DerivTr>* k = nullptr;
+    f64 scale = 0.0;
+};
+
+static WorldTrStage build_tr_stage(
+    const World& world,
+    const WorldStepperWorkspace& wksp
+) {
+    WorldTrStage stage;
+    // TODO: update fixed-step RK paths to propagate stage-build statuses.
+    if (build_tr_stage(world, wksp, stage) != StatusCode::ok) return {};
+    return stage;
+}
+
+static WorldAttStage build_source_att_stage(
+    const World& world,
+    const WorldStepperWorkspace& wksp,
+    bool stage_source_att
+) {
+    WorldAttStage stage;
+    if (!stage_source_att) return stage;
+
+    svec<EntityId> ids = wksp.source_att_ids;
+    for (EntityId id : ids) {
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr || !cel->emits_gravity) {
+            // || cel->gravity_model == GravityModel::pointmass){
+            continue;
+        }
+        // TODO: add has atmosphere and radiation
+        // only bodies that affect force via their attitude used
+
+        stage.ids.push_back(id);
+        stage.x.emplace(id, cel->x_att);
+    }
+
+    return stage;
+}
+
+static StateTr source_tr_from_stage_or_world_legacy(
+    const World& world,
+    const WorldTrStage& stage,
+    EntityId source_id
+) {
+    // NOTE: currently only celestials are valid gravity emitters.
+    const Celestial* cel = world.celestial(source_id);
+    if (cel == nullptr) return StateTr{};
+
+    auto it = stage.x.find(source_id);
+    if (it == stage.x.end()) return cel->x_tr; // world fallback
+
+    return it->second;
+}
+
+static StateAtt source_att_from_stage_or_world_legacy(
+    const World& world,
+    const WorldAttStage& stage,
+    EntityId source_id
+) {
+    const Body* body = world.body(source_id);
+    if (body == nullptr) return StateAtt{};
+
+    auto it = stage.x.find(source_id);
+    if (it == stage.x.end()) return body->x_att;
+
+    return it->second;
+}
+
+static WorldTrStage build_tr_trial_stage(
+    const WorldTrStage& base_stage,
+    std::initializer_list<DerivTrWeight> weights
+) {
+    WorldTrStage trial;
+    trial.ids = base_stage.ids;
+
+    for (EntityId id : base_stage.ids) {
+        StateTr x = base_stage.x.at(id);
+
+        for (const DerivTrWeight& weight : weights) {
+            if (weight.k == nullptr) continue;
+            x += weight.scale * weight.k->at(id);
+        }
+        trial.x.emplace(id, x);
+    }
+
+    return trial;
+}
+
+static WorldAttStage build_source_att_trial_stage(
+    const World& world,
+    const WorldAttStage& base_stage,
+    const f64 dt_stage
+) {
+    WorldAttStage trial;
+    trial.ids = base_stage.ids;
+
+    for (EntityId id : base_stage.ids) {
+        const Celestial* cel = world.celestial(id);
+        if (cel == nullptr) continue;
+
+        StateAtt x = base_stage.x.at(id);
+
+        switch (cel->attitude_model) {
+        case CelestialAttitudeModel::fixed: break; // no change
+        case CelestialAttitudeModel::simple_spin: {
+            x.q = step_q_simple_spin(x, dt_stage);
+        } break;
+        case CelestialAttitudeModel::provider: {
+            // TODO: add provider here attitude here
+        } break;
+        }
+
+        trial.x.emplace(id, x);
+    }
+
+    return trial;
+}
+
+static vec3d staged_gravity_accel_on_legacy(
+    const World& world,
+    const WorldTrStage& stage_tr,
+    const WorldAttStage& stage_att,
+    EntityId target_id,
+    const StateTr& x_tr_target,
+    const WorldStepperWorkspace& wksp
+) {
+    vec3d a = vec3d0;
+    const Body* target = world.body(target_id);
+    if (target == nullptr) return a;
+
+    const svec<EntityId>& source_ids = wksp.gravity_source_ids;
+    for (EntityId source_id : source_ids) {
+        if (target_id == source_id) continue;
+        const Body* body = world.body(source_id);
+        if (body == nullptr || !body->emits_gravity) continue;
+        const Celestial* source = world.celestial(source_id);
+        if (source == nullptr) continue;
+        StateTr x_tr_source
+            = source_tr_from_stage_or_world_legacy(world, stage_tr, source_id);
+        StateAtt x_att_source
+            = source_att_from_stage_or_world_legacy(world, stage_att, source_id);
+        a += world.gravity_accel_from(
+            target_id,
+            x_tr_target,
+            source_id,
+            x_tr_source,
+            x_att_source
+        );
+    }
+
+    return a;
+}
+
+static DerivTr derivtr_world_staged_legacy(
+    const World& world,
+    const WorldTrStage& stage_tr,
+    const WorldAttStage& stage_att,
+    EntityId target_id,
+    const StateTr& x_tr_target,
+    const WorldStepperWorkspace& wksp
+) {
+    // TODO: add other forces later
+    DerivTr dx;
+    dx.dr = x_tr_target.v;
+    dx.dv = staged_gravity_accel_on_legacy(
+        world,
+        stage_tr,
+        stage_att,
+        target_id,
+        x_tr_target,
+        wksp
+    );
+    return dx;
+}
+
+static DerivTr derivtr_world_staged_legacy(
+    const World& world,
+    f64 t_stage,
+    const WorldTrStage& stage_tr,
+    const WorldAttStage& stage_att,
+    EntityId target_id,
+    const StateTr& x_tr_target,
+    const WorldStepperWorkspace& wksp
+) {
+    // TODO: providers will use t_stage, but not yet implemented
+    return derivtr_world_staged_legacy(
+        world,
+        stage_tr,
+        stage_att,
+        target_id,
+        x_tr_target,
+        wksp
+    );
+}
+
 static bool step_tr_world_staged_rk1(
     World& world,
     f64 t,
@@ -1639,7 +2526,7 @@ static bool step_tr_world_staged_rk1(
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
+        k1[id] = derivtr_world_staged_legacy(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -1667,7 +2554,7 @@ static bool step_tr_world_staged_rk2(
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
+        k1[id] = derivtr_world_staged_legacy(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk2 stage 2
@@ -1679,7 +2566,7 @@ static bool step_tr_world_staged_rk2(
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
+        k2[id] = derivtr_world_staged_legacy(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -1708,7 +2595,7 @@ static bool step_tr_world_staged_rk2heun(
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
+        k1[id] = derivtr_world_staged_legacy(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk2 stage 2
@@ -1720,7 +2607,7 @@ static bool step_tr_world_staged_rk2heun(
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
+        k2[id] = derivtr_world_staged_legacy(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -1748,7 +2635,7 @@ static bool step_tr_world_staged_rk2ralston(
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
+        k1[id] = derivtr_world_staged_legacy(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk2 stage 2
@@ -1760,7 +2647,7 @@ static bool step_tr_world_staged_rk2ralston(
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
+        k2[id] = derivtr_world_staged_legacy(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -1788,7 +2675,7 @@ static bool step_tr_world_staged_rk3(
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
+        k1[id] = derivtr_world_staged_legacy(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk3 stage 2
@@ -1800,7 +2687,7 @@ static bool step_tr_world_staged_rk3(
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
+        k2[id] = derivtr_world_staged_legacy(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     // rk3 stage 3
@@ -1815,7 +2702,7 @@ static bool step_tr_world_staged_rk3(
     umap<EntityId, DerivTr> k3;
     for (EntityId id : stage2_tr.ids) {
         const StateTr& x2 = stage2_tr.x.at(id);
-        k3[id] = derivtr_world_staged(world, stage2_tr, stage2_att, id, x2, wksp);
+        k3[id] = derivtr_world_staged_legacy(world, stage2_tr, stage2_att, id, x2, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -1843,7 +2730,7 @@ static bool step_tr_world_staged_rk4(
     umap<EntityId, DerivTr> k1;
     for (EntityId id : stage0_tr.ids) {
         const StateTr& x0 = stage0_tr.x.at(id);
-        k1[id] = derivtr_world_staged(world, stage0_tr, stage0_att, id, x0, wksp);
+        k1[id] = derivtr_world_staged_legacy(world, stage0_tr, stage0_att, id, x0, wksp);
     }
 
     // rk4 stage 2
@@ -1855,7 +2742,7 @@ static bool step_tr_world_staged_rk4(
     umap<EntityId, DerivTr> k2;
     for (EntityId id : stage1_tr.ids) {
         const StateTr& x1 = stage1_tr.x.at(id);
-        k2[id] = derivtr_world_staged(world, stage1_tr, stage1_att, id, x1, wksp);
+        k2[id] = derivtr_world_staged_legacy(world, stage1_tr, stage1_att, id, x1, wksp);
     }
 
     // rk4 stage 3
@@ -1867,7 +2754,7 @@ static bool step_tr_world_staged_rk4(
     umap<EntityId, DerivTr> k3;
     for (EntityId id : stage2_tr.ids) {
         const StateTr& x2 = stage2_tr.x.at(id);
-        k3[id] = derivtr_world_staged(world, stage2_tr, stage2_att, id, x2, wksp);
+        k3[id] = derivtr_world_staged_legacy(world, stage2_tr, stage2_att, id, x2, wksp);
     }
 
     // rk4 stage 4
@@ -1879,7 +2766,7 @@ static bool step_tr_world_staged_rk4(
     umap<EntityId, DerivTr> k4;
     for (EntityId id : stage3_tr.ids) {
         const StateTr& x3 = stage3_tr.x.at(id);
-        k4[id] = derivtr_world_staged(world, stage3_tr, stage3_att, id, x3, wksp);
+        k4[id] = derivtr_world_staged_legacy(world, stage3_tr, stage3_att, id, x3, wksp);
     }
 
     for (EntityId id : stage0_tr.ids) {
@@ -1952,6 +2839,10 @@ WorldStepResult step_world_legacy(
     if (wksp.dirty) {
         rebuild_world_stepper_workspace(world, wksp);
     }
+    if (!wksp.provider_tr_ids.empty() || !wksp.provider_att_ids.empty()) {
+        result.status = StatusCode::unsupported_method;
+        return result;
+    }
 
     if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1) {
         result.status = StatusCode::invalid_input;
@@ -2021,246 +2912,4 @@ WorldStepResult step_world_legacy(
     result.status = StatusCode::ok;
     result.t = world.t_sim();
     return result;
-}
-
-static WorldStepResult step_world_fixed_impl(
-    World& world,
-    f64 dt,
-    IntegratorTypeFixed method,
-    const WorldStepperConfig& cfg,
-    WorldStepperWorkspace& wksp
-) {
-    WorldStepResult result;
-    result.t = world.t_sim();
-
-    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1) {
-        result.status = StatusCode::invalid_input;
-        return result;
-    }
-    if (!finite_pos(cfg.dt_scale)) {
-        result.status = StatusCode::invalid_input;
-        return result;
-    }
-
-    if (wksp.dirty) rebuild_world_stepper_workspace(world, wksp);
-
-    f64 dt_tick = dt * cfg.dt_scale;
-    f64 dt_sub = dt_tick / cfg.substeps;
-
-    for (i32 tick = 0; tick < cfg.ticks; ++tick) {
-        for (i32 substep = 0; substep < cfg.substeps; ++substep) {
-            if (dt_sub != 0.0 && (cfg.step_tr || cfg.step_att)) {
-                StatusCode status = dispatch_world_fixed_tableau(
-                    world,
-                    world.t_sim(),
-                    dt_sub,
-                    method,
-                    cfg,
-                    wksp
-                );
-                if (status != StatusCode::ok) {
-                    result.status = status;
-                    result.t = world.t_sim();
-                    return result;
-                }
-            }
-
-            world.advance_time(dt_sub);
-            result.stats.dt_sim_advanced += dt_sub;
-            ++result.stats.substeps_completed;
-        }
-        ++result.stats.ticks_completed;
-    }
-
-    result.status = StatusCode::ok;
-    result.t = world.t_sim();
-    return result;
-}
-
-static void accumulate_adaptive_stats(
-    AdaptiveIntegratorStats& total,
-    const AdaptiveIntegratorStats& current
-) {
-    i64 accepted_before = total.accepted_steps;
-
-    total.attempted_steps += current.attempted_steps;
-    total.accepted_steps += current.accepted_steps;
-    total.rejected_steps += current.rejected_steps;
-    total.deriv_evals += current.deriv_evals;
-
-    if (current.accepted_steps == 0) return;
-
-    if (accepted_before == 0) {
-        total.min_accepted_dt = current.min_accepted_dt;
-        total.max_accepted_dt = current.max_accepted_dt;
-    } else {
-        total.min_accepted_dt = std::min(total.min_accepted_dt, current.min_accepted_dt);
-        total.max_accepted_dt = std::max(total.max_accepted_dt, current.max_accepted_dt);
-    }
-    total.final_accepted_dt = current.final_accepted_dt;
-}
-
-static WorldStepResult step_world_adaptive_impl(
-    World& world,
-    f64 dt,
-    IntegratorTypeAdaptive method,
-    const WorldStepperConfig& stepper_cfg,
-    WorldStepperWorkspace& wksp
-) {
-    WorldStepResult result;
-
-    const AdaptiveIntegratorConfig& adaptive_cfg = stepper_cfg.adaptive.opts;
-
-    result.status = validate_adaptive_world_integrator_config(method, stepper_cfg);
-    if (result.status != StatusCode::ok) return result;
-
-    if (!isfinite(dt) || !finite_pos(stepper_cfg.dt_scale)) {
-        result.status = StatusCode::invalid_input;
-        return result;
-    }
-    if (stepper_cfg.ticks < 1 || stepper_cfg.substeps < 1) {
-        result.status = StatusCode::invalid_input;
-        return result;
-    }
-
-    result.t = world.t_sim();
-    if (wksp.dirty) {
-        rebuild_world_stepper_workspace(world, wksp);
-    }
-
-    f64 dt_tick = dt * stepper_cfg.dt_scale;
-    f64 dt_sub = 0.0;
-    i32 subs;
-    if (stepper_cfg.adaptive.use_substeps) {
-        subs = stepper_cfg.substeps;
-    } else {
-        subs = 1;
-    }
-    dt_sub = dt_tick / subs;
-
-    for (i32 tick = 0; tick < stepper_cfg.ticks; ++tick) {
-        for (i32 substep = 0; substep < subs; ++substep) {
-            f64 tf_sub = world.t_sim() + dt_sub;
-
-            WorldStepResult sub_result = dispatch_world_adaptive_tableau(
-                world,
-                tf_sub,
-                method,
-                stepper_cfg,
-                wksp
-            );
-
-            result.t = sub_result.t;
-            result.stats.dt_sim_advanced += sub_result.stats.dt_sim_advanced;
-            accumulate_adaptive_stats(result.stats.adaptive, sub_result.stats.adaptive);
-
-            if (sub_result.stats.adaptive.accepted_steps > 0) {
-                result.final_error_norm = sub_result.final_error_norm;
-            }
-
-            if (sub_result.status != StatusCode::ok) {
-                result.status = sub_result.status;
-                result.t = world.t_sim();
-                return result;
-            }
-
-            ++result.stats.substeps_completed;
-        }
-
-        ++result.stats.ticks_completed;
-    }
-
-    result.status = StatusCode::ok;
-    result.t = world.t_sim();
-    return result;
-}
-
-static WorldStepResult step_world_adaptive_impl(
-    World& world,
-    f64 dt,
-    IntegratorTypeAdaptive method,
-    const WorldStepperConfig& stepper_cfg
-) {
-    WorldStepperWorkspace wksp;
-    return step_world_adaptive_impl(world, dt, method, stepper_cfg, wksp);
-}
-
-WorldStepResult step_world(
-    World& world,
-    f64 dt,
-    const WorldStepperConfig& cfg,
-    WorldStepperWorkspace& wksp
-) {
-    WorldStepResult result;
-    result.t = world.t_sim();
-
-    if (!isfinite(dt) || cfg.substeps < 1 || cfg.ticks < 1 || !finite_pos(cfg.dt_scale)) {
-        result.status = StatusCode::invalid_input;
-        return result;
-    }
-
-    if (cfg.step_tr && cfg.step_att && cfg.integrator_tr != cfg.integrator_att) {
-        result.status = StatusCode::unsupported_method;
-        return result;
-    }
-
-    if (!cfg.step_att && !cfg.step_tr) {
-        f64 dt_sub = dt * cfg.dt_scale / cfg.substeps;
-        for (i32 tick = 0; tick < cfg.ticks; ++tick) {
-            for (i32 substep = 0; substep < cfg.substeps; ++substep) {
-                world.advance_time(dt_sub);
-                result.stats.dt_sim_advanced += dt_sub;
-                ++result.stats.substeps_completed;
-            }
-            ++result.stats.ticks_completed;
-        }
-
-        result.t = world.t_sim();
-        result.status = StatusCode::ok;
-        return result;
-    }
-
-    IntegratorType method = cfg.integrator_tr;
-    if (cfg.step_tr && !cfg.step_att) {
-        method = cfg.integrator_tr;
-    } else if (cfg.step_att && !cfg.step_tr) {
-        method = cfg.integrator_att;
-    }
-
-    if (const auto* fixed = std::get_if<IntegratorTypeFixed>(&method)) {
-        return step_world_fixed_impl(world, dt, *fixed, cfg, wksp);
-    }
-
-    if (const auto* adaptive = std::get_if<IntegratorTypeAdaptive>(&method)) {
-        return step_world_adaptive_impl(world, dt, *adaptive, cfg, wksp);
-    }
-
-    return result;
-}
-
-WorldStepResult step_world(World& world, f64 dt, const WorldStepperConfig& cfg) {
-    WorldStepperWorkspace wksp;
-    return step_world(world, dt, cfg, wksp);
-}
-
-void rebuild_world_stepper_workspace(const World& world, WorldStepperWorkspace& wksp) {
-    // TODO: add conditional/caching
-    wksp.propagated_tr_ids = propagated_tr_ids(world);
-    wksp.propagated_att_ids = propagated_att_ids(world);
-    wksp.celestial_att_ids = celestial_att_ids(world);
-    wksp.gravity_source_ids = gravity_source_ids(world);
-    wksp.source_att_ids = source_att_ids(world);
-    wksp.staged_att_ids = staged_att_ids(wksp.propagated_att_ids, wksp.celestial_att_ids);
-    wksp.dirty = false;
-
-    /*
-    Mark dirty = true after:
-    Adding, removing, activating, or deactivating bodies.
-    Changing propagate_tr or propagate_att.
-    Anchoring or freeing a station.
-    Changing mass-properties active.
-    Changing emits_gravity or has_atmosphere.
-    Changing a celestial attitude model between fixed and propagated/provider-driven.
-    Replacing or reloading the world.
-    */
 }

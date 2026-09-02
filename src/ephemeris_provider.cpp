@@ -20,11 +20,49 @@ static StatusCode validate_sampling_options(const OrientationSampleOptions& opts
     return StatusCode::ok;
 }
 
+static StatusCode validate_provider_coverage_action(
+    ProviderCoverageAction action,
+    ExtrapolationMethod extrapolation
+) {
+    switch (action) {
+    case ProviderCoverageAction::reject_step: [[fallthrough]];
+    case ProviderCoverageAction::hold_state: [[fallthrough]];
+    case ProviderCoverageAction::handoff_to_dynamics: [[fallthrough]];
+    case ProviderCoverageAction::stop_world: return StatusCode::ok;
+    case ProviderCoverageAction::extrapolate: {
+        if (extrapolation == ExtrapolationMethod::reject) {
+            return StatusCode::invalid_input;
+        }
+        return StatusCode::ok;
+    }
+    }
+
+    return StatusCode::invalid_input;
+}
+
+static StatusCode validate_provider_coverage_policy(
+    const ProviderCoveragePolicy& coverage,
+    ExtrapolationMethod extrapolation
+) {
+    StatusCode status
+        = validate_provider_coverage_action(coverage.before_start, extrapolation);
+    if (status != StatusCode::ok) return status;
+
+    return validate_provider_coverage_action(coverage.after_end, extrapolation);
+}
+
 StatusCode validate_ephemeris_provider(const EphemerisProvider& provider) {
     StatusCode status;
 
     status = validate_sampling_options(provider.options);
     if (status != StatusCode::ok) return status;
+
+    status = validate_provider_coverage_policy(
+        provider.coverage,
+        provider.options.extrapolation
+    );
+    if (status != StatusCode::ok) return status;
+
     if (!provider.table.has_velocity) {
         if (provider.options.interpolation
             == CartesianInterpolationMethod::cubic_hermite) {
@@ -46,6 +84,13 @@ StatusCode validate_orientation_provider(const OrientationProvider& provider) {
 
     status = validate_sampling_options(provider.options);
     if (status != StatusCode::ok) return status;
+
+    status = validate_provider_coverage_policy(
+        provider.coverage,
+        provider.options.extrapolation
+    );
+    if (status != StatusCode::ok) return status;
+
     if (!provider.table.has_angular_velocity
         && provider.options.extrapolation == ExtrapolationMethod::constant_velocity)
         return StatusCode::invalid_input;
@@ -56,7 +101,7 @@ StatusCode validate_orientation_provider(const OrientationProvider& provider) {
     return StatusCode::ok;
 }
 
-static StatusCode ephemeris_query_dt(
+StatusCode ephemeris_query_dt(
     const EphemerisEpochMetadata& metadata,
     const JulianDate& query_epoch,
     TimeScale query_scale,
@@ -105,8 +150,44 @@ StatusCode query_ephemeris_provider(
     );
     if (status != StatusCode::ok) return status;
 
+    ProviderCoverageAction action;
     StateTr temp{};
-    status = sample_cartesian_ephemeris(provider.table, dt, temp, provider.options);
+    CartesianSampleOptions opts = provider.options;
+
+    if (provider.table.dt.empty()) return StatusCode::empty_ephemeris;
+
+    if (dt < provider.table.dt.front() - opts.tol) {
+        action = provider.coverage.before_start;
+    } else if (dt > provider.table.dt.back() + opts.tol) {
+        action = provider.coverage.after_end;
+    } else {
+        status = sample_cartesian_ephemeris(provider.table, dt, temp, opts);
+        if (status != StatusCode::ok) return status;
+        out = temp;
+        return StatusCode::ok;
+    }
+
+    switch (action) {
+    case ProviderCoverageAction::reject_step: {
+        return StatusCode::sample_not_found;
+    } break;
+    case ProviderCoverageAction::extrapolate: {
+        if (opts.extrapolation == ExtrapolationMethod::reject)
+            return StatusCode::invalid_input;
+    } break;
+    case ProviderCoverageAction::hold_state: {
+        opts.extrapolation = ExtrapolationMethod::hold;
+    } break;
+    case ProviderCoverageAction::stop_world: {
+        return StatusCode::provider_coverage_end;
+    } break;
+    case ProviderCoverageAction::handoff_to_dynamics: {
+        return StatusCode::unsupported_method; // TODO: implement this later
+    } break;
+    default: return StatusCode::invalid_input;
+    }
+
+    status = sample_cartesian_ephemeris(provider.table, dt, temp, opts);
     if (status != StatusCode::ok) return status;
 
     out = temp;
@@ -130,8 +211,44 @@ StatusCode query_orientation_provider(
     );
     if (status != StatusCode::ok) return status;
 
+    if (provider.table.dt.empty()) return StatusCode::empty_ephemeris;
+
+    ProviderCoverageAction action;
     StateAtt temp{};
-    status = sample_orientation_ephemeris(provider.table, dt, temp, provider.options);
+    OrientationSampleOptions opts = provider.options;
+
+    if (dt < provider.table.dt.front() - opts.tol) {
+        action = provider.coverage.before_start;
+    } else if (dt > provider.table.dt.back() + opts.tol) {
+        action = provider.coverage.after_end;
+    } else {
+        status = sample_orientation_ephemeris(provider.table, dt, temp, opts);
+        if (status != StatusCode::ok) return status;
+        out = temp;
+        return StatusCode::ok;
+    }
+
+    switch (action) {
+    case ProviderCoverageAction::reject_step: {
+        return StatusCode::sample_not_found;
+    } break;
+    case ProviderCoverageAction::extrapolate: {
+        if (opts.extrapolation == ExtrapolationMethod::reject)
+            return StatusCode::invalid_input;
+    } break;
+    case ProviderCoverageAction::hold_state: {
+        opts.extrapolation = ExtrapolationMethod::hold;
+    } break;
+    case ProviderCoverageAction::stop_world: {
+        return StatusCode::provider_coverage_end;
+    } break;
+    case ProviderCoverageAction::handoff_to_dynamics: {
+        return StatusCode::unsupported_method; // TODO: implement this later
+    } break;
+    default: return StatusCode::invalid_input;
+    }
+
+    status = sample_orientation_ephemeris(provider.table, dt, temp, opts);
     if (status != StatusCode::ok) return status;
 
     out = temp;

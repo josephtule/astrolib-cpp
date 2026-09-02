@@ -31,12 +31,15 @@ struct WorldStepperConfig {
 };
 
 struct WorldStepperWorkspace {
-    svec<EntityId> propagated_tr_ids;  // all propagated tr
-    svec<EntityId> propagated_att_ids; // satellites, free-stations
-    svec<EntityId> celestial_att_ids;  // celestials with simple-spin/provided
+    svec<EntityId> propagated_tr_ids;  // numerically propagated translation
+    svec<EntityId> propagated_att_ids; // satellites and free stations
+    svec<EntityId> celestial_att_ids;  // simple-spin/provider celestials
     svec<EntityId> gravity_source_ids; // gravity sources
     svec<EntityId> source_att_ids;     // sources requiring attitude
-    svec<EntityId> staged_att_ids; // union of propagated_att_ids and celestial_att_ids
+    svec<EntityId> provider_tr_ids;    // provider-owned translation
+    svec<EntityId> provider_att_ids;   // provider-owned attitude
+    svec<EntityId> staged_tr_ids;      // propagated and provider translation
+    svec<EntityId> staged_att_ids;     // propagated and celestial attitude
     bool dirty = true;
 };
 
@@ -45,9 +48,7 @@ void rebuild_world_stepper_workspace(
     WorldStepperWorkspace& workspace
 );
 
-inline void invalidate_stepper_wksp(WorldStepperWorkspace& wksp) {
-    wksp.dirty = true;
-}
+inline void invalidate_stepper_wksp(WorldStepperWorkspace& wksp) { wksp.dirty = true; }
 
 struct WorldStepperStats {
     i32 ticks_completed = 0;
@@ -107,21 +108,9 @@ DerivTr derivtr_world(const World& world, EntityId id, const StateTr& x);
 
 bool step_tr_world(World& world, EntityId id, f64 dt, const WorldStepperConfig& cfg);
 
-WorldStepResult step_world_legacy(
-    World& world,
-    f64 dt,
-    const WorldStepperConfig& cfg
-);
+WorldStepResult step_world_legacy(World& world, f64 dt, const WorldStepperConfig& cfg);
 
 WorldStepResult step_world_legacy(
-    World& world,
-    f64 dt,
-    const WorldStepperConfig& cfg,
-    WorldStepperWorkspace& wksp
-);
-
-
-WorldStepResult step_world(
     World& world,
     f64 dt,
     const WorldStepperConfig& cfg,
@@ -131,5 +120,8 @@ WorldStepResult step_world(
 WorldStepResult step_world(
     World& world,
     f64 dt,
-    const WorldStepperConfig& cfg
+    const WorldStepperConfig& cfg,
+    WorldStepperWorkspace& wksp
 );
+
+WorldStepResult step_world(World& world, f64 dt, const WorldStepperConfig& cfg);

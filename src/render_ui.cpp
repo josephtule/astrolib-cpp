@@ -41,7 +41,8 @@ static Color status_color(const StatusCode code) {
 
     // Informational non-failure states
     case StatusCode::file_overwritten:
-    case StatusCode::prediction_only: return SKYBLUE;
+    case StatusCode::prediction_only:
+    case StatusCode::provider_coverage_end: return SKYBLUE;
 
     // Warning states that may still produce a usable result
     case StatusCode::max_iters_reached:

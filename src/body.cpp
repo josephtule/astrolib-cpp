@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/body.hpp"
-#include "core/status.hpp"
+#include "core/ephemeris_provider.hpp"
 #include "core/measurement.hpp"
 #include "core/observation_type.hpp"
+#include "core/status.hpp"
+
+#include <utility>
 
 static StatusCode add_typed_station_instrument(
     Station& station,
@@ -313,4 +316,33 @@ void print_station_instruments(const Station& station) {
         std::string enabled_str = instrument.enabled ? "enabled" : "disabled";
         std::println("{} ({})", instrument.name, enabled_str);
     }
+}
+
+StatusCode set_celestial_ephemeris_providers(
+    Celestial& celestial,
+    BodyEphemerisProviders providers
+) {
+    StatusCode status;
+    if (providers.translation != nullptr) {
+        status = validate_ephemeris_provider(*providers.translation);
+        if (status != StatusCode::ok) return status;
+    }
+
+    if (providers.orientation != nullptr) {
+        status = validate_orientation_provider(*providers.orientation);
+        if (status != StatusCode::ok) return status;
+    }
+    if (providers.orientation == nullptr
+        && celestial.attitude_model == CelestialAttitudeModel::provider) {
+        return StatusCode::invalid_input;
+    }
+
+    if (providers.translation != nullptr) celestial.propagate_tr = false;
+    if (providers.orientation != nullptr) {
+        celestial.attitude_model = CelestialAttitudeModel::provider;
+        celestial.propagate_att = true;
+    }
+    celestial.ephemeris_providers = std::move(providers);
+
+    return StatusCode::ok;
 }

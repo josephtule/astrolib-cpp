@@ -58,6 +58,7 @@ class World {
 
     JulianDate jd{};
     TimeScale time_scale = TimeScale::utc;
+    TimeOffsets time_offsets{};
     bool date_active = false;
 
     EntityId allocate_id();
@@ -67,9 +68,12 @@ class World {
     f64 t_sim() const;
 
     bool is_date_active() const { return date_active; }
-    void set_date(const JulianDate jd);
-    void set_date(const ModifiedJulianDate mjd);
-    void set_date(const CalendarTime cal);
+    TimeScale get_time_scale() const { return time_scale; }
+    const TimeOffsets& get_time_offsets() const { return time_offsets; }
+    void set_time_offsets(TimeOffsets offsets) { time_offsets = offsets; }
+    void set_date(JulianDate jd, TimeScale scale);
+    void set_date(ModifiedJulianDate mjd, TimeScale scale);
+    void set_date(CalendarTime cal, TimeScale scale);
     JulianDate get_date_jd() const;
     ModifiedJulianDate get_date_mjd() const;
     CalendarTime get_date_cal() const;

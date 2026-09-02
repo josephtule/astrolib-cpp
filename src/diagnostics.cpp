@@ -6244,3 +6244,702 @@ void run_ephemeris_io_diag() {
     std::println("Ephemeris I/O Checks Passed = {}/{}", passed, checks);
     std::println("Ephemeris I/O Diagnostic Passed = {}", passed == checks);
 }
+
+static JulianDate ephemeris_diag_epoch(f64 dt) {
+    JulianDate epoch;
+    epoch.frac += dt / 86400.0;
+    return normalize_jd(epoch);
+}
+
+static StateTr ephemeris_diag_state(f64 dt, f64 speed = 1.0) {
+    return StateTr{
+        .r = vec3d{speed * dt, 0.0, 0.0},
+        .v = vec3d{speed, 0.0, 0.0}
+    };
+}
+
+static StateAtt ephemeris_diag_attitude(f64 dt, f64 spin_rate = 0.1) {
+    f64 half_angle = 0.5 * spin_rate * dt;
+    return StateAtt{
+        .q = vec4d{0.0, 0.0, std::sin(half_angle), std::cos(half_angle)},
+        .w = vec3d{0.0, 0.0, spin_rate}
+    };
+}
+
+static sptr<EphemerisProvider> make_ephemeris_diag_tr_provider(
+    f64 coverage_end,
+    ProviderCoverageAction before_start,
+    ProviderCoverageAction after_end,
+    f64 speed = 1.0
+) {
+    auto provider = std::make_shared<EphemerisProvider>();
+    provider->table.metadata.frame = {
+        .object = "SOURCE",
+        .center = "SIMULATION_ORIGIN",
+        .frame = "J2000"
+    };
+    provider->table.metadata.source = {
+        .source_type = "generated",
+        .source_name = "ephemeris_provider_diag"
+    };
+    provider->table.dt = {0.0, coverage_end};
+    provider->table.states = {
+        ephemeris_diag_state(0.0, speed),
+        ephemeris_diag_state(coverage_end, speed)
+    };
+    provider->options.interpolation = CartesianInterpolationMethod::linear;
+    provider->options.extrapolation = ExtrapolationMethod::constant_velocity;
+    provider->coverage = {
+        .before_start = before_start,
+        .after_end = after_end
+    };
+    return provider;
+}
+
+static sptr<OrientationProvider> make_ephemeris_diag_att_provider(
+    f64 coverage_end,
+    ProviderCoverageAction before_start,
+    ProviderCoverageAction after_end,
+    f64 spin_rate = 0.1
+) {
+    auto provider = std::make_shared<OrientationProvider>();
+    provider->table.metadata.frame = {
+        .object = "SOURCE",
+        .source_frame = "J2000",
+        .target_frame = "SOURCE_BODY"
+    };
+    provider->table.metadata.source = {
+        .source_type = "generated",
+        .source_name = "ephemeris_provider_diag"
+    };
+    provider->table.dt = {0.0, coverage_end};
+    provider->table.states = {
+        ephemeris_diag_attitude(0.0, spin_rate),
+        ephemeris_diag_attitude(coverage_end, spin_rate)
+    };
+    provider->options.interpolation = OrientationInterpolationMethod::slerp;
+    provider->options.extrapolation = ExtrapolationMethod::constant_velocity;
+    provider->coverage = {
+        .before_start = before_start,
+        .after_end = after_end
+    };
+    return provider;
+}
+
+static StatusCode build_ephemeris_provider_diag_world(
+    World& world,
+    f64 coverage_end,
+    ProviderCoverageAction before_start,
+    ProviderCoverageAction after_end,
+    EntityId& source_id,
+    EntityId& sat_id,
+    f64 source_speed = 1.0,
+    f64 spin_rate = 0.1
+) {
+    world.set_date(JulianDate{}, TimeScale::tdb);
+
+    source_id = world.spawn_celestial();
+    Celestial* source = world.celestial(source_id);
+    if (source == nullptr) return StatusCode::body_not_found;
+
+    source->name = "Provider Source";
+    source->mu = 398600.4418;
+    source->gravity_model = GravityModel::pointmass;
+    source->x_tr = ephemeris_diag_state(0.0, source_speed);
+    source->x_att = ephemeris_diag_attitude(0.0, spin_rate);
+
+    BodyEphemerisProviders providers{
+        .translation = make_ephemeris_diag_tr_provider(
+            coverage_end,
+            before_start,
+            after_end,
+            source_speed
+        ),
+        .orientation = make_ephemeris_diag_att_provider(
+            coverage_end,
+            before_start,
+            after_end,
+            spin_rate
+        )
+    };
+    StatusCode status = set_celestial_ephemeris_providers(
+        *source,
+        std::move(providers)
+    );
+    if (status != StatusCode::ok) return status;
+
+    sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    if (sat == nullptr) return StatusCode::body_not_found;
+
+    sat->name = "Integrated Satellite";
+    sat->x_tr = {
+        .r = vec3d{7000.0, 0.0, 100.0},
+        .v = vec3d{0.0, 7.5, 0.5}
+    };
+
+    return StatusCode::ok;
+}
+
+void run_ephemeris_sampling_diag() {
+    print_diag_title("Ephemeris Sampling Diagnostic");
+
+    i32 checks = 0;
+    i32 passed = 0;
+    auto check = [&](const string& name, bool ok) {
+        ++checks;
+        passed += ok;
+        std::println("{} = {}", name, ok);
+    };
+    auto check_status = [&](const string& name,
+                            StatusCode actual,
+                            StatusCode expected) {
+        bool ok = actual == expected;
+        ++checks;
+        passed += ok;
+        std::println(
+            "{} = {} (expected {}, passed = {})",
+            name,
+            status_string(actual),
+            status_string(expected),
+            ok
+        );
+    };
+
+    CartesianEphemerisTable cart;
+    cart.dt = {0.0, 10.0, 20.0};
+    cart.states = {
+        ephemeris_diag_state(0.0),
+        ephemeris_diag_state(10.0),
+        ephemeris_diag_state(20.0)
+    };
+
+    StateTr x_tr;
+    CartesianSampleOptions cart_opts;
+    StatusCode status = sample_cartesian_ephemeris(cart, 0.0, x_tr, cart_opts);
+    check_status("Cartesian Start Status", status, StatusCode::ok);
+    check("Cartesian Start State", (x_tr.r - vec3d0).norm() <= tol12);
+
+    status = sample_cartesian_ephemeris(cart, 20.0, x_tr, cart_opts);
+    check_status("Cartesian End Status", status, StatusCode::ok);
+    check(
+        "Cartesian End State",
+        (x_tr.r - vec3d{20.0, 0.0, 0.0}).norm() <= tol12
+            && (x_tr.v - vec3d{1.0, 0.0, 0.0}).norm() <= tol12
+    );
+
+    status = sample_cartesian_ephemeris(cart, 5.0, x_tr, cart_opts);
+    check_status("Cartesian Linear Status", status, StatusCode::ok);
+    check(
+        "Cartesian Linear Midpoint",
+        (x_tr.r - vec3d{5.0, 0.0, 0.0}).norm() <= tol12
+            && (x_tr.v - vec3d{1.0, 0.0, 0.0}).norm() <= tol12
+    );
+
+    cart_opts.interpolation = CartesianInterpolationMethod::cubic_hermite;
+    status = sample_cartesian_ephemeris(cart, 15.0, x_tr, cart_opts);
+    check_status("Cartesian Hermite Status", status, StatusCode::ok);
+    check(
+        "Cartesian Hermite Midpoint",
+        (x_tr.r - vec3d{15.0, 0.0, 0.0}).norm() <= tol12
+            && (x_tr.v - vec3d{1.0, 0.0, 0.0}).norm() <= tol12
+    );
+
+    cart_opts.interpolation = CartesianInterpolationMethod::nearest;
+    status = sample_cartesian_ephemeris(cart, 6.0, x_tr, cart_opts);
+    check_status("Cartesian Nearest Status", status, StatusCode::ok);
+    check("Cartesian Nearest State", (x_tr.r - vec3d{10.0, 0.0, 0.0}).norm() <= tol12);
+
+    cart_opts.extrapolation = ExtrapolationMethod::hold;
+    status = sample_cartesian_ephemeris(cart, 25.0, x_tr, cart_opts);
+    check_status("Cartesian Hold Status", status, StatusCode::ok);
+    check("Cartesian Hold State", (x_tr.r - vec3d{20.0, 0.0, 0.0}).norm() <= tol12);
+
+    cart_opts.extrapolation = ExtrapolationMethod::constant_velocity;
+    status = sample_cartesian_ephemeris(cart, 25.0, x_tr, cart_opts);
+    check_status("Cartesian Extrapolation Status", status, StatusCode::ok);
+    check(
+        "Cartesian Extrapolated State",
+        (x_tr.r - vec3d{25.0, 0.0, 0.0}).norm() <= tol12
+    );
+
+    OrientationEphemerisTable att;
+    att.metadata.frame = {
+        .object = "SOURCE",
+        .source_frame = "J2000",
+        .target_frame = "SOURCE_BODY"
+    };
+    att.metadata.source = {
+        .source_type = "generated",
+        .source_name = "ephemeris_sampling_diag"
+    };
+    att.dt = {0.0, 10.0, 20.0};
+    att.states = {
+        ephemeris_diag_attitude(0.0),
+        ephemeris_diag_attitude(10.0),
+        ephemeris_diag_attitude(20.0)
+    };
+
+    StateAtt x_att;
+    OrientationSampleOptions att_opts;
+    status = sample_orientation_ephemeris(att, 20.0, x_att, att_opts);
+    check_status("Orientation End Status", status, StatusCode::ok);
+    StateAtt x_att_end_expected = ephemeris_diag_attitude(20.0);
+    f64 q_end_error = std::min(
+        (x_att.q - x_att_end_expected.q).norm(),
+        (x_att.q + x_att_end_expected.q).norm()
+    );
+    check(
+        "Orientation End State",
+        q_end_error <= tol12 && (x_att.w - x_att_end_expected.w).norm() <= tol12
+    );
+
+    status = sample_orientation_ephemeris(att, 5.0, x_att, att_opts);
+    check_status("Orientation SLERP Status", status, StatusCode::ok);
+    StateAtt x_att_expected = ephemeris_diag_attitude(5.0);
+    f64 q_error = std::min(
+        (x_att.q - x_att_expected.q).norm(),
+        (x_att.q + x_att_expected.q).norm()
+    );
+    check(
+        "Orientation SLERP Midpoint",
+        q_error <= tol12 && (x_att.w - x_att_expected.w).norm() <= tol12
+            && std::abs(x_att.q.norm() - 1.0) <= tol12
+    );
+
+    OrientationEphemerisTable sign_att = att;
+    sign_att.states[1].q *= -1.0;
+    sign_att.states[2].q *= -1.0;
+    status = canonicalize_orientation_ephemeris_samples(sign_att);
+    check_status("Quaternion Canonicalization Status", status, StatusCode::ok);
+    check(
+        "Quaternion Sign Continuity",
+        sign_att.states[0].q.dot(sign_att.states[1].q) >= 0.0
+            && sign_att.states[1].q.dot(sign_att.states[2].q) >= 0.0
+    );
+
+    OrientationEphemerisTable no_w_att = att;
+    no_w_att.has_angular_velocity = false;
+    for (StateAtt& state : no_w_att.states) state.w = vec3d0;
+    status = sample_orientation_ephemeris(no_w_att, 5.0, x_att, att_opts);
+    check_status("Orientation Without Rate Status", status, StatusCode::ok);
+    check("Orientation Without Rate State", x_att.w.isZero(tol12));
+
+    att_opts.extrapolation = ExtrapolationMethod::constant_velocity;
+    status = sample_orientation_ephemeris(no_w_att, 25.0, x_att, att_opts);
+    check_status(
+        "Orientation Missing Rate Extrapolation Status",
+        status,
+        StatusCode::unsupported_method
+    );
+
+    std::println("Ephemeris Sampling Checks Passed = {}/{}", passed, checks);
+    std::println("Ephemeris Sampling Diagnostic Passed = {}", passed == checks);
+}
+
+void run_ephemeris_provider_diag() {
+    print_diag_title("Ephemeris Provider Diagnostic");
+
+    i32 checks = 0;
+    i32 passed = 0;
+    auto check = [&](const string& name, bool ok) {
+        ++checks;
+        passed += ok;
+        std::println("{} = {}", name, ok);
+    };
+    auto check_status = [&](const string& name,
+                            StatusCode actual,
+                            StatusCode expected) {
+        bool ok = actual == expected;
+        ++checks;
+        passed += ok;
+        std::println(
+            "{} = {} (expected {}, passed = {})",
+            name,
+            status_string(actual),
+            status_string(expected),
+            ok
+        );
+    };
+
+    struct CoverageCase {
+        ProviderCoverageAction action;
+        StatusCode expected_status;
+        string name;
+    };
+    const svec<CoverageCase> cases = {
+        {ProviderCoverageAction::reject_step, StatusCode::sample_not_found, "Reject"},
+        {ProviderCoverageAction::hold_state, StatusCode::ok, "Hold"},
+        {ProviderCoverageAction::extrapolate, StatusCode::ok, "Extrapolate"},
+        {ProviderCoverageAction::stop_world,
+         StatusCode::provider_coverage_end,
+         "Stop"},
+        {ProviderCoverageAction::handoff_to_dynamics,
+         StatusCode::unsupported_method,
+         "Handoff"}
+    };
+
+    for (const CoverageCase& test : cases) {
+        auto tr_provider = make_ephemeris_diag_tr_provider(
+            10.0,
+            test.action,
+            test.action
+        );
+        auto att_provider = make_ephemeris_diag_att_provider(
+            10.0,
+            test.action,
+            test.action
+        );
+
+        check_status(
+            test.name + " Translation Validation",
+            validate_ephemeris_provider(*tr_provider),
+            StatusCode::ok
+        );
+        check_status(
+            test.name + " Orientation Validation",
+            validate_orientation_provider(*att_provider),
+            StatusCode::ok
+        );
+
+        for (f64 query_dt : {-5.0, 15.0}) {
+            string side = query_dt < 0.0 ? " Before" : " After";
+            StateTr x_tr_sentinel{
+                .r = vec3d{123.0, 456.0, 789.0},
+                .v = vec3d{-1.0, -2.0, -3.0}
+            };
+            StateAtt x_att_sentinel{
+                .q = vec4d{0.0, 1.0, 0.0, 0.0},
+                .w = vec3d{4.0, 5.0, 6.0}
+            };
+            StateTr x_tr = x_tr_sentinel;
+            StateAtt x_att = x_att_sentinel;
+
+            StatusCode tr_status = query_ephemeris_provider(
+                *tr_provider,
+                ephemeris_diag_epoch(query_dt),
+                TimeScale::tdb,
+                TimeOffsets{},
+                x_tr
+            );
+            StatusCode att_status = query_orientation_provider(
+                *att_provider,
+                ephemeris_diag_epoch(query_dt),
+                TimeScale::tdb,
+                TimeOffsets{},
+                x_att
+            );
+            check_status(
+                test.name + side + " Translation Status",
+                tr_status,
+                test.expected_status
+            );
+            check_status(
+                test.name + side + " Orientation Status",
+                att_status,
+                test.expected_status
+            );
+
+            if (test.expected_status != StatusCode::ok) {
+                check(
+                    test.name + side + " Transactional Output",
+                    (x_tr.r - x_tr_sentinel.r).norm() <= tol12
+                        && (x_tr.v - x_tr_sentinel.v).norm() <= tol12
+                        && (x_att.q - x_att_sentinel.q).norm() <= tol12
+                        && (x_att.w - x_att_sentinel.w).norm() <= tol12
+                );
+                continue;
+            }
+
+            f64 expected_dt = query_dt;
+            if (test.action == ProviderCoverageAction::hold_state) {
+                expected_dt = query_dt < 0.0 ? 0.0 : 10.0;
+            }
+            StateTr expected_tr = ephemeris_diag_state(expected_dt);
+            StateAtt expected_att = ephemeris_diag_attitude(expected_dt);
+            f64 q_error = std::min(
+                (x_att.q - expected_att.q).norm(),
+                (x_att.q + expected_att.q).norm()
+            );
+            check(
+                test.name + side + " Translation State",
+                (x_tr.r - expected_tr.r).norm() <= tol9
+                    && (x_tr.v - expected_tr.v).norm() <= tol12
+            );
+            check(
+                test.name + side + " Orientation State",
+                q_error <= tol9 && (x_att.w - expected_att.w).norm() <= tol12
+            );
+        }
+    }
+
+    std::println("Ephemeris Provider Checks Passed = {}/{}", passed, checks);
+    std::println("Ephemeris Provider Diagnostic Passed = {}", passed == checks);
+}
+
+void run_world_provider_diag() {
+    print_diag_title("World Provider Diagnostic");
+
+    i32 checks = 0;
+    i32 passed = 0;
+    auto check = [&](const string& name, bool ok) {
+        ++checks;
+        passed += ok;
+        std::println("{} = {}", name, ok);
+    };
+    auto check_status = [&](const string& name,
+                            StatusCode actual,
+                            StatusCode expected) {
+        bool ok = actual == expected;
+        ++checks;
+        passed += ok;
+        std::println(
+            "{} = {} (expected {}, passed = {})",
+            name,
+            status_string(actual),
+            status_string(expected),
+            ok
+        );
+    };
+
+    World coarse_world;
+    World reference_world;
+    EntityId coarse_source_id;
+    EntityId coarse_sat_id;
+    EntityId reference_source_id;
+    EntityId reference_sat_id;
+    StatusCode status = build_ephemeris_provider_diag_world(
+        coarse_world,
+        60.0,
+        ProviderCoverageAction::reject_step,
+        ProviderCoverageAction::reject_step,
+        coarse_source_id,
+        coarse_sat_id,
+        2.0,
+        0.02
+    );
+    check_status("Coarse World Build Status", status, StatusCode::ok);
+    status = build_ephemeris_provider_diag_world(
+        reference_world,
+        60.0,
+        ProviderCoverageAction::reject_step,
+        ProviderCoverageAction::reject_step,
+        reference_source_id,
+        reference_sat_id,
+        2.0,
+        0.02
+    );
+    check_status("Reference World Build Status", status, StatusCode::ok);
+
+    WorldStepperConfig rk4_cfg;
+    rk4_cfg.integrator_tr = IntegratorTypeFixed::rk4;
+    rk4_cfg.integrator_att = IntegratorTypeFixed::rk4;
+    WorldStepperWorkspace coarse_wksp;
+    WorldStepperWorkspace reference_wksp;
+
+    WorldStepResult coarse_result = step_world(coarse_world, 60.0, rk4_cfg, coarse_wksp);
+    check_status("Coarse Provider Step Status", coarse_result.status, StatusCode::ok);
+
+    WorldStepResult reference_result;
+    for (i32 i = 0; i < 240; ++i) {
+        reference_result = step_world(
+            reference_world,
+            0.25,
+            rk4_cfg,
+            reference_wksp
+        );
+        if (reference_result.status != StatusCode::ok) break;
+    }
+    check_status("Reference Provider Step Status", reference_result.status, StatusCode::ok);
+
+    const Celestial* coarse_source = coarse_world.celestial(coarse_source_id);
+    const Satellite* coarse_sat = coarse_world.satellite(coarse_sat_id);
+    const Satellite* reference_sat = reference_world.satellite(reference_sat_id);
+    bool stage_states_found
+        = coarse_source != nullptr && coarse_sat != nullptr && reference_sat != nullptr;
+    check("Provider Stage Bodies Found", stage_states_found);
+
+    if (stage_states_found) {
+        f64 sat_r_error = (coarse_sat->x_tr.r - reference_sat->x_tr.r).norm();
+        f64 sat_v_error = (coarse_sat->x_tr.v - reference_sat->x_tr.v).norm();
+        StateTr source_expected = ephemeris_diag_state(60.0, 2.0);
+        StateAtt att_expected = ephemeris_diag_attitude(60.0, 0.02);
+        f64 source_q_error = std::min(
+            (coarse_source->x_att.q - att_expected.q).norm(),
+            (coarse_source->x_att.q + att_expected.q).norm()
+        );
+
+        std::println("Provider RK4 Satellite Position Error = {}", sat_r_error);
+        std::println("Provider RK4 Satellite Velocity Error = {}", sat_v_error);
+        std::println(
+            "Provider Endpoint Translation Error = {}",
+            (coarse_source->x_tr.r - source_expected.r).norm()
+        );
+        std::println("Provider Endpoint Orientation Error = {}", source_q_error);
+
+        check(
+            "Provider Stage-Time Motion",
+            std::isfinite(sat_r_error) && std::isfinite(sat_v_error)
+                && sat_r_error <= 1e-3 && sat_v_error <= 1e-5
+        );
+        check(
+            "Provider Endpoint Commit",
+            (coarse_source->x_tr.r - source_expected.r).norm() <= tol9
+                && (coarse_source->x_tr.v - source_expected.v).norm() <= tol12
+                && source_q_error <= tol9
+                && (coarse_source->x_att.w - att_expected.w).norm() <= tol12
+        );
+    }
+
+    struct BoundaryCase {
+        bool adaptive;
+        bool backward;
+        ProviderCoverageAction action;
+        StatusCode expected_status;
+        f64 expected_time;
+        string name;
+    };
+    const svec<BoundaryCase> boundary_cases = {
+        {false,
+         false,
+         ProviderCoverageAction::reject_step,
+         StatusCode::sample_not_found,
+         0.0,
+         "Fixed Forward Reject"},
+        {true,
+         false,
+         ProviderCoverageAction::reject_step,
+         StatusCode::sample_not_found,
+         0.0,
+         "Adaptive Forward Reject"},
+        {false,
+         false,
+         ProviderCoverageAction::stop_world,
+         StatusCode::provider_coverage_end,
+         10.0,
+         "Fixed Forward Stop"},
+        {true,
+         false,
+         ProviderCoverageAction::stop_world,
+         StatusCode::provider_coverage_end,
+         10.0,
+         "Adaptive Forward Stop"},
+        {false,
+         true,
+         ProviderCoverageAction::stop_world,
+         StatusCode::provider_coverage_end,
+         0.0,
+         "Fixed Backward Stop"},
+        {true,
+         true,
+         ProviderCoverageAction::stop_world,
+         StatusCode::provider_coverage_end,
+         0.0,
+         "Adaptive Backward Stop"},
+        {false,
+         false,
+         ProviderCoverageAction::hold_state,
+         StatusCode::ok,
+         15.0,
+         "Fixed Forward Hold"},
+        {true,
+         false,
+         ProviderCoverageAction::extrapolate,
+         StatusCode::ok,
+         15.0,
+         "Adaptive Forward Extrapolate"}
+    };
+
+    for (const BoundaryCase& test : boundary_cases) {
+        World world;
+        EntityId source_id;
+        EntityId sat_id;
+        status = build_ephemeris_provider_diag_world(
+            world,
+            10.0,
+            test.action,
+            test.action,
+            source_id,
+            sat_id
+        );
+        check_status(test.name + " Build Status", status, StatusCode::ok);
+        if (status != StatusCode::ok) continue;
+
+        Celestial* source = world.celestial(source_id);
+        Satellite* sat = world.satellite(sat_id);
+        if (source == nullptr || sat == nullptr) {
+            check(test.name + " Bodies Found", false);
+            continue;
+        }
+
+        if (test.backward) {
+            world.advance_time(10.0);
+            source->x_tr = ephemeris_diag_state(10.0);
+            source->x_att = ephemeris_diag_attitude(10.0);
+        }
+
+        StateTr source_before = source->x_tr;
+        StateAtt source_att_before = source->x_att;
+        StateTr sat_before = sat->x_tr;
+
+        WorldStepperConfig cfg;
+        cfg.substeps = 2;
+        if (test.adaptive) {
+            cfg.integrator_tr = IntegratorTypeAdaptive::dopri54;
+            cfg.integrator_att = IntegratorTypeAdaptive::dopri54;
+        }
+
+        WorldStepperWorkspace wksp;
+        f64 dt = test.backward ? -15.0 : 15.0;
+        WorldStepResult result = step_world(world, dt, cfg, wksp);
+        check_status(test.name + " Status", result.status, test.expected_status);
+
+        f64 time_error = std::abs(world.t_sim() - test.expected_time);
+        std::println("{} Time Error = {}", test.name, time_error);
+        std::println(
+            "{} Stats = ticks {}, substeps {}, dt {}, accepted {}, rejected {}",
+            test.name,
+            result.stats.ticks_completed,
+            result.stats.substeps_completed,
+            result.stats.dt_sim_advanced,
+            result.stats.adaptive.accepted_steps,
+            result.stats.adaptive.rejected_steps
+        );
+        check(test.name + " Time", time_error <= tol9);
+
+        if (test.action == ProviderCoverageAction::reject_step) {
+            f64 source_q_error = std::min(
+                (source->x_att.q - source_att_before.q).norm(),
+                (source->x_att.q + source_att_before.q).norm()
+            );
+            check(
+                test.name + " Preserved State",
+                (source->x_tr.r - source_before.r).norm() <= tol12
+                    && source_q_error <= tol12
+                    && (sat->x_tr.r - sat_before.r).norm() <= tol12
+                    && (sat->x_tr.v - sat_before.v).norm() <= tol12
+            );
+        } else {
+            f64 expected_provider_dt = test.expected_time;
+            if (test.action == ProviderCoverageAction::hold_state) {
+                expected_provider_dt = 10.0;
+            }
+            StateTr expected_tr = ephemeris_diag_state(expected_provider_dt);
+            StateAtt expected_att = ephemeris_diag_attitude(expected_provider_dt);
+            f64 source_q_error = std::min(
+                (source->x_att.q - expected_att.q).norm(),
+                (source->x_att.q + expected_att.q).norm()
+            );
+            check(
+                test.name + " Provider State",
+                (source->x_tr.r - expected_tr.r).norm() <= tol9
+                    && (source->x_tr.v - expected_tr.v).norm() <= tol12
+                    && source_q_error <= tol9
+                    && (source->x_att.w - expected_att.w).norm() <= tol12
+            );
+        }
+    }
+
+    std::println("World Provider Checks Passed = {}/{}", passed, checks);
+    std::println("World Provider Diagnostic Passed = {}", passed == checks);
+}

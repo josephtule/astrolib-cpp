@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
+
 enum struct CartesianInterpolationMethod {
     nearest,
     linear,
@@ -18,9 +19,9 @@ enum struct CartesianInterpolationMethod {
 
 inline string interp_str(CartesianInterpolationMethod method) {
     switch (method) {
-    case CartesianInterpolationMethod::nearest: return "nearest";
-    case CartesianInterpolationMethod::linear: return "linear";
-    case CartesianInterpolationMethod::cubic_hermite: return "cubic_hermite";
+        case CartesianInterpolationMethod::nearest: return "nearest";
+        case CartesianInterpolationMethod::linear: return "linear";
+        case CartesianInterpolationMethod::cubic_hermite: return "cubic_hermite";
     }
     return "unknown";
 }
@@ -29,6 +30,7 @@ enum struct OrientationInterpolationMethod {
     nearest,
     slerp,
     // TODO: nlerp, SQUAD, quaternion B-splines, and Lie-group interpolation
+    // https://theorangeduck.com/page/cubic-interpolation-quaternions
 };
 
 inline string interp_str(OrientationInterpolationMethod method) {

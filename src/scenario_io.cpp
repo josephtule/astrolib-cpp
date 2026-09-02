@@ -38,7 +38,6 @@
 // TODO: add alternate names for enums
 // TODO: change units to default after conversion
 
-
 // enum parsers
 
 // TODO: allow different spellings
@@ -2551,6 +2550,19 @@ StatusCode build_world_from_scenario_config(
 ) {
     StatusCode status;
     result = ScenarioBuildResult{};
+
+    world.reset_time(cfg.time.t0);
+    switch (cfg.time.date_type) {
+    case DateType::cal: {
+        world.set_date(cfg.time.cal, cfg.time.time_scale);
+    } break;
+    case DateType::jd: {
+        world.set_date(cfg.time.jd, cfg.time.time_scale);
+    } break;
+    case DateType::mjd: {
+        world.set_date(cfg.time.mjd, cfg.time.time_scale);
+    } break;
+    }
 
     stepper.integrator_att = cfg.world_stepper.integrator_att;
     stepper.integrator_tr = cfg.world_stepper.integrator_tr;
