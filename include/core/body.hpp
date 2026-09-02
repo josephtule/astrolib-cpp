@@ -201,12 +201,6 @@ StatusCode measurement_covariance(
     matXd& R
 );
 
-StatusCode measurement_covariance(
-    const InstrumentSuite& suite,
-    ObservationType type,
-    matXd& R
-);
-
 StatusCode set_instrument(InstrumentSuite& suite, const PlatformInstrument& instrument);
 
 StatusCode add_instrument(

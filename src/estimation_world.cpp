@@ -11,33 +11,9 @@
 #include "core/measurement_world.hpp"
 #include "core/observation_type.hpp"
 #include "core/state.hpp"
+#include "core/status.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
-
-StatusCode ekf_observer_state_from_world(
-    const World& world,
-    EntityId observer_id,
-    StateTr& x_tr_observer
-) {
-
-    const Body* body = world.body(observer_id);
-    if (body == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-
-    if (body->body_type != BodyType::station) {
-        x_tr_observer = body->x_tr;
-        return StatusCode::ok;
-    }
-
-    const Station* stat = world.station(observer_id);
-    if (stat == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-    x_tr_observer = world.stat_x_tr_inertial(observer_id);
-
-    return StatusCode::ok;
-}
 
 ODEKFStepResult od_ekf_step_world(
     const World& world,
@@ -62,11 +38,16 @@ ODEKFStepResult od_ekf_step_world(
     }
 
     StateTr x_tr_observer;
-    result.status
-        = ekf_observer_state_from_world(world, event.observer_id, x_tr_observer);
-    if (result.status != StatusCode::ok) {
-        return result;
-    }
+    ObserverMeasurementContext ctx;
+    result.status = resolve_observer_measurement_context(
+        world,
+        event.observer_id,
+        event.measurement.t,
+        ctx,
+        tol_time
+    );
+    if (result.status != StatusCode::ok) return result;
+    x_tr_observer = ctx.x_tr_observer_I;
 
     ODEKFStepInput input{
         .filter = filter,
@@ -305,6 +286,10 @@ StatusCode make_world_measurement_event(
     UAngle angle_out,
     f64 tol
 ) {
+    ObserverMeasurementContext observer;
+    StatusCode status = resolve_observer_measurement_context(world, observer_id, t, observer);
+    if (status != StatusCode::ok) return status;
+
     vecXd z;
     StatusCode meas_status = world_predict_measurement(
         world,
@@ -367,42 +352,6 @@ StatusCode validate_realtime_ekf_events(
     return StatusCode::ok;
 }
 
-StatusCode make_world_measurement_event(
-    const World& world,
-    ObservationType type,
-    EntityId observer_id,
-    EntityId target_id,
-    f64 t,
-    ODWorldMeasurementEvent& event,
-    UAngle angle_in,
-    UAngle angle_out,
-    f64 tol
-) {
-    const Station* observer = world.station(observer_id);
-    if (observer == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-
-    matXd R;
-    StatusCode status = measurement_covariance(observer->instrument_suite, type, R);
-    if (status != StatusCode::ok) {
-        return status;
-    }
-
-    return make_world_measurement_event(
-        world,
-        type,
-        observer_id,
-        target_id,
-        t,
-        R,
-        event,
-        angle_in,
-        angle_out,
-        tol
-    );
-}
-
 StatusCode make_world_measurement_event_instrument(
     const World& world,
     InstrumentId instrument_id,
@@ -414,25 +363,21 @@ StatusCode make_world_measurement_event_instrument(
     UAngle angle_out,
     f64 tol
 ) {
-    const Station* observer = world.station(observer_id);
-    if (observer == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-
-    PlatformInstrument instrument;
-    StatusCode status
-        = get_instrument(observer->instrument_suite, instrument_id, instrument);
+    const PlatformInstrument* instrument = nullptr;
+    StatusCode status = resolve_platform_instrument(
+        world, observer_id, instrument_id, instrument
+    );
     if (status != StatusCode::ok) {
         return status;
     }
 
     return make_world_measurement_event(
         world,
-        instrument.type,
+        instrument->type,
         observer_id,
         target_id,
         t,
-        instrument.R,
+        instrument->R,
         event,
         angle_in,
         angle_out,
@@ -452,25 +397,21 @@ StatusCode make_noisy_world_measurement_event_instrument(
     UAngle angle_out,
     f64 tol
 ) {
-    const Station* observer = world.station(observer_id);
-    if (observer == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-
-    PlatformInstrument instrument;
-    StatusCode status
-        = get_instrument(observer->instrument_suite, instrument_id, instrument);
+    const PlatformInstrument* instrument = nullptr;
+    StatusCode status = resolve_platform_instrument(
+        world, observer_id, instrument_id, instrument
+    );
     if (status != StatusCode::ok) {
         return status;
     }
 
     status = make_world_measurement_event(
         world,
-        instrument.type,
+        instrument->type,
         observer_id,
         target_id,
         t,
-        instrument.R,
+        instrument->R,
         event,
         angle_in,
         angle_out,
@@ -485,13 +426,13 @@ StatusCode make_noisy_world_measurement_event_instrument(
             return apply_measurement_noise_diagonal(
                 event.measurement,
                 noise_opts,
-                instrument.type
+                instrument->type
             );
         } else {
             return apply_measurement_noise_cholesky(
                 event.measurement,
                 noise_opts,
-                instrument.type
+                instrument->type
             );
         }
     }
@@ -531,11 +472,6 @@ StatusCode make_world_measurement_event_history(
     i32 dim = measurement_dim(type);
     if (z_pred.size() != dim) return StatusCode::size_mismatch;
 
-    const Station* observer = world.station(observer_id);
-    if (observer == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-
     Measurement meas;
     meas.t = t;
     meas.z = z_pred;
@@ -564,14 +500,10 @@ StatusCode make_world_measurement_event_history_instrument(
     UAngle angle_out,
     f64 tol
 ) {
-    const Station* observer = world.station(observer_id);
-    if (observer == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-
-    PlatformInstrument instrument;
-    StatusCode status
-        = get_instrument(observer->instrument_suite, instrument_id, instrument);
+    const PlatformInstrument* instrument = nullptr;
+    StatusCode status = resolve_platform_instrument(
+        world, observer_id, instrument_id, instrument
+    );
     if (status != StatusCode::ok) {
         return status;
     }
@@ -579,11 +511,11 @@ StatusCode make_world_measurement_event_history_instrument(
     status = make_world_measurement_event_history(
         world,
         history,
-        instrument.type,
+        instrument->type,
         observer_id,
         target_id,
         t,
-        instrument.R,
+        instrument->R,
         event,
         sample_opts,
         angle_in,
@@ -628,13 +560,8 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
         return status;
     }
 
-    const Station* observer = world.station(observer_id);
-    if (observer == nullptr) {
-        return StatusCode::observer_not_found;
-    }
-
-    PlatformInstrument instrument;
-    status = get_instrument(observer->instrument_suite, instrument_id, instrument);
+    const PlatformInstrument* instrument = nullptr;
+    status = resolve_platform_instrument(world, observer_id, instrument_id, instrument);
     if (status != StatusCode::ok) {
         return status;
     }
@@ -644,13 +571,13 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
             return apply_measurement_noise_diagonal(
                 event.measurement,
                 noise_opts,
-                instrument.type
+                instrument->type
             );
         } else {
             return apply_measurement_noise_cholesky(
                 event.measurement,
                 noise_opts,
-                instrument.type
+                instrument->type
             );
         }
     }

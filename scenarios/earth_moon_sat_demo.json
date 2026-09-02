@@ -119,6 +119,26 @@
                     "values": [100.0, 200.0, 300.0]
                 }
             },
+            "instruments": [
+                {
+                    "id": "sat_radec",
+                    "type": "radec",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1.0e-10, 2.0e-10]
+                    }
+                },
+                {
+                    "id": "sat_range",
+                    "type": "range",
+                    "enabled": false,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1.0e-6]
+                    }
+                }
+            ],
             "propagation": {
                 "translation": true,
                 "attitude": true

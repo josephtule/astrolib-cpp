@@ -1,0 +1,600 @@
+{
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "metadata": {
+        "name": "offline_cooperative_od_demo",
+        "rng_seed": 20260902
+    },
+    "celestials": [
+        {
+            "id": "earth",
+            "name": "Earth (J2-J6)",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [0.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 0.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "axis_angle",
+                "axis": [1.0, 0.0, 0.0],
+                "angle": 23.43928,
+                "w": [0.0, 0.0, 0.004178074132240403],
+                "units_angle": "degree"
+            },
+            "attitude_model": "simple_spin",
+            "model": {
+                "id": "wgs84",
+                "units_length": "kilometer",
+                "gravity": {
+                    "model": "zonal",
+                    "degree": 6,
+                    "order": 0,
+                    "units_length": "kilometer"
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "moon",
+            "name": "Moon (Point Mass)",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [384400.0, 0.0, 0.0],
+                "v": [0.0, 1.022, 0.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "attitude_model": "fixed",
+            "model": {
+                "id": "custom",
+                "units_length": "kilometer",
+                "semimajor_axis": 1737.4,
+                "semiminor_axis": 1737.4,
+                "gravity": {
+                    "model": "pointmass",
+                    "mu": 4902.800066,
+                    "radius": 1737.4,
+                    "units_length": "kilometer"
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "sun",
+            "name": "Sun (Point Mass)",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [-149597870.7, 0.0, 0.0],
+                "v": [0.0, -29.7847, 0.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "attitude_model": "fixed",
+            "model": {
+                "id": "custom",
+                "units_length": "kilometer",
+                "semimajor_axis": 695700.0,
+                "semiminor_axis": 695700.0,
+                "gravity": {
+                    "model": "pointmass",
+                    "mu": 132712440018.0,
+                    "radius": 695700.0,
+                    "units_length": "kilometer"
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        }
+    ],
+    "satellites": [
+        {
+            "id": "leo_lagging",
+            "name": "LEO Tracking Satellite",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 7178.137,
+                "ecc": 0.0,
+                "inc": 51.6,
+                "raan": 0.0,
+                "aop": 0.0,
+                "ta": 0.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [
+                {
+                    "id": "leader_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1e-6]
+                    }
+                }
+            ],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "leo_leading",
+            "name": "LEO Leading Target",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 7178.137,
+                "ecc": 0.0,
+                "inc": 51.6,
+                "raan": 0.0,
+                "aop": 0.0,
+                "ta": 0.19954961681938616,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "gps_like_01",
+            "name": "GPS-like Reference 1",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 26560.0,
+                "ecc": 0.0,
+                "inc": 55.0,
+                "raan": 0.0,
+                "aop": 0.0,
+                "ta": 0.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [
+                {
+                    "id": "tracking_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [0.0001]
+                    }
+                },
+                {
+                    "id": "tracking_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1e-10]
+                    }
+                }
+            ],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "gps_like_02",
+            "name": "GPS-like Reference 2",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 26560.0,
+                "ecc": 0.0,
+                "inc": 55.0,
+                "raan": 60.0,
+                "aop": 0.0,
+                "ta": 300.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [
+                {
+                    "id": "tracking_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [0.0001]
+                    }
+                },
+                {
+                    "id": "tracking_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1e-10]
+                    }
+                }
+            ],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "gps_like_03",
+            "name": "GPS-like Reference 3",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 26560.0,
+                "ecc": 0.0,
+                "inc": 55.0,
+                "raan": 120.0,
+                "aop": 0.0,
+                "ta": 240.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [
+                {
+                    "id": "tracking_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [0.0001]
+                    }
+                },
+                {
+                    "id": "tracking_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1e-10]
+                    }
+                }
+            ],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "gps_like_04",
+            "name": "GPS-like Reference 4",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 26560.0,
+                "ecc": 0.0,
+                "inc": 55.0,
+                "raan": 180.0,
+                "aop": 0.0,
+                "ta": 180.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [
+                {
+                    "id": "tracking_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [0.0001]
+                    }
+                },
+                {
+                    "id": "tracking_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1e-10]
+                    }
+                }
+            ],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "gps_like_05",
+            "name": "GPS-like Reference 5",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 26560.0,
+                "ecc": 0.0,
+                "inc": 55.0,
+                "raan": 240.0,
+                "aop": 0.0,
+                "ta": 120.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [
+                {
+                    "id": "tracking_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [0.0001]
+                    }
+                },
+                {
+                    "id": "tracking_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1e-10]
+                    }
+                }
+            ],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        },
+        {
+            "id": "gps_like_06",
+            "name": "GPS-like Reference 6",
+            "state_tr": {
+                "input_type": "classical",
+                "center": "earth",
+                "sma": 26560.0,
+                "ecc": 0.0,
+                "inc": 55.0,
+                "raan": 300.0,
+                "aop": 0.0,
+                "ta": 60.0,
+                "units_length": "kilometer",
+                "units_angle": "degree"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [0.0, 0.0, 0.0],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 120.0, 150.0]
+                }
+            },
+            "instruments": [
+                {
+                    "id": "tracking_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [0.0001]
+                    }
+                },
+                {
+                    "id": "tracking_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1e-10]
+                    }
+                }
+            ],
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        }
+    ],
+    "stations": [
+        {
+            "id": "ground_ranging",
+            "name": "Ground Range and Range Rate",
+            "anchor": "earth",
+            "anchored": true,
+            "coordinate_type": "detic_llh",
+            "llh": [-2.0, -3.0, 0.1],
+            "units_angle": "degree",
+            "units_length": "kilometer",
+            "local_frame": "ENU",
+            "instruments": [
+                {
+                    "id": "lagging_range",
+                    "type": "range",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [0.0001]
+                    }
+                },
+                {
+                    "id": "lagging_range_rate",
+                    "type": "range_rate",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [1.0000000000000002e-10]
+                    }
+                }
+            ]
+        },
+        {
+            "id": "ground_angles",
+            "name": "Ground Optical Angles",
+            "anchor": "earth",
+            "anchored": true,
+            "coordinate_type": "detic_llh",
+            "llh": [2.0, 3.0, 0.1],
+            "units_angle": "degree",
+            "units_length": "kilometer",
+            "local_frame": "ENU",
+            "instruments": [
+                {
+                    "id": "lagging_radec",
+                    "type": "radec",
+                    "enabled": true,
+                    "covariance": {
+                        "type": "diagonal",
+                        "values": [5.876107634774472e-10, 5.876107634774472e-10]
+                    }
+                }
+            ]
+        }
+    ],
+    "time": {
+        "t0": 0.0,
+        "date": {
+            "input_type": "calendar",
+            "cal": {
+                "input_type": "separate",
+                "year": 2000,
+                "month": 1,
+                "day": 1,
+                "hour": 12,
+                "minute": 0,
+                "second": 0.0
+            },
+            "time_scale": "tt"
+        }
+    },
+    "world_stepper": {
+        "translation_integrator": "rk4",
+        "attitude_integrator": "rk4",
+        "substeps": 4,
+        "ticks": 1,
+        "dt_scale": 1.0,
+        "paused": true
+    },
+    "graphics_settings": {
+        "target_fps": 60,
+        "background_color": [10, 15, 20, 255],
+        "draw_inertial_axes": true
+    }
+}

@@ -100,3 +100,6 @@ void run_ephemeris_sampling_diag();
 void run_ephemeris_provider_diag();
 void run_world_provider_diag();
 void run_cspice_provider_diag();
+void run_satellite_instrument_scenario_diag();
+
+void run_observer_measurement_context_diag();

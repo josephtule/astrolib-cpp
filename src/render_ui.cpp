@@ -73,6 +73,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::observer_not_found:
     case StatusCode::target_not_found:
     case StatusCode::instrument_not_found:
+    case StatusCode::instrument_disabled:
     case StatusCode::body_not_found:
     case StatusCode::gravity_model_not_found:
     case StatusCode::attitude_type_not_found:

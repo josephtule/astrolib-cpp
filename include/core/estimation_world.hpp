@@ -33,11 +33,7 @@ ODEKFStepResult od_ekf_step_world(
     f64 tol = tol12
 );
 
-StatusCode ekf_observer_state_from_world(
-    const World& world,
-    EntityId observer_id,
-    StateTr& x_tr_observer
-);
+
 
 struct ODRealtimeEKFInput {
     const World* world;
@@ -114,18 +110,6 @@ struct ODRealtimeScheduleItem {
     EntityId observer_id = kInvalidEntityId;
     EntityId target_id = kInvalidEntityId;
 };
-
-StatusCode make_world_measurement_event(
-    const World& world,
-    ObservationType type,
-    EntityId observer_id,
-    EntityId target_id,
-    f64 t,
-    ODWorldMeasurementEvent& event,
-    UAngle angle_in = UAngle::radian,
-    UAngle angle_out = UAngle::radian,
-    f64 tol = tol12
-);
 
 StatusCode make_world_measurement_event_instrument(
     const World& world,

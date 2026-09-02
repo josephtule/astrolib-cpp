@@ -383,6 +383,11 @@ static StatusCode sync_scenario_celestial_model(
     return StatusCode::ok;
 }
 
+static StatusCode sync_scenario_instruments(
+    svec<ScenarioInstrumentConfig>& out,
+    const InstrumentSuite& suite
+);
+
 static StatusCode sync_scenario_celestial(
     ScenarioSession& scenario,
     const Celestial& cel,
@@ -434,6 +439,9 @@ static StatusCode sync_scenario_satellite(
     if (status != StatusCode::ok) return status;
 
     status = sync_scenario_mass_properties(sat_cfg->mass_properties, sat.mass_properties);
+    if (status != StatusCode::ok) return status;
+
+    status = sync_scenario_instruments(sat_cfg->instruments, sat.instrument_suite);
     if (status != StatusCode::ok) return status;
 
     sat_cfg->propagation.translation = sat.propagate_tr;
@@ -496,6 +504,9 @@ StatusCode make_scenario_satellite_config(
     status = sync_scenario_mass_properties(out.mass_properties, sat.mass_properties);
     if (status != StatusCode::ok) return status;
 
+    status = sync_scenario_instruments(out.instruments, sat.instrument_suite);
+    if (status != StatusCode::ok) return status;
+
     out.name = sat.name;
 
     out.propagation.translation = sat.propagate_tr;
@@ -541,13 +552,13 @@ static StatusCode sync_scenario_instrument(
     return StatusCode::ok;
 }
 
-static StatusCode sync_scenario_station_instruments(
-    ScenarioStationConfig& cfg,
-    const Station& stat
+static StatusCode sync_scenario_instruments(
+    svec<ScenarioInstrumentConfig>& out,
+    const InstrumentSuite& suite
 ) {
     svec<InstrumentId> instrument_ids;
-    instrument_ids.reserve(stat.instrument_suite.instruments.size());
-    for (const auto& entry : stat.instrument_suite.instruments) {
+    instrument_ids.reserve(suite.instruments.size());
+    for (const auto& entry : suite.instruments) {
         instrument_ids.push_back(entry.first);
     }
     std::sort(instrument_ids.begin(), instrument_ids.end());
@@ -557,8 +568,8 @@ static StatusCode sync_scenario_station_instruments(
     uset<string> config_ids;
 
     for (InstrumentId id : instrument_ids) {
-        auto it = stat.instrument_suite.instruments.find(id);
-        if (it == stat.instrument_suite.instruments.end()) {
+        auto it = suite.instruments.find(id);
+        if (it == suite.instruments.end()) {
             return StatusCode::instrument_not_found;
         }
 
@@ -569,7 +580,7 @@ static StatusCode sync_scenario_station_instruments(
         instruments.push_back(std::move(instr_cfg));
     }
 
-    cfg.instruments = std::move(instruments);
+    out = std::move(instruments);
     return StatusCode::ok;
 }
 
@@ -602,7 +613,7 @@ static StatusCode sync_scenario_station(
         if (status != StatusCode::ok) return status;
     }
 
-    status = sync_scenario_station_instruments(*stat_cfg, stat);
+    status = sync_scenario_instruments(stat_cfg->instruments, stat.instrument_suite);
     if (status != StatusCode::ok) return status;
 
     stat_cfg->propagation.translation = stat.propagate_tr;
@@ -666,7 +677,7 @@ StatusCode make_scenario_station_config(
         if (status != StatusCode::ok) return status;
     }
 
-    status = sync_scenario_station_instruments(out, stat);
+    status = sync_scenario_instruments(out.instruments, stat.instrument_suite);
     if (status != StatusCode::ok) return status;
 
     out.propagation.translation = stat.propagate_tr;

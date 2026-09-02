@@ -65,35 +65,6 @@ StatusCode measurement_covariance(
     return StatusCode::ok;
 }
 
-StatusCode measurement_covariance(
-    const InstrumentSuite& suite,
-    ObservationType type,
-    matXd& R
-) {
-    // only works if there is only one measurement of each type tied to the suite
-    i32 found_count = 0;
-    matXd R_match;
-
-    for (const auto& [id, instrument] : suite.instruments) {
-        if (!instrument.enabled) continue;
-        if (instrument.type != type) continue;
-
-        ++found_count;
-        R_match = instrument.R;
-
-        if (found_count > 1) {
-            return StatusCode::duplicate_id;
-        }
-    }
-
-    if (found_count == 0) {
-        return StatusCode::instrument_not_found;
-    }
-
-    R = R_match;
-    return StatusCode::ok;
-}
-
 StatusCode set_instrument(InstrumentSuite& suite, const PlatformInstrument& instrument) {
     StatusCode status = validate_instrument(instrument);
     if (status != StatusCode::ok) return status;
@@ -159,7 +130,6 @@ StatusCode get_instrument(
     InstrumentId id,
     PlatformInstrument& out
 ) {
-
     auto it = suite.instruments.find(id);
     if (it == suite.instruments.end()) {
         return StatusCode::instrument_not_found;
@@ -382,7 +352,6 @@ StatusCode set_celestial_ephemeris_providers(
 StatusCode instrument_suite_from_body(Body& body, InstrumentSuite*& out) {
     out = nullptr;
     switch (body.body_type) {
-
     case BodyType::station: {
         out = &static_cast<Station&>(body).instrument_suite;
     } break;
@@ -401,7 +370,6 @@ StatusCode instrument_suite_from_body(Body& body, InstrumentSuite*& out) {
 StatusCode instrument_suite_from_body(const Body& body, const InstrumentSuite*& out) {
     out = nullptr;
     switch (body.body_type) {
-
     case BodyType::station: {
         out = &static_cast<const Station&>(body).instrument_suite;
     } break;

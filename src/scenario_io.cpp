@@ -494,6 +494,34 @@ static StatusCode parse_instrument_template(
     return parse_instrument_config(object, out, path);
 }
 
+static StatusCode parse_opt_instrument_configs(
+    const json& object,
+    svec<ScenarioInstrumentConfig>& out,
+    const string& path
+) {
+    bool found;
+    const json* child = nullptr;
+    StatusCode status = get_opt_child(object, "instruments", child, found, path);
+    if (status != StatusCode::ok) return status;
+    if (!found) return StatusCode::ok;
+
+    i32 count = 0;
+    status = parse_array_size(object, "instruments", count, path);
+    if (status != StatusCode::ok) return status;
+
+    svec<ScenarioInstrumentConfig> instruments;
+    instruments.reserve(count);
+    for (i32 i = 0; i < count; ++i) {
+        ScenarioInstrumentConfig instrument;
+        status = parse_instrument_config(child->at(i), instrument, path);
+        if (status != StatusCode::ok) return status;
+        instruments.push_back(std::move(instrument));
+    }
+
+    out = std::move(instruments);
+    return StatusCode::ok;
+}
+
 static StatusCode parse_state_att_config(
     const json& object,
     ScenarioStateAttConfig& out,
@@ -1111,6 +1139,9 @@ static StatusCode parse_satellite_config(
     if (!found_mass_properties)
         out.propagation.attitude = false; // cannot propagate without mass properties
 
+    status = parse_opt_instrument_configs(object, out.instruments, path);
+    if (status != StatusCode::ok) return status;
+
     return StatusCode::ok;
 }
 
@@ -1206,24 +1237,8 @@ static StatusCode parse_station_config(
     if (status != StatusCode::ok) return status;
     // no default
 
-    bool found_instruments;
-    const json* child = nullptr;
-    status = get_opt_child(object, "instruments", child, found_instruments, path);
+    status = parse_opt_instrument_configs(object, out.instruments, path);
     if (status != StatusCode::ok) return status;
-    if (found_instruments) {
-        i32 num_instruments = 0;
-        status = parse_array_size(object, "instruments", num_instruments, path);
-        if (status != StatusCode::ok) return status;
-
-        out.instruments.reserve(num_instruments);
-        for (i32 i = 0; i < num_instruments; ++i) {
-            ScenarioInstrumentConfig temp_instrument;
-            status = parse_instrument_config(child->at(i), temp_instrument, path);
-            if (status != StatusCode::ok) return status;
-
-            out.instruments.push_back(temp_instrument);
-        }
-    }
 
     return StatusCode::ok;
 }
@@ -1945,6 +1960,25 @@ static StatusCode validate_celestial_config(
     return StatusCode::ok;
 }
 
+static StatusCode validate_instrument_configs(
+    const svec<ScenarioInstrumentConfig>& instruments
+) {
+    uset<string> instrument_ids;
+    for (const ScenarioInstrumentConfig& instrument : instruments) {
+        if (!insert_unique_id(instrument_ids, instrument.id)) {
+            return StatusCode::duplicate_id;
+        }
+
+        i32 dim = measurement_dim(instrument.type);
+        if (dim <= 0) return StatusCode::unsupported_type;
+
+        StatusCode status = validate_covariance_config(instrument.covariance_cfg, dim);
+        if (status != StatusCode::ok) return status;
+    }
+
+    return StatusCode::ok;
+}
+
 static StatusCode validate_satellite_config(
     const ScenarioConfig& cfg,
     const ScenarioSatelliteConfig& sat
@@ -1954,7 +1988,10 @@ static StatusCode validate_satellite_config(
     if (status != StatusCode::ok) return status;
     if (!finite_state_att(sat.x_att)) return StatusCode::invalid_att_state;
 
-    return validate_mass_properties(sat.mass_properties, sat.propagation.attitude);
+    status = validate_mass_properties(sat.mass_properties, sat.propagation.attitude);
+    if (status != StatusCode::ok) return status;
+
+    return validate_instrument_configs(sat.instruments);
 }
 
 static StatusCode validate_station_config(
@@ -1993,20 +2030,7 @@ static StatusCode validate_station_config(
         if (status != StatusCode::ok) return status;
     }
 
-    uset<string> instrument_ids;
-    for (const ScenarioInstrumentConfig& instrument : stat.instruments) {
-        if (!insert_unique_id(instrument_ids, instrument.id)) {
-            return StatusCode::duplicate_id;
-        }
-
-        i32 dim = measurement_dim(instrument.type);
-        if (dim <= 0) return StatusCode::unsupported_type;
-
-        StatusCode status = validate_covariance_config(instrument.covariance_cfg, dim);
-        if (status != StatusCode::ok) return status;
-    }
-
-    return StatusCode::ok;
+    return validate_instrument_configs(stat.instruments);
 }
 
 StatusCode validate_scenario_config(const ScenarioConfig& cfg) {
@@ -2420,6 +2444,36 @@ static StatusCode resolve_central_celestial(
     return StatusCode::ok;
 }
 
+static StatusCode apply_instrument_config(
+    const ScenarioInstrumentConfig& cfg,
+    PlatformInstrument& instrument
+) {
+    instrument.name = cfg.id;
+    instrument.type = cfg.type;
+    instrument.R = cfg.covariance_cfg.covariance;
+    instrument.enabled = cfg.enabled;
+
+    return StatusCode::ok;
+}
+
+static StatusCode apply_instrument_configs(
+    const svec<ScenarioInstrumentConfig>& configs,
+    InstrumentSuite& suite
+) {
+    InstrumentSuite temp;
+    for (const ScenarioInstrumentConfig& cfg : configs) {
+        PlatformInstrument instrument;
+        StatusCode status = apply_instrument_config(cfg, instrument);
+        if (status != StatusCode::ok) return status;
+
+        status = add_instrument(temp, instrument);
+        if (status != StatusCode::ok) return status;
+    }
+
+    suite = std::move(temp);
+    return StatusCode::ok;
+}
+
 static StatusCode apply_satellite_config(
     const ScenarioConfig& scenario,
     const ScenarioSatelliteConfig& cfg,
@@ -2429,8 +2483,6 @@ static StatusCode apply_satellite_config(
 ) {
     StatusCode status;
     Satellite temp;
-
-    const auto& mp = cfg.mass_properties;
 
     temp.name = cfg.name;
 
@@ -2457,19 +2509,10 @@ static StatusCode apply_satellite_config(
     temp.propagate_att = cfg.propagation.attitude;
     temp.propagate_tr = cfg.propagation.translation;
 
+    status = apply_instrument_configs(cfg.instruments, temp.instrument_suite);
+    if (status != StatusCode::ok) return status;
+
     sat = temp;
-    return StatusCode::ok;
-}
-
-static StatusCode apply_instrument_config(
-    const ScenarioInstrumentConfig& cfg,
-    PlatformInstrument& instrument
-) {
-    instrument.name = cfg.id;
-    instrument.type = cfg.type;
-    instrument.R = cfg.covariance_cfg.covariance;
-    instrument.enabled = cfg.enabled;
-
     return StatusCode::ok;
 }
 
@@ -2528,15 +2571,8 @@ static StatusCode apply_station_config(
         temp.propagate_tr = cfg.propagation.translation;
     }
 
-    for (const auto& instrument_cfg : cfg.instruments) {
-        PlatformInstrument instrument;
-        status = apply_instrument_config(instrument_cfg, instrument);
-        if (status != StatusCode::ok) return status;
-
-        InstrumentId instrument_id;
-        status = add_instrument(temp.instrument_suite, instrument, instrument_id);
-        if (status != StatusCode::ok) return status;
-    }
+    status = apply_instrument_configs(cfg.instruments, temp.instrument_suite);
+    if (status != StatusCode::ok) return status;
 
     stat = temp;
     return StatusCode::ok;
@@ -2654,6 +2690,42 @@ static bool ensure_gravity_provider_config(ScenarioConfig& cfg, const Celestial&
     cfg.gravity_providers.push_back(provider);
 
     return true;
+}
+
+static StatusCode build_scenario_instrument_configs(
+    const InstrumentSuite& suite,
+    svec<ScenarioInstrumentConfig>& out
+) {
+    svec<InstrumentId> ids;
+    ids.reserve(suite.instruments.size());
+    for (const auto& [id, instrument] : suite.instruments) {
+        ids.push_back(id);
+    }
+    std::sort(ids.begin(), ids.end());
+
+    svec<ScenarioInstrumentConfig> configs;
+    configs.reserve(ids.size());
+    uset<string> config_ids;
+    for (InstrumentId id : ids) {
+        auto it = suite.instruments.find(id);
+        if (it == suite.instruments.end()) return StatusCode::instrument_not_found;
+
+        const PlatformInstrument& instrument = it->second;
+        ScenarioInstrumentConfig config;
+        config.id = instrument.name.empty()
+                        ? "instrument_" + std::to_string(instrument.id)
+                        : instrument.name;
+        if (!config_ids.insert(config.id).second) return StatusCode::duplicate_id;
+
+        config.type = instrument.type;
+        config.covariance_cfg.covariance = instrument.R;
+        config.covariance_cfg.type = "matrix";
+        config.enabled = instrument.enabled;
+        configs.push_back(std::move(config));
+    }
+
+    out = std::move(configs);
+    return StatusCode::ok;
 }
 
 StatusCode build_scenario_config_from_world(
@@ -2777,6 +2849,10 @@ StatusCode build_scenario_config_from_world(
         out.mass_properties.principle_axes = sat->mass_properties.principal_axes;
         out.mass_properties.offset_body = sat->mass_properties.offset_body;
 
+        StatusCode status
+            = build_scenario_instrument_configs(sat->instrument_suite, out.instruments);
+        if (status != StatusCode::ok) return status;
+
         satellites.push_back(out);
     }
 
@@ -2816,17 +2892,9 @@ StatusCode build_scenario_config_from_world(
             out.mass_properties.offset_body = stat->mass_properties.offset_body;
         }
 
-        for (const auto& [id, instr] : stat->instrument_suite.instruments) {
-            ScenarioInstrumentConfig out_instr;
-
-            out_instr.id = instr.name;
-            out_instr.type = instr.type;
-            out_instr.covariance_cfg.covariance = instr.R;
-            out_instr.covariance_cfg.type = "matrix";
-            out_instr.enabled = instr.enabled;
-
-            out.instruments.push_back(out_instr);
-        }
+        StatusCode status
+            = build_scenario_instrument_configs(stat->instrument_suite, out.instruments);
+        if (status != StatusCode::ok) return status;
 
         stations.push_back(out);
     }
@@ -2996,6 +3064,16 @@ static json json_from_instrument_config(const ScenarioInstrumentConfig& instr) {
     return instrument;
 }
 
+static json json_from_instrument_configs(
+    const svec<ScenarioInstrumentConfig>& instruments
+) {
+    json result = json::array();
+    for (const ScenarioInstrumentConfig& instrument : instruments) {
+        result.push_back(json_from_instrument_config(instrument));
+    }
+    return result;
+}
+
 static json json_from_propagation_config(const ScenarioPropagationConfig& prop) {
     json propagation;
 
@@ -3066,6 +3144,9 @@ static json json_from_satellite_config(const ScenarioSatelliteConfig& sat) {
     satellite["state_att"] = json_from_state_att_config(sat.x_att);
     satellite["propagation"] = json_from_propagation_config(sat.propagation);
     satellite["mass_properties"] = json_from_mass_properties_config(sat.mass_properties);
+    if (!sat.instruments.empty()) {
+        satellite["instruments"] = json_from_instrument_configs(sat.instruments);
+    }
 
     return satellite;
 }
@@ -3098,12 +3179,8 @@ static json json_from_station_config(const ScenarioStationConfig& stat) {
             = json_from_mass_properties_config(stat.mass_properties);
     }
 
-    if (stat.instruments.size() > 0) {
-        json instruments = json::array();
-        for (const auto& instr : stat.instruments) {
-            instruments.push_back(json_from_instrument_config(instr));
-        }
-        station["instruments"] = instruments;
+    if (!stat.instruments.empty()) {
+        station["instruments"] = json_from_instrument_configs(stat.instruments);
     }
 
     return station;

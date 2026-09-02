@@ -3038,7 +3038,7 @@ void run_world_measurement_context_diag() {
         );
 
         MeasurementContext ctx;
-        StatusCode ctx_status = make_world_station_measurement_context(
+        StatusCode ctx_status = make_world_measurement_context(
             world,
             ctx,
             stat_id,
@@ -4114,41 +4114,24 @@ void run_station_instrument_diag() {
         = measurement_covariance(stat1->instrument_suite, radec_instr1.id, R_radec);
 
     matXd R_range;
-    StatusCode range_type_status = measurement_covariance(
+    StatusCode range_id_status = measurement_covariance(
         stat1->instrument_suite,
-        ObservationType::range,
+        range_instr.id,
         R_range
-    );
-
-    matXd R_radec_type;
-    StatusCode radec_type_status = measurement_covariance(
-        stat1->instrument_suite,
-        ObservationType::radec,
-        R_radec_type
     );
 
     f64 t = world.t_sim();
     EntityId stat_id = scenario.stat1_id;
     EntityId sat_id = scenario.sat1_id;
 
-    ODWorldMeasurementEvent range_type_event;
-    StatusCode range_type_event_status = make_world_measurement_event(
+    ODWorldMeasurementEvent range_id_event;
+    StatusCode range_id_event_status = make_world_measurement_event_instrument(
         world,
-        ObservationType::range,
+        range_instr.id,
         stat_id,
         sat_id,
         t,
-        range_type_event
-    );
-
-    ODWorldMeasurementEvent radec_type_event;
-    StatusCode radec_type_event_status = make_world_measurement_event(
-        world,
-        ObservationType::radec,
-        stat_id,
-        sat_id,
-        t,
-        radec_type_event
+        range_id_event
     );
 
     ODWorldMeasurementEvent radec_id_event;
@@ -4185,21 +4168,14 @@ void run_station_instrument_diag() {
     std::println("Next Instrument ID: {}", stat1->instrument_suite.next_id);
     std::println("RA/Dec Query By ID Status: {}", status_string(radec_id_status));
     std::println("RA/Dec Query By ID R Norm: {}", R_radec.norm());
-    std::println("Range Query By Type Status: {}", status_string(range_type_status));
-    std::println("Range Query By Type R Norm: {}", R_range.norm());
-    std::println("RA/Dec Query By Type Status: {}", status_string(radec_type_status));
-    std::println("RA/Dec Query By Type Expected Ambiguous = true");
+    std::println("Range Query By ID Status: {}", status_string(range_id_status));
+    std::println("Range Query By ID R Norm: {}", R_range.norm());
     std::println(
-        "Range Event By Type Status: {}",
-        status_string(range_type_event_status)
+        "Range Event By ID Status: {}",
+        status_string(range_id_event_status)
     );
-    std::println("Range Event By Type z Size: {}", range_type_event.measurement.z.size());
-    std::println("Range Event By Type R Norm: {}", range_type_event.measurement.R.norm());
-    std::println(
-        "RA/Dec Event By Type Status: {}",
-        status_string(radec_type_event_status)
-    );
-    std::println("RA/Dec Event By Type Expected Ambiguous = true");
+    std::println("Range Event By ID z Size: {}", range_id_event.measurement.z.size());
+    std::println("Range Event By ID R Norm: {}", range_id_event.measurement.R.norm());
     std::println("RA/Dec Event By ID Status: {}", status_string(radec_id_event_status));
     std::println(
         "RA/Dec Event By ID Type: {}",
@@ -7191,4 +7167,298 @@ void run_cspice_provider_diag() {
 
     std::println("CSPICE Provider Checks Passed = {}/{}", passed, checks);
     std::println("CSPICE Provider Diagnostic Passed = {}", passed == checks);
+}
+
+void run_satellite_instrument_scenario_diag() {
+    print_diag_title("Satellite Instrument Scenario Diagnostic");
+
+    i32 checks = 0;
+    i32 passed = 0;
+    auto check = [&](const string& label, bool value) {
+        ++checks;
+        if (value) ++passed;
+        std::println("{} = {}", label, value);
+    };
+    auto check_status = [&](const string& label, StatusCode status) {
+        check(label, status == StatusCode::ok);
+        if (status != StatusCode::ok) {
+            std::println("    Status = {}", status_string(status));
+        }
+    };
+    auto find_satellite = [](const ScenarioConfig& cfg,
+                             const string& id) -> const ScenarioSatelliteConfig* {
+        for (const ScenarioSatelliteConfig& satellite : cfg.satellites) {
+            if (satellite.id == id) return &satellite;
+        }
+        return nullptr;
+    };
+    auto same_instrument = [](const ScenarioInstrumentConfig& lhs,
+                              const ScenarioInstrumentConfig& rhs) {
+        return lhs.id == rhs.id && lhs.type == rhs.type && lhs.enabled == rhs.enabled
+               && lhs.covariance_cfg.covariance.isApprox(
+                   rhs.covariance_cfg.covariance,
+                   tol12
+               );
+    };
+
+    ScenarioConfig source_cfg;
+    StatusCode status
+        = load_scenario_json(pwd + "/scenarios/earth_moon_sat_demo.json", source_cfg);
+    check_status("Scenario Load", status);
+    if (status != StatusCode::ok) return;
+
+    status = validate_scenario_config(source_cfg);
+    check_status("Scenario Validation", status);
+    if (status != StatusCode::ok) return;
+
+    const ScenarioSatelliteConfig* source_sat = find_satellite(source_cfg, "sat1");
+    check("Source Satellite Found", source_sat != nullptr);
+    if (source_sat == nullptr) return;
+    check("Source Instrument Count", source_sat->instruments.size() == 2);
+
+    World world;
+    ScenarioBuildResult build_result;
+    WorldStepperConfig stepper;
+    status = build_world_from_scenario_config(source_cfg, world, build_result, stepper);
+    check_status("World Build", status);
+    if (status != StatusCode::ok) return;
+
+    auto sat_id_it = build_result.satellite_ids.find("sat1");
+    check(
+        "Runtime Satellite Mapping Found",
+        sat_id_it != build_result.satellite_ids.end()
+    );
+    if (sat_id_it == build_result.satellite_ids.end()) return;
+
+    const Satellite* satellite = world.satellite(sat_id_it->second);
+    check("Runtime Satellite Found", satellite != nullptr);
+    if (satellite == nullptr) return;
+    check(
+        "Runtime Instrument Count",
+        satellite->instrument_suite.instruments.size() == 2
+    );
+    check(
+        "Runtime Enabled Instrument Count",
+        satellite->instrument_suite.enabled_ids.size() == 1
+    );
+
+    PlatformInstrument radec;
+    status = get_instrument(satellite->instrument_suite, 1, radec);
+    check_status("Runtime RA/Dec Lookup", status);
+    if (status == StatusCode::ok) {
+        check(
+            "Runtime RA/Dec Instrument",
+            radec.name == "sat_radec" && radec.type == ObservationType::radec
+                && radec.enabled && radec.R.rows() == 2 && radec.R.cols() == 2
+        );
+    }
+
+    PlatformInstrument range;
+    status = get_instrument(satellite->instrument_suite, 2, range);
+    check_status("Runtime Range Lookup", status);
+    if (status == StatusCode::ok) {
+        check(
+            "Runtime Disabled Range Instrument",
+            range.name == "sat_range" && range.type == ObservationType::range
+                && !range.enabled && range.R.rows() == 1 && range.R.cols() == 1
+        );
+    }
+
+    ScenarioConfig saved_cfg = source_cfg;
+    status = build_scenario_config_from_world(saved_cfg, world, stepper);
+    check_status("Runtime To Scenario Sync", status);
+    if (status != StatusCode::ok) return;
+
+    const std::filesystem::path filepath
+        = std::filesystem::temp_directory_path() / "astrolib_satellite_instruments.json";
+    status = save_scenario_json(filepath.string(), saved_cfg);
+    check_status("Scenario Save", status);
+    if (status != StatusCode::ok) return;
+
+    ScenarioConfig loaded_cfg;
+    status = load_scenario_json(filepath.string(), loaded_cfg);
+    std::error_code remove_error;
+    std::filesystem::remove(filepath, remove_error);
+    check_status("Scenario Reload", status);
+    if (status != StatusCode::ok) return;
+
+    const ScenarioSatelliteConfig* loaded_sat = find_satellite(loaded_cfg, "sat1");
+    check("Reloaded Satellite Found", loaded_sat != nullptr);
+    if (loaded_sat == nullptr) return;
+    check("Reloaded Instrument Count", loaded_sat->instruments.size() == 2);
+    if (source_sat->instruments.size() == loaded_sat->instruments.size()) {
+        bool instruments_match = true;
+        for (i32 i = 0; i < static_cast<i32>(source_sat->instruments.size()); ++i) {
+            instruments_match = instruments_match
+                                && same_instrument(
+                                    source_sat->instruments[i],
+                                    loaded_sat->instruments[i]
+                                );
+        }
+        check("Instrument Round Trip", instruments_match);
+    }
+
+    World loaded_world;
+    ScenarioBuildResult loaded_result;
+    WorldStepperConfig loaded_stepper;
+    status = build_world_from_scenario_config(
+        loaded_cfg,
+        loaded_world,
+        loaded_result,
+        loaded_stepper
+    );
+    check_status("Reloaded World Build", status);
+
+    std::println("Satellite Instrument Scenario Checks Passed = {}/{}", passed, checks);
+    std::println(
+        "Satellite Instrument Scenario Diagnostic Passed = {}",
+        passed == checks
+    );
+    print_diag_title();
+}
+
+void run_observer_measurement_context_diag() {
+    print_diag_title("Observer Measurement Context Diagnostic");
+    auto scenario = make_earth_sats_stats_scenario();
+    if (!scenario.success) {
+        std::println("Scenario Build Failed");
+        return;
+    }
+    World& world = scenario.world;
+    i32 checks = 0;
+    i32 passed = 0;
+    auto check = [&](const char* label, bool valid) {
+        ++checks;
+        if (valid) ++passed;
+        std::println("{}: {}", label, valid ? "PASS" : "FAIL");
+    };
+    auto check_status = [&](const char* label, StatusCode actual, StatusCode expected) {
+        check(label, actual == expected);
+        if (actual != expected) {
+            std::println("  Actual: {}, Expected: {}", status_string(actual), status_string(expected));
+        }
+    };
+
+    // Station and satellite use the same observer and instrument path
+    f64 t = world.t_sim();
+    InstrumentId satellite_instrument_id = kInvalidInstrumentId;
+    for (EntityId observer_id : {scenario.stat1_id, scenario.sat1_id}) {
+        std::println("Observer ID: {}", observer_id);
+        ObserverMeasurementContext ctx;
+        StatusCode status = resolve_observer_measurement_context(world, observer_id, t, ctx);
+        check_status("Resolve Observer", status, StatusCode::ok);
+        if (status != StatusCode::ok) continue;
+        check("Platform Identity", ctx.platform_id == observer_id
+            && ctx.platform_type == world.body(observer_id)->body_type);
+        StateTr expected = observer_id == scenario.stat1_id
+            ? world.stat_x_tr_inertial(observer_id) : world.body(observer_id)->x_tr;
+        check("Observer State", (ctx.x_tr_observer_I.r - expected.r).norm() < tol12
+            && (ctx.x_tr_observer_I.v - expected.v).norm() < tol12);
+
+        InstrumentSuite* suite = nullptr;
+        status = instrument_suite_from_body(*world.body(observer_id), suite);
+        check_status("Instrument Suite", status, StatusCode::ok);
+        if (status != StatusCode::ok) continue;
+        for (ObservationType type : {ObservationType::range, ObservationType::range_rate,
+                 ObservationType::radec, ObservationType::rel_pos, ObservationType::rel_pos_vel}) {
+            PlatformInstrument instrument;
+            instrument.type = type;
+            instrument.enabled = true;
+            instrument.R = matXd::Identity(measurement_dim(type), measurement_dim(type)) * 1e-6;
+            InstrumentId instrument_id = kInvalidInstrumentId;
+            status = add_instrument(*suite, instrument, instrument_id);
+            check_status("Add Instrument", status, StatusCode::ok);
+            if (status != StatusCode::ok) continue;
+            if (observer_id == scenario.sat1_id) satellite_instrument_id = instrument_id;
+            status = resolve_instrument_measurement_context(world, observer_id, instrument_id, t, ctx);
+            check_status("Resolve Instrument", status, StatusCode::ok);
+            check("Resolved Instrument And State", ctx.instrument != nullptr
+                && ctx.instrument_id == instrument_id && ctx.platform_id == observer_id
+                && (ctx.x_tr_observer_I.r - expected.r).norm() < tol12);
+
+            ODWorldMeasurementEvent event;
+            status = make_world_measurement_event_instrument(
+                world, instrument_id, observer_id, scenario.sat2_id, t, event
+            );
+            check_status("Measurement Event", status, StatusCode::ok);
+            vecXd reference = predict_measurement(type, world.body(scenario.sat2_id)->x_tr, expected);
+            check("Prediction Comparison", event.measurement.z.size() == reference.size()
+                && (event.measurement.z - reference).norm() < tol12);
+            check("Instrument Covariance", event.measurement.R.isApprox(instrument.R));
+        }
+    }
+
+    // Missing, disabled, inactive and unsupported inputs
+    ObserverMeasurementContext ctx;
+    ctx.platform_id = scenario.sat2_id;
+    check_status("Missing Observer", resolve_observer_measurement_context(
+        world, kInvalidEntityId, t, ctx), StatusCode::observer_not_found);
+    check("Failure Preserves Context", ctx.platform_id == scenario.sat2_id);
+    check_status("Unsupported Platform", resolve_observer_measurement_context(
+        world, scenario.earth_id, t, ctx), StatusCode::unsupported_type);
+    check_status("Time Mismatch", resolve_observer_measurement_context(
+        world, scenario.sat1_id, t + 1.0, ctx), StatusCode::time_mismatch);
+    check_status("Invalid Time Tolerance", resolve_observer_measurement_context(
+        world, scenario.sat1_id, t, ctx, -1.0), StatusCode::invalid_input);
+    check_status("Missing Instrument", resolve_instrument_measurement_context(
+        world, scenario.sat1_id, kInvalidInstrumentId, t, ctx), StatusCode::instrument_not_found);
+
+    Satellite* sat = world.satellite(scenario.sat1_id);
+    PlatformInstrument instrument;
+    StatusCode status = get_instrument(sat->instrument_suite, satellite_instrument_id, instrument);
+    check_status("Get Satellite Instrument", status, StatusCode::ok);
+    if (status != StatusCode::ok) return;
+    instrument.enabled = false;
+    check_status("Disable Instrument", set_instrument(sat->instrument_suite, instrument), StatusCode::ok);
+    ODWorldMeasurementEvent event;
+    check_status("Disabled Instrument", make_world_measurement_event_instrument(
+        world, instrument.id, sat->id, scenario.sat2_id, t, event), StatusCode::instrument_disabled);
+    instrument.enabled = true;
+    check_status("Enable Instrument", set_instrument(sat->instrument_suite, instrument), StatusCode::ok);
+    world.make_inactive(sat->id);
+    check_status("Inactive Observer", resolve_observer_measurement_context(
+        world, sat->id, t, ctx), StatusCode::inactive_entity);
+    world.make_active(sat->id);
+    check_status("Self Observation", make_world_measurement_event_instrument(
+        world, instrument.id, sat->id, sat->id, t, event), StatusCode::invalid_input);
+    vecXd z;
+    check_status("Satellite AzEl Unsupported", world_predict_measurement(
+        world, ObservationType::azel, sat->id, scenario.sat2_id, z), StatusCode::unsupported_type);
+    check_status("Missing Target", world_predict_measurement(
+        world, ObservationType::range, sat->id, kInvalidEntityId, z), StatusCode::target_not_found);
+    Station* station = world.station(scenario.stat1_id);
+    EntityId anchor_id = station->anchor_id;
+    station->anchor_id = kInvalidEntityId;
+    check_status("Missing Anchor", resolve_observer_measurement_context(
+        world, station->id, t, ctx), StatusCode::anchor_not_found);
+    station->anchor_id = anchor_id;
+    station->anchored = false;
+    station->x_tr = sat->x_tr;
+    check_status("Free Station", resolve_observer_measurement_context(
+        world, station->id, t, ctx), StatusCode::ok);
+    check("Free Station State", (ctx.x_tr_observer_I.r - station->x_tr.r).norm() < tol12);
+    station->anchored = true;
+
+    // History uses the requested epoch, not the current world time
+    WorldHistory history;
+    push_world_history_sample(history, capture_world_history_sample(world));
+    world.advance_time(1.0);
+    push_world_history_sample(history, capture_world_history_sample(world));
+    StateSampleOptions sample_opts;
+    check_status("Historical Satellite Event", make_world_measurement_event_history_instrument(
+        world, history, instrument.id, sat->id, scenario.sat2_id, t, event, sample_opts), StatusCode::ok);
+    check("Historical Event Time", event.measurement.t == t);
+    std::mt19937_64 rng(42);
+    MeasurementNoiseOptions noise_opts{.rng = rng};
+    noise_opts.enabled = false;
+    check_status("Historical Noise Wrapper", make_noisy_world_measurement_event_history_instrument(
+        world, history, instrument.id, sat->id, scenario.sat2_id, t, event, noise_opts, sample_opts), StatusCode::ok);
+    check_status("Current Noise Wrapper", make_noisy_world_measurement_event_instrument(
+        world, instrument.id, sat->id, scenario.sat2_id, world.t_sim(), event, noise_opts), StatusCode::ok);
+    noise_opts.enabled = true;
+    check_status("Noisy Satellite Event", make_noisy_world_measurement_event_instrument(
+        world, instrument.id, sat->id, scenario.sat2_id, world.t_sim(), event, noise_opts), StatusCode::ok);
+    check("Noisy Measurement Finite", event.measurement.z.allFinite());
+    std::println("Observer Context Checks: {}/{}", passed, checks);
+    print_diag_title();
 }

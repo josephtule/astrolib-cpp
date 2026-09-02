@@ -186,16 +186,6 @@ struct ScenarioMassPropertiesConfig {
     vec3d offset_body = vec3d0;
 };
 
-struct ScenarioSatelliteConfig {
-    string id;
-    string name;
-    bool active = true;
-    ScenarioStateTrConfig x_tr;
-    ScenarioStateAttConfig x_att;
-    ScenarioPropagationConfig propagation;
-    ScenarioMassPropertiesConfig mass_properties;
-};
-
 struct ScenarioCovarianceConfig {
     string type = "diagonal";
     matXd covariance;
@@ -206,6 +196,17 @@ struct ScenarioInstrumentConfig {
     ObservationType type = ObservationType::radec;
     bool enabled = true;
     ScenarioCovarianceConfig covariance_cfg;
+};
+
+struct ScenarioSatelliteConfig {
+    string id;
+    string name;
+    bool active = true;
+    ScenarioStateTrConfig x_tr;
+    ScenarioStateAttConfig x_att;
+    ScenarioPropagationConfig propagation;
+    ScenarioMassPropertiesConfig mass_properties;
+    svec<ScenarioInstrumentConfig> instruments;
 };
 
 struct ScenarioStationConfig {
