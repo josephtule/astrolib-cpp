@@ -7,19 +7,39 @@
 #include "core/observation_type.hpp"
 #include "core/status.hpp"
 
+#include <cmath>
+#include <limits>
 #include <utility>
 
-static StatusCode add_typed_station_instrument(
-    Station& station,
+static StatusCode validate_instrument(const PlatformInstrument& instrument) {
+    i32 dim = measurement_dim(instrument.type);
+    if (dim <= 0) return StatusCode::unsupported_type;
+    if (instrument.R.rows() != dim || instrument.R.cols() != dim) {
+        return StatusCode::size_mismatch;
+    }
+    if (!instrument.R.allFinite()) return StatusCode::invalid_covariance;
+
+    for (i32 i = 0; i < dim; ++i) {
+        if (instrument.R(i, i) < 0.0) return StatusCode::invalid_covariance;
+        for (i32 j = i + 1; j < dim; ++j) {
+            if (std::abs(instrument.R(i, j) - instrument.R(j, i)) >= tol12) {
+                return StatusCode::invalid_covariance;
+            }
+        }
+    }
+
+    return StatusCode::ok;
+}
+
+static StatusCode add_typed_instrument(
+    InstrumentSuite& suite,
     ObservationType type,
     const matXd& R,
     InstrumentId& out_id,
     std::string name
 ) {
     i32 dim = measurement_dim(type);
-    if (R.rows() != dim || R.cols() != dim) {
-        return StatusCode::size_mismatch;
-    }
+    if (dim <= 0) return StatusCode::unsupported_type;
 
     PlatformInstrument instrument;
     instrument.type = type;
@@ -27,16 +47,16 @@ static StatusCode add_typed_station_instrument(
     instrument.R = R;
     instrument.name = name;
 
-    return add_station_instrument(station, instrument, out_id);
+    return add_instrument(suite, instrument, out_id);
 }
 
-StatusCode station_measurement_covariance(
-    const Station& station,
+StatusCode measurement_covariance(
+    const InstrumentSuite& suite,
     InstrumentId instrument_id,
     matXd& R
 ) {
-    auto it = station.instrument_suite.instruments.find(instrument_id);
-    if (it == station.instrument_suite.instruments.end()) {
+    auto it = suite.instruments.find(instrument_id);
+    if (it == suite.instruments.end()) {
         return StatusCode::instrument_not_found;
     }
 
@@ -45,16 +65,16 @@ StatusCode station_measurement_covariance(
     return StatusCode::ok;
 }
 
-StatusCode station_measurement_covariance(
-    const Station& station,
+StatusCode measurement_covariance(
+    const InstrumentSuite& suite,
     ObservationType type,
     matXd& R
 ) {
-    // only works if there is only one measurement of each type tied to the station
+    // only works if there is only one measurement of each type tied to the suite
     i32 found_count = 0;
     matXd R_match;
 
-    for (const auto& [id, instrument] : station.instrument_suite.instruments) {
+    for (const auto& [id, instrument] : suite.instruments) {
         if (!instrument.enabled) continue;
         if (instrument.type != type) continue;
 
@@ -74,216 +94,222 @@ StatusCode station_measurement_covariance(
     return StatusCode::ok;
 }
 
-StatusCode set_station_instrument(
-    Station& station,
-    const PlatformInstrument& instrument
-) {
+StatusCode set_instrument(InstrumentSuite& suite, const PlatformInstrument& instrument) {
+    StatusCode status = validate_instrument(instrument);
+    if (status != StatusCode::ok) return status;
     if (instrument.id == kInvalidInstrumentId) {
         return StatusCode::instrument_not_found;
     }
-    auto it = station.instrument_suite.instruments.find(instrument.id);
-    if (it == station.instrument_suite.instruments.end()) {
+    auto it = suite.instruments.find(instrument.id);
+    if (it == suite.instruments.end()) {
         return StatusCode::instrument_not_found;
     }
 
     it->second = instrument;
 
-    station.instrument_suite.enabled_ids = enabled_station_instrument_ids(station);
+    suite.enabled_ids = enabled_instrument_ids(suite);
 
     return StatusCode::ok;
 }
 
-StatusCode add_station_instrument(
-    Station& station,
+StatusCode add_instrument(
+    InstrumentSuite& suite,
     const PlatformInstrument& instrument,
     InstrumentId& out_id
 ) {
     PlatformInstrument copy = instrument;
+    StatusCode status = validate_instrument(copy);
+    if (status != StatusCode::ok) return status;
+
     if (copy.id == kInvalidInstrumentId) {
-        copy.id = station.instrument_suite.next_id++;
+        if (suite.next_id == kInvalidInstrumentId
+            || suite.next_id == std::numeric_limits<InstrumentId>::max()) {
+            return StatusCode::invalid_input;
+        }
+        copy.id = suite.next_id++;
+    } else if (copy.id >= suite.next_id) {
+        if (copy.id == std::numeric_limits<InstrumentId>::max()) {
+            return StatusCode::invalid_input;
+        }
+        suite.next_id = copy.id + 1;
     }
 
-    auto it = station.instrument_suite.instruments.find(copy.id);
-    if (it != station.instrument_suite.instruments.end()) {
+    auto it = suite.instruments.find(copy.id);
+    if (it != suite.instruments.end()) {
         // id already exists
         out_id = copy.id;
-        return set_station_instrument(station, copy);
+        return set_instrument(suite, copy);
     }
 
-    station.instrument_suite.instruments.emplace(copy.id, copy);
+    suite.instruments.emplace(copy.id, copy);
     out_id = copy.id;
 
-    if (copy.enabled) {
-        station.instrument_suite.enabled_ids = enabled_station_instrument_ids(station);
-    }
+    suite.enabled_ids = enabled_instrument_ids(suite);
 
     return StatusCode::ok;
 }
 
-StatusCode add_station_instrument(
-    Station& station,
-    const PlatformInstrument& instrument
-) {
+StatusCode add_instrument(InstrumentSuite& suite, const PlatformInstrument& instrument) {
     InstrumentId _;
-    return add_station_instrument(station, instrument, _);
+    return add_instrument(suite, instrument, _);
 }
 
-StatusCode get_station_instrument(
-    const Station& station,
-    PlatformInstrument& instrument,
-    InstrumentId id
+StatusCode get_instrument(
+    const InstrumentSuite& suite,
+    InstrumentId id,
+    PlatformInstrument& out
 ) {
 
-    auto it = station.instrument_suite.instruments.find(id);
-    if (it == station.instrument_suite.instruments.end()) {
+    auto it = suite.instruments.find(id);
+    if (it == suite.instruments.end()) {
         return StatusCode::instrument_not_found;
     }
-    instrument = it->second;
+    out = it->second;
 
     return StatusCode::ok;
-}
-
-StatusCode add_radec_instrument(Station& station, const mat2d& R, std::string name) {
-    InstrumentId _;
-    return add_radec_instrument(station, R, _, name);
 }
 
 StatusCode add_radec_instrument(
-    Station& station,
+    InstrumentSuite& suite,
+    const mat2d& R,
+    std::string name
+) {
+    InstrumentId _;
+    return add_radec_instrument(suite, R, _, name);
+}
+
+StatusCode add_radec_instrument(
+    InstrumentSuite& suite,
     const mat2d& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(station, ObservationType::radec, R, out_id, name);
+    return add_typed_instrument(suite, ObservationType::radec, R, out_id, name);
 }
 
-StatusCode add_azel_instrument(Station& station, const mat2d& R, std::string name) {
+StatusCode add_azel_instrument(InstrumentSuite& suite, const mat2d& R, std::string name) {
     InstrumentId _;
-    return add_azel_instrument(station, R, _, name);
+    return add_azel_instrument(suite, R, _, name);
 }
 
 StatusCode add_azel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat2d& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(station, ObservationType::azel, R, out_id, name);
-}
-
-StatusCode add_range_instrument(Station& station, const matXd& R, std::string name) {
-    InstrumentId _;
-    return add_range_instrument(station, R, _, name);
+    return add_typed_instrument(suite, ObservationType::azel, R, out_id, name);
 }
 
 StatusCode add_range_instrument(
-    Station& station,
+    InstrumentSuite& suite,
+    const matXd& R,
+    std::string name
+) {
+    InstrumentId _;
+    return add_range_instrument(suite, R, _, name);
+}
+
+StatusCode add_range_instrument(
+    InstrumentSuite& suite,
     const matXd& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(station, ObservationType::range, R, out_id, name);
-}
-
-StatusCode add_range_rate_instrument(Station& station, const matXd& R, std::string name) {
-    InstrumentId _;
-    return add_range_rate_instrument(station, R, _, name);
+    return add_typed_instrument(suite, ObservationType::range, R, out_id, name);
 }
 
 StatusCode add_range_rate_instrument(
-    Station& station,
+    InstrumentSuite& suite,
+    const matXd& R,
+    std::string name
+) {
+    InstrumentId _;
+    return add_range_rate_instrument(suite, R, _, name);
+}
+
+StatusCode add_range_rate_instrument(
+    InstrumentSuite& suite,
     const matXd& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(
-        station,
-        ObservationType::range_rate,
-        R,
-        out_id,
-        name
-    );
+    return add_typed_instrument(suite, ObservationType::range_rate, R, out_id, name);
 }
 
-StatusCode add_pos_instrument(Station& station, const mat3d& R, std::string name) {
+StatusCode add_pos_instrument(InstrumentSuite& suite, const mat3d& R, std::string name) {
     InstrumentId _;
-    return add_pos_instrument(station, R, _, name);
+    return add_pos_instrument(suite, R, _, name);
 }
 
 StatusCode add_pos_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat3d& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(station, ObservationType::pos, R, out_id, name);
-}
-
-StatusCode add_posvel_instrument(Station& station, const mat6d& R, std::string name) {
-    InstrumentId _;
-    return add_posvel_instrument(station, R, _, name);
+    return add_typed_instrument(suite, ObservationType::pos, R, out_id, name);
 }
 
 StatusCode add_posvel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
+    const mat6d& R,
+    std::string name
+) {
+    InstrumentId _;
+    return add_posvel_instrument(suite, R, _, name);
+}
+
+StatusCode add_posvel_instrument(
+    InstrumentSuite& suite,
     const mat6d& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(
-        station,
-        ObservationType::pos_vel,
-        R,
-        out_id,
-        name
-    );
-}
-
-StatusCode add_rel_pos_instrument(Station& station, const mat3d& R, std::string name) {
-    InstrumentId _;
-    return add_rel_pos_instrument(station, R, _, name);
+    return add_typed_instrument(suite, ObservationType::pos_vel, R, out_id, name);
 }
 
 StatusCode add_rel_pos_instrument(
-    Station& station,
+    InstrumentSuite& suite,
+    const mat3d& R,
+    std::string name
+) {
+    InstrumentId _;
+    return add_rel_pos_instrument(suite, R, _, name);
+}
+
+StatusCode add_rel_pos_instrument(
+    InstrumentSuite& suite,
     const mat3d& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(
-        station,
-        ObservationType::rel_pos,
-        R,
-        out_id,
-        name
-    );
-}
-
-StatusCode add_rel_posvel_instrument(Station& station, const mat6d& R, std::string name) {
-    InstrumentId _;
-    return add_rel_posvel_instrument(station, R, _, name);
+    return add_typed_instrument(suite, ObservationType::rel_pos, R, out_id, name);
 }
 
 StatusCode add_rel_posvel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
+    const mat6d& R,
+    std::string name
+) {
+    InstrumentId _;
+    return add_rel_posvel_instrument(suite, R, _, name);
+}
+
+StatusCode add_rel_posvel_instrument(
+    InstrumentSuite& suite,
     const mat6d& R,
     InstrumentId& out_id,
     std::string name
 ) {
-    return add_typed_station_instrument(
-        station,
-        ObservationType::rel_pos_vel,
-        R,
-        out_id,
-        name
-    );
+    return add_typed_instrument(suite, ObservationType::rel_pos_vel, R, out_id, name);
 }
 
-svec<InstrumentId> enabled_station_instrument_ids(const Station& station) {
+svec<InstrumentId> enabled_instrument_ids(const InstrumentSuite& suite) {
     svec<InstrumentId> ids;
-    ids.reserve(station.instrument_suite.instruments.size());
+    ids.reserve(suite.instruments.size());
 
-    for (auto& [instr_id, instrument] : station.instrument_suite.instruments) {
+    for (auto& [instr_id, instrument] : suite.instruments) {
         if (instrument.enabled) {
             ids.push_back(instr_id);
         }
@@ -293,32 +319,32 @@ svec<InstrumentId> enabled_station_instrument_ids(const Station& station) {
     return ids;
 }
 
-StatusCode enable_station_instrument(Station& station, InstrumentId instrument_id) {
-    auto it = station.instrument_suite.instruments.find(instrument_id);
-    if (it == station.instrument_suite.instruments.end()) {
+StatusCode enable_instrument(InstrumentSuite& suite, InstrumentId instrument_id) {
+    auto it = suite.instruments.find(instrument_id);
+    if (it == suite.instruments.end()) {
         return StatusCode::instrument_not_found;
     }
     it->second.enabled = true;
 
-    station.instrument_suite.enabled_ids = enabled_station_instrument_ids(station);
+    suite.enabled_ids = enabled_instrument_ids(suite);
 
     return StatusCode::ok;
 }
 
-StatusCode disable_station_instrument(Station& station, InstrumentId instrument_id) {
-    auto it = station.instrument_suite.instruments.find(instrument_id);
-    if (it == station.instrument_suite.instruments.end()) {
+StatusCode disable_instrument(InstrumentSuite& suite, InstrumentId instrument_id) {
+    auto it = suite.instruments.find(instrument_id);
+    if (it == suite.instruments.end()) {
         return StatusCode::instrument_not_found;
     }
     it->second.enabled = false;
 
-    station.instrument_suite.enabled_ids = enabled_station_instrument_ids(station);
+    suite.enabled_ids = enabled_instrument_ids(suite);
 
     return StatusCode::ok;
 }
 
-void print_station_instruments(const Station& station) {
-    for (const auto& [id, instrument] : station.instrument_suite.instruments) {
+void print_instruments(const InstrumentSuite& suite) {
+    for (const auto& [id, instrument] : suite.instruments) {
         std::string enabled_str = instrument.enabled ? "enabled" : "disabled";
         std::println("{} ({})", instrument.name, enabled_str);
     }
@@ -354,6 +380,7 @@ StatusCode set_celestial_ephemeris_providers(
 }
 
 StatusCode instrument_suite_from_body(Body& body, InstrumentSuite*& out) {
+    out = nullptr;
     switch (body.body_type) {
 
     case BodyType::station: {
@@ -372,6 +399,7 @@ StatusCode instrument_suite_from_body(Body& body, InstrumentSuite*& out) {
 }
 
 StatusCode instrument_suite_from_body(const Body& body, const InstrumentSuite*& out) {
+    out = nullptr;
     switch (body.body_type) {
 
     case BodyType::station: {

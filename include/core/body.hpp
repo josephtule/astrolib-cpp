@@ -207,10 +207,7 @@ StatusCode measurement_covariance(
     matXd& R
 );
 
-StatusCode set_instrument(
-    InstrumentSuite& suite,
-    const PlatformInstrument& instrument
-);
+StatusCode set_instrument(InstrumentSuite& suite, const PlatformInstrument& instrument);
 
 StatusCode add_instrument(
     InstrumentSuite& suite,
@@ -218,152 +215,117 @@ StatusCode add_instrument(
     InstrumentId& out_id
 );
 
+StatusCode add_instrument(InstrumentSuite& suite, const PlatformInstrument& instrument);
+
 StatusCode get_instrument(
     const InstrumentSuite& suite,
     InstrumentId id,
     PlatformInstrument& out
 );
 
-svec<InstrumentId> enabled_instrument_ids(
-    const InstrumentSuite& suite
-);
+svec<InstrumentId> enabled_instrument_ids(const InstrumentSuite& suite);
 
-StatusCode enable_instrument(
-    InstrumentSuite& suite,
-    InstrumentId id
-);
+StatusCode enable_instrument(InstrumentSuite& suite, InstrumentId id);
 
-StatusCode disable_instrument(
-    InstrumentSuite& suite,
-    InstrumentId id
-);
+StatusCode disable_instrument(InstrumentSuite& suite, InstrumentId id);
 
-// TODO: remove station specific instrument functions 
-StatusCode station_measurement_covariance(
-    const Station& station,
-    InstrumentId instrument_id,
-    matXd& R
-);
-StatusCode station_measurement_covariance(
-    const Station& station,
-    ObservationType type,
-    matXd& R
-);
-StatusCode set_station_instrument(Station& station, const PlatformInstrument& instrument);
-StatusCode add_station_instrument(
-    Station& station,
-    const PlatformInstrument& instrument,
-    InstrumentId& out_id
-);
-StatusCode add_station_instrument(Station& station, const PlatformInstrument& instrument);
-StatusCode get_station_instrument(
-    const Station& station,
-    PlatformInstrument& instrument,
-    InstrumentId id
-);
+void print_instruments(const InstrumentSuite& suite);
 
 StatusCode add_radec_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat2d& R,
     std::string name = "Ra/Dec Instrument"
 );
 StatusCode add_radec_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat2d& R,
     InstrumentId& out_id,
     std::string name = "Ra/Dec Instrument"
 );
 
 StatusCode add_azel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat2d& R,
     std::string name = "Az/El Instrument"
 );
 StatusCode add_azel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat2d& R,
     InstrumentId& out_id,
     std::string name = "Az/El Instrument"
 );
 
 StatusCode add_range_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const matXd& R,
     std::string name = "Range Instrument"
 );
 StatusCode add_range_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const matXd& R,
     InstrumentId& out_id,
     std::string name = "Range Instrument"
 );
 
 StatusCode add_range_rate_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const matXd& R,
     std::string name = "Range-Rate Instrument"
 );
 StatusCode add_range_rate_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const matXd& R,
     InstrumentId& out_id,
     std::string name = "Range-Rate Instrument"
 );
 
 StatusCode add_pos_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat3d& R,
     std::string name = "Simulation Position Instrument"
 );
 StatusCode add_pos_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat3d& R,
     InstrumentId& out_id,
     std::string name = "Inertial Position Instrument"
 );
 
 StatusCode add_posvel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat6d& R,
     std::string name = "Simulation State Instrument"
 );
 StatusCode add_posvel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat6d& R,
     InstrumentId& out_id,
     std::string name = "Inertial State Instrument"
 );
 
 StatusCode add_rel_pos_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat3d& R,
     std::string name = "Relative Position Instrument"
 );
 StatusCode add_rel_pos_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat3d& R,
     InstrumentId& out_id,
     std::string name = "Relative Position Instrument"
 );
 
 StatusCode add_rel_posvel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat6d& R,
     std::string name = "Relative State Instrument"
 );
 StatusCode add_rel_posvel_instrument(
-    Station& station,
+    InstrumentSuite& suite,
     const mat6d& R,
     InstrumentId& out_id,
     std::string name = "Relative State Instrument"
 );
-
-svec<InstrumentId> enabled_station_instrument_ids(const Station& station);
-
-StatusCode enable_station_instrument(Station& station, InstrumentId instrument_id);
-StatusCode disable_station_instrument(Station& station, InstrumentId instrument_id);
-
-void print_station_instruments(const Station& station);
 
 inline void print_mass_properties(const MassProperties& mp, const string& indent = "") {
     std::println("{}Mass: {}", indent, mp.mass);
@@ -471,5 +433,3 @@ inline void print_station(const Station& stat, const string& indent = "") {
         print_station_instrument(instrument, indent3);
     }
 }
-
-

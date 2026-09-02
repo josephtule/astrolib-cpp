@@ -384,7 +384,7 @@ StatusCode make_world_measurement_event(
     }
 
     matXd R;
-    StatusCode status = station_measurement_covariance(*observer, type, R);
+    StatusCode status = measurement_covariance(observer->instrument_suite, type, R);
     if (status != StatusCode::ok) {
         return status;
     }
@@ -420,7 +420,8 @@ StatusCode make_world_measurement_event_instrument(
     }
 
     PlatformInstrument instrument;
-    StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
+    StatusCode status
+        = get_instrument(observer->instrument_suite, instrument_id, instrument);
     if (status != StatusCode::ok) {
         return status;
     }
@@ -457,7 +458,8 @@ StatusCode make_noisy_world_measurement_event_instrument(
     }
 
     PlatformInstrument instrument;
-    StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
+    StatusCode status
+        = get_instrument(observer->instrument_suite, instrument_id, instrument);
     if (status != StatusCode::ok) {
         return status;
     }
@@ -568,7 +570,8 @@ StatusCode make_world_measurement_event_history_instrument(
     }
 
     PlatformInstrument instrument;
-    StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
+    StatusCode status
+        = get_instrument(observer->instrument_suite, instrument_id, instrument);
     if (status != StatusCode::ok) {
         return status;
     }
@@ -631,7 +634,7 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
     }
 
     PlatformInstrument instrument;
-    status = get_station_instrument(*observer, instrument, instrument_id);
+    status = get_instrument(observer->instrument_suite, instrument_id, instrument);
     if (status != StatusCode::ok) {
         return status;
     }

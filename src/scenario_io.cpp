@@ -2534,7 +2534,7 @@ static StatusCode apply_station_config(
         if (status != StatusCode::ok) return status;
 
         InstrumentId instrument_id;
-        status = add_station_instrument(temp, instrument, instrument_id);
+        status = add_instrument(temp.instrument_suite, instrument, instrument_id);
         if (status != StatusCode::ok) return status;
     }
 

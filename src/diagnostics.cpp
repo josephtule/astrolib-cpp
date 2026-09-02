@@ -3870,32 +3870,36 @@ void run_realtime_ekf_world_update_diag() {
     R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
 
     StatusCode radec_status
-        = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
+        = add_radec_instrument(stat1->instrument_suite, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(radec_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    StatusCode range_status
-        = add_range_instrument(*stat1, matXd1<1> * sigma_range * sigma_range);
+    StatusCode range_status = add_range_instrument(
+        stat1->instrument_suite,
+        matXd1<1> * sigma_range * sigma_range
+    );
     if (!od_status_success(range_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    StatusCode azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode azel_status
+        = add_azel_instrument(stat2->instrument_suite, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(azel_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
     InstrumentId rel_pv_id;
-    StatusCode rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
+    StatusCode rel_posvel_status
+        = add_rel_posvel_instrument(stat2->instrument_suite, R_pv, rel_pv_id);
     if (!od_status_success(rel_posvel_status)) {
         std::println("Failed to add instrument");
         return;
     }
-    // disable_station_instrument(*stat2, rel_pv_id);
+    // disable_instrument(stat2->instrument_suite, rel_pv_id);
 
     WorldStepperConfig cfg;
     cfg.step_tr = true;
@@ -4037,11 +4041,11 @@ void run_realtime_ekf_world_update_diag() {
     f64 final_state_err = statetr_to_vec6d(final_err).norm();
 
     std::println("Station 1 Instruments:");
-    print_station_instruments(*stat1);
+    print_instruments(stat1->instrument_suite);
     std::println();
 
     std::println("Station 2 Instruments:");
-    print_station_instruments(*stat2);
+    print_instruments(stat2->instrument_suite);
     std::println();
 
     std::println("Final Status: {}", status_string(last_result.status));
@@ -4087,7 +4091,7 @@ void run_station_instrument_diag() {
     radec_instr1.name = "Ra/Dec Observer";
     radec_instr1.R = mat2d1 * sigma_rad * sigma_rad;
     StatusCode radec_status1
-        = add_station_instrument(*stat1, radec_instr1, radec_instr1.id);
+        = add_instrument(stat1->instrument_suite, radec_instr1, radec_instr1.id);
 
     PlatformInstrument radec_instr2;
     radec_instr2.type = ObservationType::radec;
@@ -4095,26 +4099,33 @@ void run_station_instrument_diag() {
     radec_instr2.name = "Ra/Dec Observer";
     radec_instr2.R = mat2d1 * sigma_rad * sigma_rad;
     StatusCode radec_status2
-        = add_station_instrument(*stat1, radec_instr2, radec_instr2.id);
+        = add_instrument(stat1->instrument_suite, radec_instr2, radec_instr2.id);
 
     PlatformInstrument range_instr;
     range_instr.type = ObservationType::range;
     range_instr.enabled = true;
     range_instr.name = "Range Observer";
     range_instr.R = matXd1<1> * sigma_range * sigma_range;
-    StatusCode range_status = add_station_instrument(*stat1, range_instr, range_instr.id);
+    StatusCode range_status
+        = add_instrument(stat1->instrument_suite, range_instr, range_instr.id);
 
     matXd R_radec;
     StatusCode radec_id_status
-        = station_measurement_covariance(*stat1, radec_instr1.id, R_radec);
+        = measurement_covariance(stat1->instrument_suite, radec_instr1.id, R_radec);
 
     matXd R_range;
-    StatusCode range_type_status
-        = station_measurement_covariance(*stat1, ObservationType::range, R_range);
+    StatusCode range_type_status = measurement_covariance(
+        stat1->instrument_suite,
+        ObservationType::range,
+        R_range
+    );
 
     matXd R_radec_type;
-    StatusCode radec_type_status
-        = station_measurement_covariance(*stat1, ObservationType::radec, R_radec_type);
+    StatusCode radec_type_status = measurement_covariance(
+        stat1->instrument_suite,
+        ObservationType::radec,
+        R_radec_type
+    );
 
     f64 t = world.t_sim();
     EntityId stat_id = scenario.stat1_id;
@@ -4544,32 +4555,36 @@ void run_world_history_ekf_diag() {
     R_pv.block<3, 3>(3, 3) *= sigma_v * sigma_v;
 
     StatusCode radec_status
-        = add_radec_instrument(*stat1, mat2d1 * sigma_rad * sigma_rad);
+        = add_radec_instrument(stat1->instrument_suite, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(radec_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    StatusCode range_status
-        = add_range_instrument(*stat1, matXd1<1> * sigma_range * sigma_range);
+    StatusCode range_status = add_range_instrument(
+        stat1->instrument_suite,
+        matXd1<1> * sigma_range * sigma_range
+    );
     if (!od_status_success(range_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
-    StatusCode azel_status = add_azel_instrument(*stat2, mat2d1 * sigma_rad * sigma_rad);
+    StatusCode azel_status
+        = add_azel_instrument(stat2->instrument_suite, mat2d1 * sigma_rad * sigma_rad);
     if (!od_status_success(azel_status)) {
         std::println("Failed to add instrument");
         return;
     }
 
     InstrumentId rel_pv_id;
-    StatusCode rel_posvel_status = add_rel_posvel_instrument(*stat2, R_pv, rel_pv_id);
+    StatusCode rel_posvel_status
+        = add_rel_posvel_instrument(stat2->instrument_suite, R_pv, rel_pv_id);
     if (!od_status_success(rel_posvel_status)) {
         std::println("Failed to add instrument");
         return;
     }
-    // disable_station_instrument(*stat2, rel_pv_id);
+    // disable_instrument(stat2->instrument_suite, rel_pv_id);
 
     WorldStepperConfig cfg;
     cfg.step_tr = true;
@@ -4745,11 +4760,11 @@ void run_world_history_ekf_diag() {
     f64 final_state_err = statetr_to_vec6d(final_err).norm();
 
     std::println("Station 1 Instruments:");
-    print_station_instruments(*stat1);
+    print_instruments(stat1->instrument_suite);
     std::println();
 
     std::println("Station 2 Instruments:");
-    print_station_instruments(*stat2);
+    print_instruments(stat2->instrument_suite);
     std::println();
 
     std::println("Final Status: {}", status_string(last_result.status));

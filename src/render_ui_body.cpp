@@ -1077,7 +1077,8 @@ static void render_station_instruments_ui(
         }
 
         if (enabled_changed) {
-            stat.instrument_suite.enabled_ids = enabled_station_instrument_ids(stat);
+            stat.instrument_suite.enabled_ids
+                = enabled_instrument_ids(stat.instrument_suite);
         }
 
         if (im::CollapsingHeader("Add Instrument")) {
@@ -1121,7 +1122,7 @@ static void render_station_instruments_ui(
                     instrument.enabled = true;
                     instrument.R = state.add_instrument_R_diag.asDiagonal();
                     state.add_instrument_status
-                        = add_station_instrument(stat, instrument);
+                        = add_instrument(stat.instrument_suite, instrument);
                     if (state.add_instrument_status == StatusCode::ok) {
                         state.add_instrument_name = "New Instrument";
                     }
