@@ -3,6 +3,7 @@
 
 #include "core/diagnostics.hpp"
 #include "core/body.hpp"
+#include "core/cspice_provider.hpp"
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
 #include "core/ephemeris_io.hpp"
@@ -3747,10 +3748,11 @@ static StatusCode make_realtime_ekf_diag_schedule(
             item.observer_id = stat_id;
             item.target_id = sat_id;
 
-            svec<InstrumentId> ids = stat->enabled_instrument_ids;
+            svec<InstrumentId> ids = stat->instrument_suite.enabled_ids;
 
             for (InstrumentId id : ids) {
-                const StationInstrument& instrument = stat->instruments.at(id);
+                const PlatformInstrument& instrument
+                    = stat->instrument_suite.instruments.at(id);
                 if (instrument.enabled) {
                     item.instrument_id = id;
                     item.type = instrument.type;
@@ -4079,7 +4081,7 @@ void run_station_instrument_diag() {
     f64 sigma_rad = 1e-5;
     f64 sigma_range = 1e-3;
 
-    StationInstrument radec_instr1;
+    PlatformInstrument radec_instr1;
     radec_instr1.type = ObservationType::radec;
     radec_instr1.enabled = true;
     radec_instr1.name = "Ra/Dec Observer";
@@ -4087,7 +4089,7 @@ void run_station_instrument_diag() {
     StatusCode radec_status1
         = add_station_instrument(*stat1, radec_instr1, radec_instr1.id);
 
-    StationInstrument radec_instr2;
+    PlatformInstrument radec_instr2;
     radec_instr2.type = ObservationType::radec;
     radec_instr2.enabled = true;
     radec_instr2.name = "Ra/Dec Observer";
@@ -4095,7 +4097,7 @@ void run_station_instrument_diag() {
     StatusCode radec_status2
         = add_station_instrument(*stat1, radec_instr2, radec_instr2.id);
 
-    StationInstrument range_instr;
+    PlatformInstrument range_instr;
     range_instr.type = ObservationType::range;
     range_instr.enabled = true;
     range_instr.name = "Range Observer";
@@ -4165,8 +4167,11 @@ void run_station_instrument_diag() {
     std::println("Add RA/Dec 2 ID: {}", radec_instr2.id);
     std::println("Add Range Status: {}", status_string(range_status));
     std::println("Add Range ID: {}", range_instr.id);
-    std::println("Station Instrument Count: {}", stat1->instruments.size());
-    std::println("Next Instrument ID: {}", stat1->next_instrument_id);
+    std::println(
+        "Station Instrument Count: {}",
+        stat1->instrument_suite.instruments.size()
+    );
+    std::println("Next Instrument ID: {}", stat1->instrument_suite.next_id);
     std::println("RA/Dec Query By ID Status: {}", status_string(radec_id_status));
     std::println("RA/Dec Query By ID R Norm: {}", R_radec.norm());
     std::println("Range Query By Type Status: {}", status_string(range_type_status));
@@ -5862,8 +5867,7 @@ void run_ephemeris_io_diag() {
     print_diag_title("Ephemeris I/O Diagnostic");
 
     const std::filesystem::path root
-        = std::filesystem::path{PROJECT_ROOT}
-          / "data/ephemerides/diagnostics/io";
+        = std::filesystem::path{PROJECT_ROOT} / "data/ephemerides/diagnostics/io";
     const std::filesystem::path valid_dir = root / "valid";
     const std::filesystem::path invalid_dir = root / "invalid";
     const std::filesystem::path save_safety_dir = root / "save_safety";
@@ -5885,9 +5889,7 @@ void run_ephemeris_io_diag() {
 
     i32 checks = 0;
     i32 passed = 0;
-    auto check_status = [&](const string& name,
-                            StatusCode actual,
-                            StatusCode expected) {
+    auto check_status = [&](const string& name, StatusCode actual, StatusCode expected) {
         const bool ok = actual == expected;
         ++checks;
         passed += ok;
@@ -5904,8 +5906,7 @@ void run_ephemeris_io_diag() {
         passed += ok;
         std::println("{} = {}", name, ok);
     };
-    auto write_text = [](const std::filesystem::path& filepath,
-                         const string& text) {
+    auto write_text = [](const std::filesystem::path& filepath, const string& text) {
         std::ofstream file(filepath);
         if (!file.is_open()) return false;
         file << text;
@@ -5921,8 +5922,7 @@ void run_ephemeris_io_diag() {
         );
         return !file.bad();
     };
-    auto read_json = [](const std::filesystem::path& filepath,
-                        nlohmann::json& out) {
+    auto read_json = [](const std::filesystem::path& filepath, nlohmann::json& out) {
         std::ifstream file(filepath);
         if (!file.is_open()) return false;
         try {
@@ -5932,56 +5932,47 @@ void run_ephemeris_io_diag() {
         }
         return true;
     };
-    auto write_json = [](const std::filesystem::path& filepath,
-                         const nlohmann::json& root) {
-        std::ofstream file(filepath);
-        if (!file.is_open()) return false;
-        file << std::setw(4) << root << '\n';
-        file.close();
-        return !file.fail();
-    };
+    auto write_json
+        = [](const std::filesystem::path& filepath, const nlohmann::json& root) {
+              std::ofstream file(filepath);
+              if (!file.is_open()) return false;
+              file << std::setw(4) << root << '\n';
+              file.close();
+              return !file.fail();
+          };
 
     CartesianEphemerisTable cart;
-    cart.metadata.frame = {
-        .object = "SATELLITE",
-        .center = "EARTH",
-        .frame = "J2000"
-    };
-    cart.metadata.source = {
-        .source_type = "generated",
-        .source_name = "ephemeris_io_diag",
-        .description = "Cartesian ephemeris diagnostic"
-    };
+    cart.metadata.frame = {.object = "SATELLITE", .center = "EARTH", .frame = "J2000"};
+    cart.metadata.source
+        = {.source_type = "generated",
+           .source_name = "ephemeris_io_diag",
+           .description = "Cartesian ephemeris diagnostic"};
     cart.dt = {0.0, 60.0, 120.0};
-    cart.states = {
-        StateTr{.r = vec3d{7000.0, 0.0, 0.0}, .v = vec3d{0.0, 7.5, 1.0}},
-        StateTr{.r = vec3d{6985.0, 449.0, 60.0}, .v = vec3d{-0.48, 7.48, 1.0}},
-        StateTr{.r = vec3d{6940.0, 896.0, 120.0}, .v = vec3d{-0.96, 7.43, 0.99}}
-    };
+    cart.states
+        = {StateTr{.r = vec3d{7000.0, 0.0, 0.0}, .v = vec3d{0.0, 7.5, 1.0}},
+           StateTr{.r = vec3d{6985.0, 449.0, 60.0}, .v = vec3d{-0.48, 7.48, 1.0}},
+           StateTr{.r = vec3d{6940.0, 896.0, 120.0}, .v = vec3d{-0.96, 7.43, 0.99}}};
 
     OrientationEphemerisTable att;
-    att.metadata.frame = {
-        .object = "SATELLITE",
-        .source_frame = "J2000",
-        .target_frame = "SATELLITE_BODY"
-    };
-    att.metadata.source = {
-        .source_type = "generated",
-        .source_name = "ephemeris_io_diag",
-        .description = "Orientation ephemeris diagnostic"
-    };
+    att.metadata.frame
+        = {.object = "SATELLITE",
+           .source_frame = "J2000",
+           .target_frame = "SATELLITE_BODY"};
+    att.metadata.source
+        = {.source_type = "generated",
+           .source_name = "ephemeris_io_diag",
+           .description = "Orientation ephemeris diagnostic"};
     att.dt = {0.0, 60.0, 120.0};
-    att.states = {
-        StateAtt{.q = vec4d{0.0, 0.0, 0.0, 1.0}, .w = vec3d{0.0, 0.0, 0.01}},
-        StateAtt{
-            .q = vec4d{0.0, 0.0, std::sin(0.05), std::cos(0.05)},
-            .w = vec3d{0.0, 0.0, 0.01}
-        },
-        StateAtt{
-            .q = vec4d{0.0, 0.0, std::sin(0.10), std::cos(0.10)},
-            .w = vec3d{0.0, 0.0, 0.01}
-        }
-    };
+    att.states
+        = {StateAtt{.q = vec4d{0.0, 0.0, 0.0, 1.0}, .w = vec3d{0.0, 0.0, 0.01}},
+           StateAtt{
+               .q = vec4d{0.0, 0.0, std::sin(0.05), std::cos(0.05)},
+               .w = vec3d{0.0, 0.0, 0.01}
+           },
+           StateAtt{
+               .q = vec4d{0.0, 0.0, std::sin(0.10), std::cos(0.10)},
+               .w = vec3d{0.0, 0.0, 0.01}
+           }};
 
     EphemerisWriteOptions cart_opts{
         .overwrite = false,
@@ -5994,11 +5985,7 @@ void run_ephemeris_io_diag() {
         .csv = EphemerisCSVLayout{.filepath = att_data.filename().string()}
     };
 
-    StatusCode status = save_cartesian_ephemeris(
-        cart_manifest.string(),
-        cart,
-        cart_opts
-    );
+    StatusCode status = save_cartesian_ephemeris(cart_manifest.string(), cart, cart_opts);
     check_status("Cartesian Save Status", status, StatusCode::ok);
 
     CartesianEphemerisTable cart_loaded;
@@ -6011,7 +5998,8 @@ void run_ephemeris_io_diag() {
     if (cart_loaded.dt.size() == cart.dt.size()
         && cart_loaded.states.size() == cart.states.size()) {
         for (i32 i = 0; i < cart.dt.size(); ++i) {
-            cart_dt_error = std::max(cart_dt_error, std::abs(cart.dt[i] - cart_loaded.dt[i]));
+            cart_dt_error
+                = std::max(cart_dt_error, std::abs(cart.dt[i] - cart_loaded.dt[i]));
             cart_r_error = std::max(
                 cart_r_error,
                 (cart.states[i].r - cart_loaded.states[i].r).norm()
@@ -6032,9 +6020,11 @@ void run_ephemeris_io_diag() {
           && cart_loaded.metadata.frame.frame == cart.metadata.frame.frame
           && cart_loaded.metadata.source.source_type == cart.metadata.source.source_type
           && cart_loaded.metadata.source.source_name == cart.metadata.source.source_name;
-    check_bool("Cartesian Round Trip", cart_dt_error <= tol12 && cart_r_error <= tol12
-                                           && cart_v_error <= tol12
-                                           && cart_metadata_ok);
+    check_bool(
+        "Cartesian Round Trip",
+        cart_dt_error <= tol12 && cart_r_error <= tol12 && cart_v_error <= tol12
+            && cart_metadata_ok
+    );
     std::println("    Max dt Error = {}", cart_dt_error);
     std::println("    Max Position Error = {}", cart_r_error);
     std::println("    Max Velocity Error = {}", cart_v_error);
@@ -6076,9 +6066,11 @@ void run_ephemeris_io_diag() {
           && att_loaded.metadata.frame.target_frame == att.metadata.frame.target_frame
           && att_loaded.metadata.source.source_type == att.metadata.source.source_type
           && att_loaded.metadata.source.source_name == att.metadata.source.source_name;
-    check_bool("Orientation Round Trip", att_dt_error <= tol12 && att_q_error <= tol12
-                                             && att_w_error <= tol12
-                                             && att_metadata_ok);
+    check_bool(
+        "Orientation Round Trip",
+        att_dt_error <= tol12 && att_q_error <= tol12 && att_w_error <= tol12
+            && att_metadata_ok
+    );
     std::println("    Max dt Error = {}", att_dt_error);
     std::println("    Max Quaternion Error = {}", att_q_error);
     std::println("    Max Angular Velocity Error = {}", att_w_error);
@@ -6099,8 +6091,7 @@ void run_ephemeris_io_diag() {
 
     const std::filesystem::path malformed_manifest
         = invalid_dir / "malformed_columns.json";
-    const std::filesystem::path malformed_data
-        = invalid_dir / "malformed_columns.csv";
+    const std::filesystem::path malformed_data = invalid_dir / "malformed_columns.csv";
     check_bool(
         "Malformed Column Fixture",
         make_manifest_case(cart_root, malformed_manifest, malformed_data)
@@ -6130,24 +6121,17 @@ void run_ephemeris_io_diag() {
     check_bool(
         "Non-Finite Fixture",
         make_manifest_case(cart_root, nonfinite_manifest, nonfinite_data)
-            && write_text(
-                nonfinite_data,
-                "dt,rx,ry,rz,vx,vy,vz\n0,nan,0,0,0,7.5,0\n"
-            )
+            && write_text(nonfinite_data, "dt,rx,ry,rz,vx,vy,vz\n0,nan,0,0,0,7.5,0\n")
     );
     status = load_cartesian_ephemeris(nonfinite_manifest.string(), cart_failed);
     check_status("Non-Finite Status", status, StatusCode::parse_failed);
 
-    const std::filesystem::path zero_q_manifest
-        = invalid_dir / "zero_quaternion.json";
+    const std::filesystem::path zero_q_manifest = invalid_dir / "zero_quaternion.json";
     const std::filesystem::path zero_q_data = invalid_dir / "zero_quaternion.csv";
     check_bool(
         "Zero Quaternion Fixture",
         make_manifest_case(att_root, zero_q_manifest, zero_q_data)
-            && write_text(
-                zero_q_data,
-                "dt,qx,qy,qz,qw,wx,wy,wz\n0,0,0,0,0,0,0,0\n"
-            )
+            && write_text(zero_q_data, "dt,qx,qy,qz,qw,wx,wy,wz\n0,0,0,0,0,0,0,0\n")
     );
     OrientationEphemerisTable att_failed;
     status = load_orientation_ephemeris(zero_q_manifest.string(), att_failed);
@@ -6155,9 +6139,11 @@ void run_ephemeris_io_diag() {
 
     nlohmann::json wrong_domain_root = cart_root;
     wrong_domain_root["domain"] = "orientation";
-    const std::filesystem::path wrong_domain_manifest
-        = invalid_dir / "wrong_domain.json";
-    check_bool("Wrong Domain Fixture", write_json(wrong_domain_manifest, wrong_domain_root));
+    const std::filesystem::path wrong_domain_manifest = invalid_dir / "wrong_domain.json";
+    check_bool(
+        "Wrong Domain Fixture",
+        write_json(wrong_domain_manifest, wrong_domain_root)
+    );
     status = load_cartesian_ephemeris(wrong_domain_manifest.string(), cart_failed);
     check_status("Wrong Domain Status", status, StatusCode::invalid_ephemeris_metadata);
 
@@ -6181,8 +6167,7 @@ void run_ephemeris_io_diag() {
 
     nlohmann::json missing_data_root = cart_root;
     missing_data_root["data"]["filepath"] = "missing.csv";
-    const std::filesystem::path missing_data_manifest
-        = invalid_dir / "missing_data.json";
+    const std::filesystem::path missing_data_manifest = invalid_dir / "missing_data.json";
     check_bool(
         "Missing CSV Fixture",
         write_json(missing_data_manifest, missing_data_root)
@@ -6252,10 +6237,7 @@ static JulianDate ephemeris_diag_epoch(f64 dt) {
 }
 
 static StateTr ephemeris_diag_state(f64 dt, f64 speed = 1.0) {
-    return StateTr{
-        .r = vec3d{speed * dt, 0.0, 0.0},
-        .v = vec3d{speed, 0.0, 0.0}
-    };
+    return StateTr{.r = vec3d{speed * dt, 0.0, 0.0}, .v = vec3d{speed, 0.0, 0.0}};
 }
 
 static StateAtt ephemeris_diag_attitude(f64 dt, f64 spin_rate = 0.1) {
@@ -6273,26 +6255,16 @@ static sptr<EphemerisProvider> make_ephemeris_diag_tr_provider(
     f64 speed = 1.0
 ) {
     auto provider = std::make_shared<EphemerisProvider>();
-    provider->table.metadata.frame = {
-        .object = "SOURCE",
-        .center = "SIMULATION_ORIGIN",
-        .frame = "J2000"
-    };
-    provider->table.metadata.source = {
-        .source_type = "generated",
-        .source_name = "ephemeris_provider_diag"
-    };
+    provider->table.metadata.frame
+        = {.object = "SOURCE", .center = "SIMULATION_ORIGIN", .frame = "J2000"};
+    provider->table.metadata.source
+        = {.source_type = "generated", .source_name = "ephemeris_provider_diag"};
     provider->table.dt = {0.0, coverage_end};
-    provider->table.states = {
-        ephemeris_diag_state(0.0, speed),
-        ephemeris_diag_state(coverage_end, speed)
-    };
+    provider->table.states
+        = {ephemeris_diag_state(0.0, speed), ephemeris_diag_state(coverage_end, speed)};
     provider->options.interpolation = CartesianInterpolationMethod::linear;
     provider->options.extrapolation = ExtrapolationMethod::constant_velocity;
-    provider->coverage = {
-        .before_start = before_start,
-        .after_end = after_end
-    };
+    provider->coverage = {.before_start = before_start, .after_end = after_end};
     return provider;
 }
 
@@ -6303,26 +6275,17 @@ static sptr<OrientationProvider> make_ephemeris_diag_att_provider(
     f64 spin_rate = 0.1
 ) {
     auto provider = std::make_shared<OrientationProvider>();
-    provider->table.metadata.frame = {
-        .object = "SOURCE",
-        .source_frame = "J2000",
-        .target_frame = "SOURCE_BODY"
-    };
-    provider->table.metadata.source = {
-        .source_type = "generated",
-        .source_name = "ephemeris_provider_diag"
-    };
+    provider->table.metadata.frame
+        = {.object = "SOURCE", .source_frame = "J2000", .target_frame = "SOURCE_BODY"};
+    provider->table.metadata.source
+        = {.source_type = "generated", .source_name = "ephemeris_provider_diag"};
     provider->table.dt = {0.0, coverage_end};
-    provider->table.states = {
-        ephemeris_diag_attitude(0.0, spin_rate),
-        ephemeris_diag_attitude(coverage_end, spin_rate)
-    };
+    provider->table.states
+        = {ephemeris_diag_attitude(0.0, spin_rate),
+           ephemeris_diag_attitude(coverage_end, spin_rate)};
     provider->options.interpolation = OrientationInterpolationMethod::slerp;
     provider->options.extrapolation = ExtrapolationMethod::constant_velocity;
-    provider->coverage = {
-        .before_start = before_start,
-        .after_end = after_end
-    };
+    provider->coverage = {.before_start = before_start, .after_end = after_end};
     return provider;
 }
 
@@ -6362,10 +6325,7 @@ static StatusCode build_ephemeris_provider_diag_world(
             spin_rate
         )
     };
-    StatusCode status = set_celestial_ephemeris_providers(
-        *source,
-        std::move(providers)
-    );
+    StatusCode status = set_celestial_ephemeris_providers(*source, std::move(providers));
     if (status != StatusCode::ok) return status;
 
     sat_id = world.spawn_satellite();
@@ -6373,10 +6333,7 @@ static StatusCode build_ephemeris_provider_diag_world(
     if (sat == nullptr) return StatusCode::body_not_found;
 
     sat->name = "Integrated Satellite";
-    sat->x_tr = {
-        .r = vec3d{7000.0, 0.0, 100.0},
-        .v = vec3d{0.0, 7.5, 0.5}
-    };
+    sat->x_tr = {.r = vec3d{7000.0, 0.0, 100.0}, .v = vec3d{0.0, 7.5, 0.5}};
 
     return StatusCode::ok;
 }
@@ -6391,9 +6348,7 @@ void run_ephemeris_sampling_diag() {
         passed += ok;
         std::println("{} = {}", name, ok);
     };
-    auto check_status = [&](const string& name,
-                            StatusCode actual,
-                            StatusCode expected) {
+    auto check_status = [&](const string& name, StatusCode actual, StatusCode expected) {
         bool ok = actual == expected;
         ++checks;
         passed += ok;
@@ -6408,11 +6363,10 @@ void run_ephemeris_sampling_diag() {
 
     CartesianEphemerisTable cart;
     cart.dt = {0.0, 10.0, 20.0};
-    cart.states = {
-        ephemeris_diag_state(0.0),
-        ephemeris_diag_state(10.0),
-        ephemeris_diag_state(20.0)
-    };
+    cart.states
+        = {ephemeris_diag_state(0.0),
+           ephemeris_diag_state(10.0),
+           ephemeris_diag_state(20.0)};
 
     StateTr x_tr;
     CartesianSampleOptions cart_opts;
@@ -6464,21 +6418,15 @@ void run_ephemeris_sampling_diag() {
     );
 
     OrientationEphemerisTable att;
-    att.metadata.frame = {
-        .object = "SOURCE",
-        .source_frame = "J2000",
-        .target_frame = "SOURCE_BODY"
-    };
-    att.metadata.source = {
-        .source_type = "generated",
-        .source_name = "ephemeris_sampling_diag"
-    };
+    att.metadata.frame
+        = {.object = "SOURCE", .source_frame = "J2000", .target_frame = "SOURCE_BODY"};
+    att.metadata.source
+        = {.source_type = "generated", .source_name = "ephemeris_sampling_diag"};
     att.dt = {0.0, 10.0, 20.0};
-    att.states = {
-        ephemeris_diag_attitude(0.0),
-        ephemeris_diag_attitude(10.0),
-        ephemeris_diag_attitude(20.0)
-    };
+    att.states
+        = {ephemeris_diag_attitude(0.0),
+           ephemeris_diag_attitude(10.0),
+           ephemeris_diag_attitude(20.0)};
 
     StateAtt x_att;
     OrientationSampleOptions att_opts;
@@ -6547,9 +6495,7 @@ void run_ephemeris_provider_diag() {
         passed += ok;
         std::println("{} = {}", name, ok);
     };
-    auto check_status = [&](const string& name,
-                            StatusCode actual,
-                            StatusCode expected) {
+    auto check_status = [&](const string& name, StatusCode actual, StatusCode expected) {
         bool ok = actual == expected;
         ++checks;
         passed += ok;
@@ -6571,25 +6517,17 @@ void run_ephemeris_provider_diag() {
         {ProviderCoverageAction::reject_step, StatusCode::sample_not_found, "Reject"},
         {ProviderCoverageAction::hold_state, StatusCode::ok, "Hold"},
         {ProviderCoverageAction::extrapolate, StatusCode::ok, "Extrapolate"},
-        {ProviderCoverageAction::stop_world,
-         StatusCode::provider_coverage_end,
-         "Stop"},
+        {ProviderCoverageAction::stop_world, StatusCode::provider_coverage_end, "Stop"},
         {ProviderCoverageAction::handoff_to_dynamics,
          StatusCode::unsupported_method,
          "Handoff"}
     };
 
     for (const CoverageCase& test : cases) {
-        auto tr_provider = make_ephemeris_diag_tr_provider(
-            10.0,
-            test.action,
-            test.action
-        );
-        auto att_provider = make_ephemeris_diag_att_provider(
-            10.0,
-            test.action,
-            test.action
-        );
+        auto tr_provider
+            = make_ephemeris_diag_tr_provider(10.0, test.action, test.action);
+        auto att_provider
+            = make_ephemeris_diag_att_provider(10.0, test.action, test.action);
 
         check_status(
             test.name + " Translation Validation",
@@ -6687,9 +6625,7 @@ void run_world_provider_diag() {
         passed += ok;
         std::println("{} = {}", name, ok);
     };
-    auto check_status = [&](const string& name,
-                            StatusCode actual,
-                            StatusCode expected) {
+    auto check_status = [&](const string& name, StatusCode actual, StatusCode expected) {
         bool ok = actual == expected;
         ++checks;
         passed += ok;
@@ -6742,15 +6678,14 @@ void run_world_provider_diag() {
 
     WorldStepResult reference_result;
     for (i32 i = 0; i < 240; ++i) {
-        reference_result = step_world(
-            reference_world,
-            0.25,
-            rk4_cfg,
-            reference_wksp
-        );
+        reference_result = step_world(reference_world, 0.25, rk4_cfg, reference_wksp);
         if (reference_result.status != StatusCode::ok) break;
     }
-    check_status("Reference Provider Step Status", reference_result.status, StatusCode::ok);
+    check_status(
+        "Reference Provider Step Status",
+        reference_result.status,
+        StatusCode::ok
+    );
 
     const Celestial* coarse_source = coarse_world.celestial(coarse_source_id);
     const Satellite* coarse_sat = coarse_world.satellite(coarse_sat_id);
@@ -6799,56 +6734,55 @@ void run_world_provider_diag() {
         f64 expected_time;
         string name;
     };
-    const svec<BoundaryCase> boundary_cases = {
-        {false,
-         false,
-         ProviderCoverageAction::reject_step,
-         StatusCode::sample_not_found,
-         0.0,
-         "Fixed Forward Reject"},
-        {true,
-         false,
-         ProviderCoverageAction::reject_step,
-         StatusCode::sample_not_found,
-         0.0,
-         "Adaptive Forward Reject"},
-        {false,
-         false,
-         ProviderCoverageAction::stop_world,
-         StatusCode::provider_coverage_end,
-         10.0,
-         "Fixed Forward Stop"},
-        {true,
-         false,
-         ProviderCoverageAction::stop_world,
-         StatusCode::provider_coverage_end,
-         10.0,
-         "Adaptive Forward Stop"},
-        {false,
-         true,
-         ProviderCoverageAction::stop_world,
-         StatusCode::provider_coverage_end,
-         0.0,
-         "Fixed Backward Stop"},
-        {true,
-         true,
-         ProviderCoverageAction::stop_world,
-         StatusCode::provider_coverage_end,
-         0.0,
-         "Adaptive Backward Stop"},
-        {false,
-         false,
-         ProviderCoverageAction::hold_state,
-         StatusCode::ok,
-         15.0,
-         "Fixed Forward Hold"},
-        {true,
-         false,
-         ProviderCoverageAction::extrapolate,
-         StatusCode::ok,
-         15.0,
-         "Adaptive Forward Extrapolate"}
-    };
+    const svec<BoundaryCase> boundary_cases
+        = {{false,
+            false,
+            ProviderCoverageAction::reject_step,
+            StatusCode::sample_not_found,
+            0.0,
+            "Fixed Forward Reject"},
+           {true,
+            false,
+            ProviderCoverageAction::reject_step,
+            StatusCode::sample_not_found,
+            0.0,
+            "Adaptive Forward Reject"},
+           {false,
+            false,
+            ProviderCoverageAction::stop_world,
+            StatusCode::provider_coverage_end,
+            10.0,
+            "Fixed Forward Stop"},
+           {true,
+            false,
+            ProviderCoverageAction::stop_world,
+            StatusCode::provider_coverage_end,
+            10.0,
+            "Adaptive Forward Stop"},
+           {false,
+            true,
+            ProviderCoverageAction::stop_world,
+            StatusCode::provider_coverage_end,
+            0.0,
+            "Fixed Backward Stop"},
+           {true,
+            true,
+            ProviderCoverageAction::stop_world,
+            StatusCode::provider_coverage_end,
+            0.0,
+            "Adaptive Backward Stop"},
+           {false,
+            false,
+            ProviderCoverageAction::hold_state,
+            StatusCode::ok,
+            15.0,
+            "Fixed Forward Hold"},
+           {true,
+            false,
+            ProviderCoverageAction::extrapolate,
+            StatusCode::ok,
+            15.0,
+            "Adaptive Forward Extrapolate"}};
 
     for (const BoundaryCase& test : boundary_cases) {
         World world;
@@ -6942,4 +6876,304 @@ void run_world_provider_diag() {
 
     std::println("World Provider Checks Passed = {}/{}", passed, checks);
     std::println("World Provider Diagnostic Passed = {}", passed == checks);
+}
+
+void run_cspice_provider_diag() {
+    print_diag_title("CSPICE Provider Diagnostic");
+
+    if (!cspice_available()) {
+        std::println("CSPICE Available = false");
+        std::println("Configure with -DASTROLIB_ENABLE_CSPICE=ON");
+        return;
+    }
+
+    i32 checks = 0;
+    i32 passed = 0;
+    auto check = [&](const string& name, bool ok) {
+        ++checks;
+        passed += ok;
+        std::println("{} = {}", name, ok);
+    };
+    auto check_status = [&](const string& name, StatusCode actual, StatusCode expected) {
+        bool ok = actual == expected;
+        ++checks;
+        passed += ok;
+        std::println(
+            "{} = {} (expected {}, passed = {})",
+            name,
+            status_string(actual),
+            status_string(expected),
+            ok
+        );
+    };
+
+    std::println("CSPICE Version = {}", cspice_toolkit_version());
+
+    const string kernel_root = pwd + "/assets/spice";
+    const string spk_filepath = kernel_root + "/de442s.bsp";
+    const string lsk_filepath = kernel_root + "/naif0012.tls";
+    const string pck_filepath = kernel_root + "/pck00011.tpc";
+
+    CSpiceKernelPool pool;
+    CSpiceError error;
+    StatusCode status = pool.clear(&error);
+    check_status("Initial Kernel Clear Status", status, StatusCode::ok);
+
+    for (const string& filepath : {spk_filepath, lsk_filepath, pck_filepath}) {
+        status = pool.load(filepath, &error);
+        check_status("Kernel Load Status: " + filepath, status, StatusCode::ok);
+        if (status != StatusCode::ok) {
+            std::println("    SPICE Short Message = {}", error.short_message);
+            std::println("    SPICE Long Message = {}", error.long_message);
+        }
+    }
+
+    svec<CSpiceKernelInfo> kernels;
+    status = pool.loaded(kernels, &error);
+    check_status("Loaded Kernel Query Status", status, StatusCode::ok);
+    check("Loaded Kernel Count", kernels.size() == 3);
+    for (const CSpiceKernelInfo& kernel : kernels) {
+        std::println(
+            "    Kernel = {}, Type = {}, Source = {}",
+            kernel.filepath,
+            kernel.type,
+            kernel.source
+        );
+    }
+
+    JulianDate epoch{};
+    TimeOffsets offsets{};
+    f64 et = inf<f64>;
+    status = cspice_et_from_jd(epoch, TimeScale::tdb, offsets, et);
+    check_status("J2000 ET Conversion Status", status, StatusCode::ok);
+    check("J2000 ET", std::abs(et) <= tol12);
+
+    CSpiceStateQuery state_query{
+        .target = CSpiceBodyRef::preset(CSpiceBodyPreset::moon),
+        .observer = CSpiceBodyRef::preset(CSpiceBodyPreset::earth),
+        .frame = CSpiceFrameRef::preset(CSpiceFramePreset::j2000),
+        .aberration = CSpiceAberrationCorrection::none
+    };
+    StateTr moon_state;
+    f64 light_time = 0.0;
+    status = query_cspice_state(
+        state_query,
+        epoch,
+        TimeScale::tdb,
+        offsets,
+        moon_state,
+        &light_time,
+        &error
+    );
+    check_status("Direct State Query Status", status, StatusCode::ok);
+    check(
+        "Direct State Query Result",
+        finite_state(moon_state) && moon_state.r.norm() > 1e5 && std::isfinite(light_time)
+            && light_time > 0.0
+    );
+    std::println("    Moon Position [km] = {}", moon_state.r.transpose());
+    std::println("    Moon Velocity [km/s] = {}", moon_state.v.transpose());
+    std::println("    One-Way Light Time [s] = {}", light_time);
+
+    CSpiceOrientationQuery orientation_query{
+        .object = CSpiceBodyRef::preset(CSpiceBodyPreset::earth),
+        .source_frame = CSpiceFrameRef::preset(CSpiceFramePreset::j2000),
+        .target_frame = CSpiceFrameRef::preset(CSpiceFramePreset::iau_earth)
+    };
+    StateAtt earth_attitude;
+    status = query_cspice_orientation(
+        orientation_query,
+        epoch,
+        TimeScale::tdb,
+        offsets,
+        earth_attitude,
+        &error
+    );
+    check_status("Direct Orientation Query Status", status, StatusCode::ok);
+    check(
+        "Direct Orientation Query Result",
+        finite_state_att(earth_attitude)
+            && std::abs(earth_attitude.q.norm() - 1.0) <= tol12
+            && earth_attitude.w.norm() > 0.0
+    );
+    std::println("    Earth N -> B Quaternion = {}", earth_attitude.q.transpose());
+    std::println(
+        "    Earth Body Angular Velocity [rad/s] = {}",
+        earth_attitude.w.transpose()
+    );
+
+    CSpiceSampleGrid grid{
+        .epoch
+        = EphemerisEpochMetadata{.ref_epoch = epoch, .time_scale = TimeScale::tdb, .offset_unit = UTime::second},
+        .dt = {0.0, 60.0, 120.0}
+    };
+    CartesianEphemerisTable cart_table;
+    OrientationEphemerisTable att_table;
+    status = sample_cspice_ephemeris(state_query, grid, offsets, cart_table, &error);
+    check_status("State Materialization Status", status, StatusCode::ok);
+    status
+        = sample_cspice_orientation(orientation_query, grid, offsets, att_table, &error);
+    check_status("Orientation Materialization Status", status, StatusCode::ok);
+
+    JulianDate midpoint = epoch;
+    midpoint.frac += 30.0 / 86400.0;
+    midpoint = normalize_jd(midpoint);
+    StateTr moon_mid_direct;
+    StateAtt earth_mid_direct;
+    status = query_cspice_state(
+        state_query,
+        midpoint,
+        TimeScale::tdb,
+        offsets,
+        moon_mid_direct,
+        nullptr,
+        &error
+    );
+    check_status("Midpoint Direct State Status", status, StatusCode::ok);
+    status = query_cspice_orientation(
+        orientation_query,
+        midpoint,
+        TimeScale::tdb,
+        offsets,
+        earth_mid_direct,
+        &error
+    );
+    check_status("Midpoint Direct Orientation Status", status, StatusCode::ok);
+
+    StateTr moon_mid_sampled;
+    CartesianSampleOptions cart_opts{
+        .interpolation = CartesianInterpolationMethod::cubic_hermite,
+        .extrapolation = ExtrapolationMethod::reject,
+        .tol = tol12
+    };
+    status = sample_cartesian_ephemeris(cart_table, 30.0, moon_mid_sampled, cart_opts);
+    check_status("Midpoint Sampled State Status", status, StatusCode::ok);
+
+    StateAtt earth_mid_sampled;
+    status = sample_orientation_ephemeris(att_table, 30.0, earth_mid_sampled);
+    check_status("Midpoint Sampled Orientation Status", status, StatusCode::ok);
+
+    f64 r_interp_error = (moon_mid_direct.r - moon_mid_sampled.r).norm();
+    f64 v_interp_error = (moon_mid_direct.v - moon_mid_sampled.v).norm();
+    f64 q_interp_error = std::min(
+        (earth_mid_direct.q - earth_mid_sampled.q).norm(),
+        (earth_mid_direct.q + earth_mid_sampled.q).norm()
+    );
+    f64 w_interp_error = (earth_mid_direct.w - earth_mid_sampled.w).norm();
+    std::println("State Midpoint Position Error [km] = {}", r_interp_error);
+    std::println("State Midpoint Velocity Error [km/s] = {}", v_interp_error);
+    std::println("Orientation Midpoint Quaternion Error = {}", q_interp_error);
+    std::println(
+        "Orientation Midpoint Angular Velocity Error [rad/s] = {}",
+        w_interp_error
+    );
+    check(
+        "Materialized State Midpoint",
+        std::isfinite(r_interp_error) && std::isfinite(v_interp_error)
+            && r_interp_error <= 1e-6 && v_interp_error <= 1e-8
+    );
+    check(
+        "Materialized Orientation Midpoint",
+        std::isfinite(q_interp_error) && std::isfinite(w_interp_error)
+            && q_interp_error <= 1e-8 && w_interp_error <= 1e-10
+    );
+
+    StateAtt earth_attitude_1s;
+    status
+        = query_cspice_orientation_et(orientation_query, 1.0, earth_attitude_1s, &error);
+    check_status("Simple Spin Endpoint Status", status, StatusCode::ok);
+    vec4d q_simple = step_q_simple_spin(earth_attitude, 1.0);
+    f64 q_simple_error = std::min(
+        (q_simple - earth_attitude_1s.q).norm(),
+        (q_simple + earth_attitude_1s.q).norm()
+    );
+    std::println("Simple Spin Quaternion Error = {}", q_simple_error);
+    check(
+        "Simple Spin Convention",
+        std::isfinite(q_simple_error) && q_simple_error <= 1e-8
+    );
+
+    check_status(
+        "CSPICE Earth Orientation Selection",
+        validate_earth_orientation_source_selection(true, false),
+        StatusCode::ok
+    );
+    check_status(
+        "Internal EOP Selection",
+        validate_earth_orientation_source_selection(false, true),
+        StatusCode::ok
+    );
+    check_status(
+        "Duplicate Earth Orientation Rejection",
+        validate_earth_orientation_source_selection(true, true),
+        StatusCode::invalid_input
+    );
+
+    const std::filesystem::path output_root
+        = std::filesystem::path{pwd} / "data/ephemerides/diagnostics/cspice";
+    std::error_code ec;
+    std::filesystem::create_directories(output_root, ec);
+    check("CSPICE Output Directory", !ec);
+    if (!ec) {
+        EphemerisWriteOptions cart_write{
+            .overwrite = true,
+            .precision = 17,
+            .csv = EphemerisCSVLayout{.filepath = "moon_earth_j2000.csv"}
+        };
+        EphemerisWriteOptions att_write{
+            .overwrite = true,
+            .precision = 17,
+            .csv = EphemerisCSVLayout{.filepath = "earth_iau_orientation.csv"}
+        };
+        const string cart_manifest = (output_root / "moon_earth_j2000.json").string();
+        const string att_manifest = (output_root / "earth_iau_orientation.json").string();
+
+        status = save_cartesian_ephemeris(cart_manifest, cart_table, cart_write);
+        check_status("Materialized State Save Status", status, StatusCode::ok);
+        status = save_orientation_ephemeris(att_manifest, att_table, att_write);
+        check_status("Materialized Orientation Save Status", status, StatusCode::ok);
+
+        CartesianEphemerisTable cart_loaded;
+        OrientationEphemerisTable att_loaded;
+        status = load_cartesian_ephemeris(cart_manifest, cart_loaded);
+        check_status("Materialized State Reload Status", status, StatusCode::ok);
+        status = load_orientation_ephemeris(att_manifest, att_loaded);
+        check_status("Materialized Orientation Reload Status", status, StatusCode::ok);
+        check(
+            "Materialized Table Round Trip",
+            cart_loaded.states.size() == cart_table.states.size()
+                && att_loaded.states.size() == att_table.states.size()
+                && cart_loaded.metadata.source.source_type == "cspice_spk"
+                && att_loaded.metadata.source.source_type == "cspice_orientation"
+        );
+    }
+
+    CSpiceStateQuery invalid_query = state_query;
+    invalid_query.target = CSpiceBodyRef::name("NOT_A_REAL_SPICE_TARGET");
+    StateTr invalid_state;
+    status = query_cspice_state_et(invalid_query, 0.0, invalid_state, nullptr, &error);
+    check_status(
+        "SPICE Error Capture Status",
+        status,
+        StatusCode::external_library_error
+    );
+    check("SPICE Error Capture Message", !error.short_message.empty());
+    std::println("    Captured SPICE Error = {}", error.short_message);
+
+    status = pool.unload(pck_filepath, &error);
+    check_status("Kernel Unload Status", status, StatusCode::ok);
+    kernels.clear();
+    status = pool.loaded(kernels, &error);
+    check_status("Kernel Count After Unload Status", status, StatusCode::ok);
+    check("Kernel Count After Unload", kernels.size() == 2);
+
+    status = pool.clear(&error);
+    check_status("Final Kernel Clear Status", status, StatusCode::ok);
+    kernels.clear();
+    status = pool.loaded(kernels, &error);
+    check_status("Final Kernel Query Status", status, StatusCode::ok);
+    check("Final Kernel Count", kernels.empty());
+
+    std::println("CSPICE Provider Checks Passed = {}/{}", passed, checks);
+    std::println("CSPICE Provider Diagnostic Passed = {}", passed == checks);
 }

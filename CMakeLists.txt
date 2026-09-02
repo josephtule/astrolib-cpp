@@ -27,6 +27,45 @@ target_include_directories(${TARGET_NAME} PRIVATE
 ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# Add CSPICE (optional)
+option(ASTROLIB_ENABLE_CSPICE "Enable the CSPICE source adapter" OFF)
+set(
+    CSPICE_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/cspice"
+    CACHE PATH
+    "CSPICE toolkit root"
+)
+if(ASTROLIB_ENABLE_CSPICE)
+    find_file(
+        CSPICE_LIBRARY
+        NAMES cspice.a cspice.lib
+        PATHS "${CSPICE_ROOT}/lib"
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    find_file(
+        CSPICE_CSUPPORT_LIBRARY
+        NAMES csupport.a csupport.lib
+        PATHS "${CSPICE_ROOT}/lib"
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    if(NOT EXISTS "${CSPICE_ROOT}/include/SpiceUsr.h")
+        message(FATAL_ERROR "CSPICE headers not found under ${CSPICE_ROOT}")
+    endif()
+
+    target_include_directories(${TARGET_NAME} PRIVATE "${CSPICE_ROOT}/include")
+    target_link_libraries(
+        ${TARGET_NAME}
+        PRIVATE
+        "${CSPICE_CSUPPORT_LIBRARY}"
+        "${CSPICE_LIBRARY}"
+    )
+    target_compile_definitions(${TARGET_NAME} PRIVATE ASTROLIB_HAS_CSPICE=1)
+else()
+    target_compile_definitions(${TARGET_NAME} PRIVATE ASTROLIB_HAS_CSPICE=0)
+endif()
+
 # Add Raylib
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/raylib)

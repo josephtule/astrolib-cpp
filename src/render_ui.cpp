@@ -52,6 +52,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::invalid_input:
     case StatusCode::validation_failed:
     case StatusCode::unsupported_type:
+    case StatusCode::external_library_unavailable:
     case StatusCode::missing_reference:
     case StatusCode::duplicate_id:
     case StatusCode::inactive_entity:
@@ -99,6 +100,8 @@ static Color status_color(const StatusCode code) {
     case StatusCode::max_rejections_reached:
     case StatusCode::non_finite_derivative:
     case StatusCode::non_finite_result: return RED;
+    case StatusCode::external_library_error:
+    case StatusCode::kernel_not_loaded: return RED;
     }
 
     return RAYWHITE;

@@ -419,7 +419,7 @@ StatusCode make_world_measurement_event_instrument(
         return StatusCode::observer_not_found;
     }
 
-    StationInstrument instrument;
+    PlatformInstrument instrument;
     StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
     if (status != StatusCode::ok) {
         return status;
@@ -456,7 +456,7 @@ StatusCode make_noisy_world_measurement_event_instrument(
         return StatusCode::observer_not_found;
     }
 
-    StationInstrument instrument;
+    PlatformInstrument instrument;
     StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
     if (status != StatusCode::ok) {
         return status;
@@ -567,7 +567,7 @@ StatusCode make_world_measurement_event_history_instrument(
         return StatusCode::observer_not_found;
     }
 
-    StationInstrument instrument;
+    PlatformInstrument instrument;
     StatusCode status = get_station_instrument(*observer, instrument, instrument_id);
     if (status != StatusCode::ok) {
         return status;
@@ -630,7 +630,7 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
         return StatusCode::observer_not_found;
     }
 
-    StationInstrument instrument;
+    PlatformInstrument instrument;
     status = get_station_instrument(*observer, instrument, instrument_id);
     if (status != StatusCode::ok) {
         return status;

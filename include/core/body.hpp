@@ -110,9 +110,6 @@ StatusCode set_celestial_ephemeris_providers(
     BodyEphemerisProviders providers
 );
 
-
-
-
 // Printing --------------------------------------------------------------------
 
 inline string celestial_attitude_model_str(const CelestialAttitudeModel model) {
@@ -144,8 +141,26 @@ struct MassProperties {
 
     bool active = false;
 };
+
+using InstrumentId = u32;
+constexpr InstrumentId kInvalidInstrumentId = 0;
+struct PlatformInstrument {
+    InstrumentId id = kInvalidInstrumentId;
+    std::string name;
+    ObservationType type = ObservationType::radec;
+    matXd R;
+    bool enabled = true;
+};
+
+struct InstrumentSuite {
+    InstrumentId next_id = 1;
+    umap<InstrumentId, PlatformInstrument> instruments;
+    svec<InstrumentId> enabled_ids;
+};
+
 struct Satellite : public Body {
     MassProperties mass_properties;
+    InstrumentSuite instrument_suite;
 
     // Constructor(s)
     Satellite() {
@@ -158,27 +173,15 @@ struct Satellite : public Body {
     }
 };
 
-using InstrumentId = u32;
-constexpr InstrumentId kInvalidInstrumentId = 0;
-struct StationInstrument {
-    InstrumentId id = kInvalidInstrumentId;
-    std::string name;
-    ObservationType type = ObservationType::radec;
-    matXd R;
-    bool enabled = true;
-};
-
 struct Station : public Body {
     bool anchored = true;
     EntityId anchor_id = kInvalidEntityId;
     vec3d r_body_BCBF = vec3d0; // Position of station relative to anchor in bcbf
     vec3d llh_BCBF = vec3d0;    // Planetodetic coordinates
     // [lat, lon, h] - [rad, rad, sim units]
-    InstrumentId next_instrument_id = 1;
-    umap<u32, StationInstrument> instruments;
-    svec<InstrumentId> enabled_instrument_ids;
 
     MassProperties mass_properties;
+    InstrumentSuite instrument_suite;
 
     // Constructor(s)
     Station() {
@@ -188,6 +191,54 @@ struct Station : public Body {
     }
 };
 
+StatusCode instrument_suite_from_body(Body& body, InstrumentSuite*& out);
+
+StatusCode instrument_suite_from_body(const Body& body, const InstrumentSuite*& out);
+
+StatusCode measurement_covariance(
+    const InstrumentSuite& suite,
+    InstrumentId instrument_id,
+    matXd& R
+);
+
+StatusCode measurement_covariance(
+    const InstrumentSuite& suite,
+    ObservationType type,
+    matXd& R
+);
+
+StatusCode set_instrument(
+    InstrumentSuite& suite,
+    const PlatformInstrument& instrument
+);
+
+StatusCode add_instrument(
+    InstrumentSuite& suite,
+    const PlatformInstrument& instrument,
+    InstrumentId& out_id
+);
+
+StatusCode get_instrument(
+    const InstrumentSuite& suite,
+    InstrumentId id,
+    PlatformInstrument& out
+);
+
+svec<InstrumentId> enabled_instrument_ids(
+    const InstrumentSuite& suite
+);
+
+StatusCode enable_instrument(
+    InstrumentSuite& suite,
+    InstrumentId id
+);
+
+StatusCode disable_instrument(
+    InstrumentSuite& suite,
+    InstrumentId id
+);
+
+// TODO: remove station specific instrument functions 
 StatusCode station_measurement_covariance(
     const Station& station,
     InstrumentId instrument_id,
@@ -198,16 +249,16 @@ StatusCode station_measurement_covariance(
     ObservationType type,
     matXd& R
 );
-StatusCode set_station_instrument(Station& station, const StationInstrument& instrument);
+StatusCode set_station_instrument(Station& station, const PlatformInstrument& instrument);
 StatusCode add_station_instrument(
     Station& station,
-    const StationInstrument& instrument,
+    const PlatformInstrument& instrument,
     InstrumentId& out_id
 );
-StatusCode add_station_instrument(Station& station, const StationInstrument& instrument);
+StatusCode add_station_instrument(Station& station, const PlatformInstrument& instrument);
 StatusCode get_station_instrument(
     const Station& station,
-    StationInstrument& instrument,
+    PlatformInstrument& instrument,
     InstrumentId id
 );
 
@@ -375,7 +426,7 @@ inline void print_satellite(const Satellite& sat, const string& indent = "") {
 }
 
 inline void print_station_instrument(
-    const StationInstrument& instrument,
+    const PlatformInstrument& instrument,
     const string& indent = ""
 ) {
     std::println("{}--- Instrument ID: {}", indent, instrument.id);
@@ -406,13 +457,19 @@ inline void print_station(const Station& stat, const string& indent = "") {
         print_mass_properties(stat.mass_properties, indent2);
     }
 
-    std::println("{}Instruments Count: {}", indent2, stat.instruments.size());
+    std::println(
+        "{}Instruments Count: {}",
+        indent2,
+        stat.instrument_suite.instruments.size()
+    );
     std::println(
         "{}Enabled Instrument IDs: {}",
         indent2,
-        vec_string(stat.enabled_instrument_ids)
+        vec_string(stat.instrument_suite.enabled_ids)
     );
-    for (const auto& [id, instrument] : stat.instruments) {
+    for (const auto& [id, instrument] : stat.instrument_suite.instruments) {
         print_station_instrument(instrument, indent3);
     }
 }
+
+

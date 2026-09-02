@@ -62,6 +62,16 @@ other licenses. See `external/eigen/COPYING.README` and the accompanying
 - Source: https://github.com/nlohmann/json
 - License text: https://github.com/nlohmann/json/blob/develop/LICENSE.MIT
 
+## CSPICE
+
+- Project: CSPICE Toolkit
+- Provider: NASA/JPL Navigation and Ancillary Information Facility (NAIF)
+- Source: https://naif.jpl.nasa.gov/naif/toolkit.html
+- Usage and distribution rules: https://naif.jpl.nasa.gov/naif/rules.html
+
+CSPICE is an optional, locally downloaded dependency and is not distributed in
+this repository. SPICE kernels remain subject to their source-provider terms.
+
 ## Distribution Notes
 
 The entries above summarize the primary dependencies used by this project. The

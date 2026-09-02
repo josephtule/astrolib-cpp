@@ -89,6 +89,14 @@ Download the optional CSPICE toolkit and compact generic kernel set with:
 ./scripts/download_spice.sh
 ```
 
+Enable the optional CSPICE adapter while configuring:
+
+```sh
+cmake -S . -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DASTROLIB_ENABLE_CSPICE=ON
+```
+
 ## Build
 
 Recommended:

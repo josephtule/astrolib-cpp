@@ -2463,7 +2463,7 @@ static StatusCode apply_satellite_config(
 
 static StatusCode apply_instrument_config(
     const ScenarioInstrumentConfig& cfg,
-    StationInstrument& instrument
+    PlatformInstrument& instrument
 ) {
     instrument.name = cfg.id;
     instrument.type = cfg.type;
@@ -2529,7 +2529,7 @@ static StatusCode apply_station_config(
     }
 
     for (const auto& instrument_cfg : cfg.instruments) {
-        StationInstrument instrument;
+        PlatformInstrument instrument;
         status = apply_instrument_config(instrument_cfg, instrument);
         if (status != StatusCode::ok) return status;
 
@@ -2816,7 +2816,7 @@ StatusCode build_scenario_config_from_world(
             out.mass_properties.offset_body = stat->mass_properties.offset_body;
         }
 
-        for (const auto& [id, instr] : stat->instruments) {
+        for (const auto& [id, instr] : stat->instrument_suite.instruments) {
             ScenarioInstrumentConfig out_instr;
 
             out_instr.id = instr.name;

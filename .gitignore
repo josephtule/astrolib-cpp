@@ -15,3 +15,4 @@
 docs/api/
 **/data/ephemerides/diagnostics
 **/external/cspice
+**/external/Sgp4Prop

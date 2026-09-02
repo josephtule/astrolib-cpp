@@ -5,9 +5,9 @@
 
 #include "core/body.hpp"
 #include "core/entity.hpp"
-#include "core/status.hpp"
 #include "core/scenario_io.hpp"
 #include "core/state.hpp"
+#include "core/status.hpp"
 #include "core/transform.hpp"
 #include "core/world.hpp"
 #include "core/world_stepper.hpp"
@@ -528,7 +528,7 @@ static StatusCode sync_scenario_station_anchor(
 
 static StatusCode sync_scenario_instrument(
     ScenarioInstrumentConfig& cfg,
-    const StationInstrument& instr
+    const PlatformInstrument& instr
 ) {
     cfg.id = instr.name.empty() ? "instrument_" + std::to_string(instr.id) : instr.name;
 
@@ -546,8 +546,8 @@ static StatusCode sync_scenario_station_instruments(
     const Station& stat
 ) {
     svec<InstrumentId> instrument_ids;
-    instrument_ids.reserve(stat.instruments.size());
-    for (const auto& entry : stat.instruments) {
+    instrument_ids.reserve(stat.instrument_suite.instruments.size());
+    for (const auto& entry : stat.instrument_suite.instruments) {
         instrument_ids.push_back(entry.first);
     }
     std::sort(instrument_ids.begin(), instrument_ids.end());
@@ -557,8 +557,10 @@ static StatusCode sync_scenario_station_instruments(
     uset<string> config_ids;
 
     for (InstrumentId id : instrument_ids) {
-        auto it = stat.instruments.find(id);
-        if (it == stat.instruments.end()) return StatusCode::instrument_not_found;
+        auto it = stat.instrument_suite.instruments.find(id);
+        if (it == stat.instrument_suite.instruments.end()) {
+            return StatusCode::instrument_not_found;
+        }
 
         ScenarioInstrumentConfig instr_cfg;
         StatusCode status = sync_scenario_instrument(instr_cfg, it->second);

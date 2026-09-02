@@ -225,6 +225,18 @@ Existing validated files are reused. Pass `--force` to replace them, or use
 ignored because CSPICE is platform-specific and the ephemeris is relatively
 large.
 
+The downloader selects the NAIF package for Apple Silicon macOS, Intel macOS,
+x86-64 Linux, Windows/Visual C under Git Bash or MSYS, or Windows/Cygwin. Set
+`CSPICE_PLATFORM` to an official NAIF platform directory when automatic
+detection does not match the compiler used by CMake. Unsupported architectures
+fail explicitly rather than installing an incompatible binary toolkit.
+
+Enable the source adapter at configure time:
+
+```sh
+cmake -S . -B build -DASTROLIB_ENABLE_CSPICE=ON
+```
+
 References:
 
 - SPK position API: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkpos_c.html

@@ -63,6 +63,10 @@ enum struct StatusCode {
     invalid_ephemeris_metadata,
     non_monotonic_time,
     provider_coverage_end,
+
+    external_library_unavailable,
+    external_library_error,
+    kernel_not_loaded,
 };
 
 inline std::string status_string(StatusCode status) {
@@ -119,6 +123,9 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::invalid_ephemeris_metadata: return "Invalid ephemeris metadata";
     case StatusCode::non_monotonic_time: return "Non-monotonic time";
     case StatusCode::provider_coverage_end: return "Provider coverage end reached";
+    case StatusCode::external_library_unavailable: return "External library unavailable";
+    case StatusCode::external_library_error: return "External library error";
+    case StatusCode::kernel_not_loaded: return "Kernel not loaded";
     }
 
     return "Unknown Status";

@@ -234,8 +234,8 @@ static bool mass_properties_changed(
 }
 
 static bool station_instrument_changed(
-    const StationInstrument& a,
-    const StationInstrument& b,
+    const PlatformInstrument& a,
+    const PlatformInstrument& b,
     f64 tol = tol12
 ) {
     return a.id != b.id || a.name != b.name || a.type != b.type || a.enabled != b.enabled
@@ -243,8 +243,8 @@ static bool station_instrument_changed(
 }
 
 static bool station_instruments_changed(
-    const umap<u32, StationInstrument>& a,
-    const umap<u32, StationInstrument>& b,
+    const umap<u32, PlatformInstrument>& a,
+    const umap<u32, PlatformInstrument>& b,
     f64 tol = tol12
 ) {
     if (a.size() != b.size()) return true;
@@ -283,9 +283,13 @@ static bool station_changed(const Station& a, const Station& b, f64 tol = tol12)
            || a.anchor_id != b.anchor_id
            || vec3_changed(a.r_body_BCBF, b.r_body_BCBF, tol)
            || vec3_changed(a.llh_BCBF, b.llh_BCBF, tol)
-           || a.next_instrument_id != b.next_instrument_id
-           || a.enabled_instrument_ids != b.enabled_instrument_ids
-           || station_instruments_changed(a.instruments, b.instruments, tol)
+           || a.instrument_suite.next_id != b.instrument_suite.next_id
+           || a.instrument_suite.enabled_ids != b.instrument_suite.enabled_ids
+           || station_instruments_changed(
+               a.instrument_suite.instruments,
+               b.instrument_suite.instruments,
+               tol
+           )
            || mass_properties_changed(a.mass_properties, b.mass_properties, tol);
 }
 
@@ -1056,7 +1060,7 @@ static void render_station_instruments_ui(
     if (im::CollapsingHeader("Instruments")) {
         im::Indent();
         bool enabled_changed = false;
-        for (auto& [id, instr] : stat.instruments) {
+        for (auto& [id, instr] : stat.instrument_suite.instruments) {
             im::PushID(&instr.name);
             im::TextSL("Name:");
             im::InputText("##name", &instr.name, flags);
@@ -1073,7 +1077,7 @@ static void render_station_instruments_ui(
         }
 
         if (enabled_changed) {
-            stat.enabled_instrument_ids = enabled_station_instrument_ids(stat);
+            stat.instrument_suite.enabled_ids = enabled_station_instrument_ids(stat);
         }
 
         if (im::CollapsingHeader("Add Instrument")) {
@@ -1111,7 +1115,7 @@ static void render_station_instruments_ui(
                 if (dim <= 0) {
                     state.add_instrument_status = StatusCode::invalid_input;
                 } else {
-                    StationInstrument instrument;
+                    PlatformInstrument instrument;
                     instrument.name = state.add_instrument_name;
                     instrument.type = type;
                     instrument.enabled = true;

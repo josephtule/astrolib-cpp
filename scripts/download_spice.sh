@@ -8,6 +8,7 @@ project_root="$(CDPATH= cd -- "${script_dir}/.." && pwd)"
 cspice_dir="${CSPICE_DIR:-${project_root}/external/cspice}"
 kernel_dir="${SPICE_KERNEL_DIR:-${project_root}/assets/spice}"
 naif_root="https://naif.jpl.nasa.gov/pub/naif"
+cspice_version="N0067"
 
 spk_name="de442s.bsp"
 lsk_name="naif0012.tls"
@@ -38,8 +39,9 @@ Options:
 Environment overrides:
   CSPICE_DIR              Toolkit installation directory
   SPICE_KERNEL_DIR        Kernel installation directory
+  CSPICE_PLATFORM         NAIF platform directory override
   CSPICE_PACKAGE_URL      CSPICE archive URL for an unsupported platform
-  CSPICE_ARCHIVE_FORMAT   tar.Z or zip when CSPICE_PACKAGE_URL is set
+  CSPICE_ARCHIVE_FORMAT   tar.Z, tar.gz, or zip for an override
 EOF
 }
 
@@ -111,6 +113,7 @@ select_cspice_package() {
     local arch
 
     if [[ -n "${CSPICE_PACKAGE_URL:-}" ]]; then
+        cspice_platform="custom"
         cspice_url="${CSPICE_PACKAGE_URL}"
         cspice_format="${CSPICE_ARCHIVE_FORMAT:-tar.Z}"
         return
@@ -119,39 +122,48 @@ select_cspice_package() {
     os="$(uname -s)"
     arch="$(uname -m)"
 
-    case "${os}:${arch}" in
-        Darwin:arm64|Darwin:aarch64)
-            cspice_platform="MacM1_OSX_clang_64bit"
-            cspice_format="tar.Z"
-            ;;
-        Darwin:x86_64)
-            cspice_platform="MacIntel_OSX_AppleC_64bit"
-            cspice_format="tar.Z"
-            ;;
-        Linux:x86_64|Linux:amd64)
-            cspice_platform="PC_Linux_GCC_64bit"
-            cspice_format="tar.Z"
-            ;;
-        MINGW64*:x86_64|MSYS_NT*:x86_64)
-            cspice_platform="PC_Windows_VisualC_64bit"
-            cspice_format="zip"
-            ;;
-        *)
-            fail "unsupported CSPICE platform ${os}/${arch}; set CSPICE_PACKAGE_URL and CSPICE_ARCHIVE_FORMAT"
-            ;;
-    esac
-
-    if [[ "${cspice_format}" == "zip" ]]; then
-        cspice_url="${naif_root}/toolkit/C/${cspice_platform}/packages/cspice.zip"
+    if [[ -n "${CSPICE_PLATFORM:-}" ]]; then
+        cspice_platform="${CSPICE_PLATFORM}"
+        case "${cspice_platform}" in
+            PC_Windows_VisualC_*) cspice_format="zip" ;;
+            PC_Cygwin_GCC_*) cspice_format="tar.gz" ;;
+            *) cspice_format="tar.Z" ;;
+        esac
     else
-        cspice_url="${naif_root}/toolkit/C/${cspice_platform}/packages/cspice.tar.Z"
+        case "${os}:${arch}" in
+            Darwin:arm64|Darwin:aarch64)
+                cspice_platform="MacM1_OSX_clang_64bit"
+                cspice_format="tar.Z"
+                ;;
+            Darwin:x86_64|Darwin:amd64)
+                cspice_platform="MacIntel_OSX_AppleC_64bit"
+                cspice_format="tar.Z"
+                ;;
+            Linux:x86_64|Linux:amd64)
+                cspice_platform="PC_Linux_GCC_64bit"
+                cspice_format="tar.Z"
+                ;;
+            CYGWIN_NT-*:x86_64|CYGWIN_NT-*:amd64)
+                cspice_platform="PC_Cygwin_GCC_64bit"
+                cspice_format="tar.gz"
+                ;;
+            MINGW64_NT-*:x86_64|MINGW64_NT-*:amd64|MSYS_NT-*:x86_64|MSYS_NT-*:amd64)
+                cspice_platform="PC_Windows_VisualC_64bit"
+                cspice_format="zip"
+                ;;
+            *)
+                fail "unsupported CSPICE platform ${os}/${arch}; set CSPICE_PLATFORM or CSPICE_PACKAGE_URL and CSPICE_ARCHIVE_FORMAT"
+                ;;
+        esac
     fi
+
+    cspice_url="${naif_root}/toolkit/C/${cspice_platform}/packages/cspice.${cspice_format}"
 }
 
 validate_cspice_tree() {
     local directory="$1"
 
-    [[ -f "${directory}/N0067" ]] || return 1
+    [[ -f "${directory}/${cspice_version}" ]] || return 1
     [[ -f "${directory}/include/SpiceUsr.h" ]] || return 1
     [[ -f "${directory}/lib/cspice.a" || -f "${directory}/lib/cspice.lib" ]] || return 1
 }
@@ -164,7 +176,7 @@ install_cspice() {
     if [[ -d "${cspice_dir}" && "${force}" == false ]]; then
         validate_cspice_tree "${cspice_dir}" || \
             fail "existing CSPICE directory is incomplete; rerun with --force"
-        printf 'Using existing CSPICE N0067: %s\n' "${cspice_dir}"
+        printf 'Using existing CSPICE %s: %s\n' "${cspice_version}" "${cspice_dir}"
         return
     fi
 
@@ -183,6 +195,9 @@ install_cspice() {
                 fail "gzip or uncompress is required to extract CSPICE"
             fi
             ;;
+        tar.gz)
+            tar -xzf "${archive}" -C "${extract_dir}"
+            ;;
         zip)
             command -v unzip >/dev/null 2>&1 || fail "unzip is required to extract CSPICE"
             unzip -q "${archive}" -d "${extract_dir}"
@@ -200,7 +215,8 @@ install_cspice() {
         rm -rf "${cspice_dir}"
     fi
     mv "${extracted_tree}" "${cspice_dir}"
-    printf 'Installed CSPICE N0067: %s\n' "${cspice_dir}"
+    printf 'Installed CSPICE %s for %s: %s\n' \
+        "${cspice_version}" "${cspice_platform}" "${cspice_dir}"
 }
 
 install_kernel() {
