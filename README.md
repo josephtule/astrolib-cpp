@@ -83,6 +83,12 @@ Several diagnostics and scenarios expect local data files under `assets/`. Data 
 
 See [`docs/data.md`](docs/data.md) for expected filenames and public data sources.
 
+Download the optional CSPICE toolkit and compact generic kernel set with:
+
+```sh
+./scripts/download_spice.sh
+```
+
 ## Build
 
 Recommended:

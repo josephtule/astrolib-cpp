@@ -202,13 +202,36 @@ Useful sources:
 
 TLE parsing supports raw TLE data and conversion to satellite initial states through the project ingest utilities.
 
-## SPICE References
+## SPICE Toolkit and Kernels
 
-SPICE is not currently required for the active project path, but these references may be useful for later ephemeris/provider work:
+Download the platform-specific CSPICE N0067 toolkit and the project's pinned
+generic kernels:
+
+```sh
+./scripts/download_spice.sh
+```
+
+The script installs:
+
+```text
+external/cspice/             platform-specific CSPICE toolkit
+assets/spice/de442s.bsp      compact DE442 planetary ephemeris
+assets/spice/naif0012.tls    leap-second kernel
+assets/spice/pck00011.tpc    planetary constants kernel
+```
+
+Existing validated files are reused. Pass `--force` to replace them, or use
+`--toolkit-only` / `--kernels-only` to download one group. These directories are
+ignored because CSPICE is platform-specific and the ephemeris is relatively
+large.
+
+References:
 
 - SPK position API: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkpos_c.html
 - NAIF target IDs: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/naif_ids.html
 - NAIF frame IDs: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/frames.html
+- CSPICE toolkit downloads: https://naif.jpl.nasa.gov/naif/toolkit.html
+- Generic kernels: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/
 
 ## Notes
 
