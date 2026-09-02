@@ -11,6 +11,20 @@
 
 StatusCode od_batch_validate_input(const ODBatchInput& input) {
     if (input.measurements.size() == 0) return StatusCode::empty_measurements;
+    if (!input.observer_uncertainties.empty()) {
+        if (input.observer_uncertainties.size() != input.measurements.size()) {
+            return StatusCode::size_mismatch;
+        }
+        for (size_t i = 0; i < input.measurements.size(); ++i) {
+            if (input.observer_uncertainties[i].enabled
+                && input.measurements[i].type == ObservationType::azel) {
+                return StatusCode::unsupported_type;
+            }
+            if (input.observer_uncertainties[i].enabled && input.measurements[i].R.size() == 0) {
+                return StatusCode::invalid_covariance;
+            }
+        }
+    }
     if (input.measurements.size() != input.observer_states.size()) {
         return StatusCode::size_mismatch;
     }
@@ -24,9 +38,31 @@ StatusCode od_batch_validate_input(const ODBatchInput& input) {
     return StatusCode::ok;
 }
 
-ODBatchResidualEval od_batch_eval_residual_norm(
+namespace {
+
+StatusCode batch_measurement_covariance(
     const ODBatchInput& input,
-    const StateTr& x0_ref
+    size_t i,
+    const MeasurementContext& ctx,
+    matXd& out
+) {
+    const Measurement& meas = input.measurements[i];
+    if (input.observer_uncertainties.empty() || !input.observer_uncertainties[i].enabled) {
+        out = meas.R;
+        return StatusCode::ok;
+    }
+    matXd H_observer;
+    StatusCode status = measurement_observer_jacobian(meas.type, ctx, H_observer);
+    if (status != StatusCode::ok) return status;
+    return effective_measurement_covariance(
+        meas.R, H_observer, input.observer_uncertainties[i].P, out
+    );
+}
+
+ODBatchResidualEval batch_eval_residual_norm(
+    const ODBatchInput& input,
+    const StateTr& x0_ref,
+    const svec<matXd>* frozen_covariances
 ) {
     // helper to compute residual norms (weighted & raw)
     ODBatchResidualEval eval;
@@ -73,6 +109,14 @@ ODBatchResidualEval od_batch_eval_residual_norm(
             return eval;
         }
 
+        matXd R;
+        if (frozen_covariances != nullptr) {
+            R = (*frozen_covariances)[i];
+        } else {
+            eval.status = batch_measurement_covariance(input, i, ctx, R);
+            if (eval.status != StatusCode::ok) return eval;
+        }
+
         // residuals
         vecXd res_i = measurement_residual(meas.type, meas.z, z_pred);
         if (!res_i.allFinite()) {
@@ -84,10 +128,10 @@ ODBatchResidualEval od_batch_eval_residual_norm(
 
         // weight residuals using measurement covariance
         // empty measurement covariance uses identity
-        if (meas.R.size() == 0) {
+        if (R.size() == 0) {
             weighted_norm2 += res_i.squaredNorm();
         } else {
-            Eigen::LDLT<matXd> R_ldlt(meas.R);
+            Eigen::LDLT<matXd> R_ldlt(R);
             if (R_ldlt.info() != Eigen::Success) {
                 eval.status = StatusCode::invalid_covariance;
                 return eval;
@@ -112,6 +156,15 @@ ODBatchResidualEval od_batch_eval_residual_norm(
     eval.raw_norm = std::sqrt(raw_norm2);
     eval.status = StatusCode::ok;
     return eval;
+}
+
+} // namespace
+
+ODBatchResidualEval od_batch_eval_residual_norm(
+    const ODBatchInput& input,
+    const StateTr& x0_ref
+) {
+    return batch_eval_residual_norm(input, x0_ref, nullptr);
 }
 
 ODBatchResult od_batch_lumve(const ODBatchInput& input) {
@@ -172,6 +225,8 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
         f64 residual_norm2 = 0.0;
         f64 raw_residual_norm2 = 0.0;
 
+        // freeze observer-dependent weights throughout this iteration's line search
+        svec<matXd> frozen_covariances(input.measurements.size());
         i32 row0 = 0;
         for (i32 i = 0; i < input.measurements.size(); ++i) {
             const Measurement& meas = input.measurements[i];
@@ -222,13 +277,17 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             }
             matXd H_i = G_i * yf.Phi;
 
+            matXd& R = frozen_covariances[i];
+            result.status = batch_measurement_covariance(input, i, ctx, R);
+            if (result.status != StatusCode::ok) return result;
+
             vecXd weighted_res;
             matXd weighted_H;
-            if (meas.R.size() == 0) {
+            if (R.size() == 0) {
                 weighted_res = res_i;
                 weighted_H = H_i;
             } else {
-                Eigen::LDLT<matXd> R_ldlt(meas.R);
+                Eigen::LDLT<matXd> R_ldlt(R);
                 if (R_ldlt.info() != Eigen::Success) {
                     result.status = StatusCode::invalid_covariance;
                     return result;
@@ -303,7 +362,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 vec6d dx_cand_vec = alpha * dx_vec;
                 StateTr x0_cand = x0_ref + vec6d_to_statetr(dx_cand_vec);
                 ODBatchResidualEval cand_eval
-                    = od_batch_eval_residual_norm(input, x0_cand);
+                    = batch_eval_residual_norm(input, x0_cand, &frozen_covariances);
                 if (!od_status_success(cand_eval.status)) {
                     continue;
                 }

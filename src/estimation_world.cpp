@@ -58,6 +58,7 @@ ODEKFStepResult od_ekf_step_world(
         .Q = Q,
         .tol_time = tol_time
     };
+    input.observer_uncertainty = event.observer_uncertainty;
     result.status = od_ekf_step_validate_input(input);
 
     // result = od_ekf_step(input);
@@ -85,6 +86,14 @@ ODEKFStepResult od_ekf_step_world(
 
     StateTr& x_pred = prediction.y.x;
     mat6d& P_pred = prediction.P;
+    result.filter.x = x_pred;
+    result.filter.P = P_pred;
+    result.filter.t = prediction.t;
+
+    if (event.observer_uncertainty.enabled && event.measurement.type == ObservationType::azel) {
+        result.status = StatusCode::unsupported_type;
+        return result;
+    }
 
     // predicted measurement
     vecXd z_pred;
@@ -149,6 +158,20 @@ ODEKFStepResult od_ekf_step_world(
         R = matXd::Identity(dim, dim);
     } else {
         R = event.measurement.R;
+    }
+
+    if (event.observer_uncertainty.enabled) {
+        MeasurementContext measurement_ctx = make_measurement_context(x_pred, x_tr_observer);
+        matXd H_observer;
+        result.status = measurement_observer_jacobian(
+            event.measurement.type, measurement_ctx, H_observer,
+            angle_in, angle_out, eps_pos, eps_vel, tol
+        );
+        if (result.status != StatusCode::ok) return result;
+        result.status = effective_measurement_covariance(
+            event.measurement.R, H_observer, event.observer_uncertainty.P, R
+        );
+        if (result.status != StatusCode::ok) return result;
     }
 
     // innovation covariance

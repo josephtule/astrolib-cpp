@@ -5,6 +5,7 @@
 
 #include "core/status.hpp"
 #include "core/measurement.hpp"
+#include "core/measurement_uncertainty.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/state.hpp"
 #include "util/vecdefs.hpp"
@@ -23,6 +24,8 @@ struct ODBatchInput {
     f64 max_dx_r_norm = 5e4;
     f64 max_dx_v_norm = 15.0;
     bool use_line_search = true;
+    // empty disables all; otherwise one entry per measurement
+    svec<ObserverUncertainty> observer_uncertainties;
 };
 
 struct ODBatchResult {

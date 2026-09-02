@@ -5,6 +5,7 @@
 
 #include "core/status.hpp"
 #include "core/measurement.hpp"
+#include "core/measurement_uncertainty.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/state.hpp"
 #include "util/constants.hpp"
@@ -24,6 +25,7 @@ struct ODEKFStepInput {
     i32 prop_steps = 100;
     mat6d Q = mat6d0; // process noise covariance (process uncertainty)
     f64 tol_time = tol12;
+    ObserverUncertainty observer_uncertainty;
 };
 
 struct ODEKFStepResult {
@@ -43,6 +45,8 @@ struct ODEKFOfflineInput {
     i32 prop_steps = 100;
     mat6d Q = mat6d0;
     f64 tol_time = tol12;
+    // empty disables all; otherwise one entry per measurement
+    svec<ObserverUncertainty> observer_uncertainties;
 };
 
 struct ODEKFResult {

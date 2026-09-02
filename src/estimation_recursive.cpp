@@ -16,6 +16,9 @@ StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input) {
     if (!std::isfinite(input.tol_time) || input.tol_time < 0.0) {
         return StatusCode::validation_failed;
     }
+    if (input.observer_uncertainty.enabled && input.measurement.R.size() == 0) {
+        return StatusCode::invalid_covariance;
+    }
     i32 dim = measurement_dim(input.measurement.type);
     if (dim <= 0) {
         return StatusCode::unsupported_type;
@@ -41,6 +44,10 @@ StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input) {
 
 StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
     if (input.measurements.size() == 0) return StatusCode::empty_measurements;
+    if (!input.observer_uncertainties.empty()
+        && input.observer_uncertainties.size() != input.measurements.size()) {
+        return StatusCode::size_mismatch;
+    }
     if (input.measurements.size() != input.observer_states.size()) {
         return StatusCode::size_mismatch;
     }
@@ -55,6 +62,10 @@ StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
     }
     for (i32 i = 0; i < input.measurements.size(); ++i) {
         const Measurement& meas = input.measurements[i];
+        if (!input.observer_uncertainties.empty()
+            && input.observer_uncertainties[i].enabled && meas.R.size() == 0) {
+            return StatusCode::invalid_covariance;
+        }
         i32 dim = measurement_dim(meas.type);
         if (dim <= 0) {
             return StatusCode::unsupported_type;
@@ -165,6 +176,11 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     result.filter.t = t_pred;
 
 
+    if (input.observer_uncertainty.enabled && meas.type == ObservationType::azel) {
+        result.status = StatusCode::unsupported_type;
+        return result;
+    }
+
     // measurement prediction
     MeasurementContext ctx = make_measurement_context(x_pred, x_tr_obsv);
     vecXd z_pred = predict_measurement(meas.type, ctx);
@@ -194,6 +210,16 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
         R = matXd::Identity(dim, dim);
     } else {
         R = meas.R;
+    }
+
+    if (input.observer_uncertainty.enabled) {
+        matXd H_observer;
+        result.status = measurement_observer_jacobian(meas.type, ctx, H_observer);
+        if (result.status != StatusCode::ok) return result;
+        result.status = effective_measurement_covariance(
+            meas.R, H_observer, input.observer_uncertainty.P, R
+        );
+        if (result.status != StatusCode::ok) return result;
     }
 
     // innovation covariance
@@ -276,6 +302,9 @@ ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input) {
             .tol_time = input.tol_time
         };
 
+        if (!input.observer_uncertainties.empty()) {
+            step_input.observer_uncertainty = input.observer_uncertainties[i];
+        }
         ODEKFStepResult step_result = od_ekf_step(step_input);
         if (!od_status_success(step_result.status)) {
             result.filter = step_result.filter;

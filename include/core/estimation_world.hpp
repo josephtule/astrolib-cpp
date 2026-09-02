@@ -7,6 +7,7 @@
 #include "core/estimation_recursive.hpp"
 #include "core/interpolation.hpp"
 #include "core/measurement.hpp"
+#include "core/measurement_uncertainty.hpp"
 #include "core/world.hpp"
 #include "core/world_history.hpp"
 #include "core/measurement_realism.hpp"
@@ -17,6 +18,7 @@ struct ODWorldMeasurementEvent {
     Measurement measurement;
     EntityId observer_id = kInvalidEntityId;
     EntityId target_id = kInvalidEntityId;
+    ObserverUncertainty observer_uncertainty;
 };
 
 ODEKFStepResult od_ekf_step_world(
