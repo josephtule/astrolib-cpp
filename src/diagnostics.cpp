@@ -7583,3 +7583,133 @@ void run_relative_angular_observation_diag() {
     std::println("Relative Angular Checks: {}/{}", passed, checks);
     print_diag_title();
 }
+
+void run_measurement_realism_seam_diag() {
+    print_diag_title("Measurement Realism Seam Diagnostic");
+    i32 checks = 0, passed = 0;
+    auto check = [&](const char* label, bool valid) {
+        ++checks;
+        if (valid) ++passed;
+        std::println("{}: {}", label, valid ? "PASS" : "FAIL");
+    };
+    auto scenario = make_earth_sats_stats_scenario();
+    check("Scenario", scenario.success);
+    if (!scenario.success) return;
+    World& world = scenario.world;
+    EntityId observer_id = scenario.sat1_id, target_id = scenario.sat2_id;
+    MeasurementRealismQuery query{world.t_sim(), ObservationType::range, observer_id, target_id};
+    MeasurementRealismPolicy disabled;
+    MeasurementRealismResult result;
+    result.availability = MeasurementAvailability::available;
+    StatusCode status = evaluate_measurement_realism(query, disabled, result);
+    check("Disabled Not Evaluated", status == StatusCode::ok
+        && result.availability == MeasurementAvailability::not_evaluated);
+    check("Unavailable Is Not Estimator Success", !od_status_success(StatusCode::measurement_unavailable));
+
+    PlatformInstrument instrument;
+    instrument.type = ObservationType::range;
+    instrument.enabled = true;
+    instrument.R = matXd::Identity(1, 1) * 1e-6;
+    InstrumentId instrument_id = kInvalidInstrumentId;
+    auto& suite = world.satellite(observer_id)->instrument_suite;
+    status = add_instrument(suite, instrument, instrument_id);
+    check("Add Instrument", status == StatusCode::ok);
+    if (status != StatusCode::ok) return;
+    ODWorldMeasurementEvent baseline;
+    status = make_world_measurement_event_instrument(
+        world, instrument_id, observer_id, target_id, query.t, baseline
+    );
+    check("Default Policy Event", status == StatusCode::ok);
+    ODWorldMeasurementEvent explicit_disabled;
+    status = make_world_measurement_event_instrument(
+        world, instrument_id, observer_id, target_id, query.t, explicit_disabled,
+        UAngle::radian, UAngle::radian, tol12, disabled
+    );
+    check("Disabled Prediction Unchanged", status == StatusCode::ok
+        && explicit_disabled.measurement.z.isApprox(baseline.measurement.z)
+        && explicit_disabled.measurement.R.isApprox(baseline.measurement.R));
+
+    WorldHistory history;
+    push_world_history_sample(history, capture_world_history_sample(world));
+    world.advance_time(1.0);
+    push_world_history_sample(history, capture_world_history_sample(world));
+    StateSampleOptions sample_opts;
+    ODWorldMeasurementEvent history_event;
+    status = make_world_measurement_event_history_instrument(
+        world, history, instrument_id, observer_id, target_id, query.t, history_event,
+        sample_opts, UAngle::radian, UAngle::radian, tol12, disabled
+    );
+    check("History Uses Requested Epoch", status == StatusCode::ok
+        && history_event.measurement.t == query.t
+        && history_event.measurement.z.isApprox(baseline.measurement.z));
+
+    // Each requested check is unsupported, with no prediction/noise side effects
+    for (i32 i = 0; i < 4; ++i) {
+        MeasurementRealismPolicy policy;
+        if (i == 0) policy.check_station_horizon = true;
+        if (i == 1) policy.check_body_occultation = true;
+        if (i == 2) policy.check_target_illumination = true;
+        if (i == 3) policy.check_field_of_view = true;
+        result.availability = MeasurementAvailability::available;
+        status = evaluate_measurement_realism(query, policy, result);
+        check("Requested Check Unsupported", status == StatusCode::unsupported_type);
+        check("Evaluator Output Preserved", result.availability == MeasurementAvailability::available);
+        ODWorldMeasurementEvent event = baseline;
+        std::mt19937_64 rng(12345);
+        auto rng_before = rng;
+        MeasurementNoiseOptions noise{.rng = rng, .enabled = true};
+        status = make_noisy_world_measurement_event_instrument(
+            world, instrument_id, observer_id, target_id, world.t_sim(), event, noise,
+            UAngle::radian, UAngle::radian, tol12, policy
+        );
+        check("Current Wrapper Unsupported", status == StatusCode::unsupported_type);
+        check("Current Event And RNG Preserved", event.measurement.t == baseline.measurement.t
+            && event.measurement.z.isApprox(baseline.measurement.z) && rng == rng_before);
+        status = make_noisy_world_measurement_event_history_instrument(
+            world, history, instrument_id, observer_id, target_id, query.t, event,
+            noise, sample_opts, UAngle::radian, UAngle::radian, tol12, policy
+        );
+        check("History Wrapper Unsupported", status == StatusCode::unsupported_type);
+        check("History Event And RNG Preserved", event.measurement.t == baseline.measurement.t
+            && event.measurement.z.isApprox(baseline.measurement.z) && rng == rng_before);
+    }
+
+    // Invalid query fields fail without changing the output
+    for (i32 i = 0; i < 4; ++i) {
+        auto invalid = query;
+        if (i == 0) invalid.t = std::numeric_limits<f64>::quiet_NaN();
+        if (i == 1) invalid.type = static_cast<ObservationType>(-1);
+        if (i == 2) invalid.observer_id = kInvalidEntityId;
+        if (i == 3) invalid.target_id = kInvalidEntityId;
+        result.availability = MeasurementAvailability::available;
+        check("Invalid Query", evaluate_measurement_realism(invalid, disabled, result) == StatusCode::invalid_input);
+        check("Invalid Query Output Preserved", result.availability == MeasurementAvailability::available);
+    }
+
+    std::mt19937_64 rng1(42), rng2(42);
+    MeasurementNoiseOptions noise1{.rng = rng1, .enabled = true};
+    MeasurementNoiseOptions noise2{.rng = rng2, .enabled = true};
+    ODWorldMeasurementEvent noisy1, noisy2;
+    StatusCode first = make_noisy_world_measurement_event_instrument(
+        world, instrument_id, observer_id, target_id, world.t_sim(), noisy1, noise1
+    );
+    StatusCode second = make_noisy_world_measurement_event_instrument(
+        world, instrument_id, observer_id, target_id, world.t_sim(), noisy2, noise2,
+        UAngle::radian, UAngle::radian, tol12, disabled
+    );
+    check("Disabled Noise Reproducible", first == StatusCode::ok && second == StatusCode::ok
+        && noisy1.measurement.z.isApprox(noisy2.measurement.z) && rng1 == rng2);
+
+    // Invalid noise covariance must not publish the noiseless intermediate event
+    suite.instruments.at(instrument_id).R(0, 0) = -1.0;
+    ODWorldMeasurementEvent event = baseline;
+    auto rng_before = rng1;
+    status = make_noisy_world_measurement_event_instrument(
+        world, instrument_id, observer_id, target_id, world.t_sim(), event, noise1
+    );
+    check("Noise Failure Preserves Event", status == StatusCode::invalid_covariance
+        && event.measurement.t == baseline.measurement.t
+        && event.measurement.z.isApprox(baseline.measurement.z) && rng1 == rng_before);
+    std::println("Measurement Realism Checks: {}/{}", passed, checks);
+    print_diag_title();
+}
