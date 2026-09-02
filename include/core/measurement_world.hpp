@@ -229,11 +229,25 @@ inline StatusCode world_predict_measurement_history(
 ) {
     StateTr x_tr_observer;
        StatusCode status
-        = sample_tr_history(world, history, observer_id, t, x_tr_observer, sample_opts);
+        = sample_tr_history(
+            world,
+            history,
+            observer_id,
+            t,
+            x_tr_observer,
+            sample_opts.translation
+        );
     if (!od_status_success(status)) return status;
 
     StateTr x_tr_target;
-    status = sample_tr_history(world, history, target_id, t, x_tr_target, sample_opts);
+    status = sample_tr_history(
+        world,
+        history,
+        target_id,
+        t,
+        x_tr_target,
+        sample_opts.translation
+    );
     if (!od_status_success(status)) return status;
 
     MeasurementContext ctx;
@@ -249,11 +263,25 @@ inline StatusCode world_predict_measurement_history(
         if (anchor == nullptr) return StatusCode::observer_not_found;
 
         StateTr x_tr_anchor;
-        status = sample_tr_history(world, history, anchor->id, t, x_tr_anchor, sample_opts);
+        status = sample_tr_history(
+            world,
+            history,
+            anchor->id,
+            t,
+            x_tr_anchor,
+            sample_opts.translation
+        );
         if (!od_status_success(status)) return status;
 
         StateAtt x_att_anchor;
-        status = sample_att_history(world, history, anchor->id, t, x_att_anchor, sample_opts);
+        status = sample_att_history(
+            world,
+            history,
+            anchor->id,
+            t,
+            x_att_anchor,
+            sample_opts.orientation
+        );
         if (!od_status_success(status)) return status;
         if (!observer->anchored || observer->anchor_id == kInvalidEntityId) {
             return StatusCode::observer_not_found;

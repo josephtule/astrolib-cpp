@@ -4600,8 +4600,8 @@ void run_world_history_ekf_diag() {
     MeasurementNoiseOptions noise_opts{.rng = rng, .enabled = true, .diagonal = false};
 
     StateSampleOptions sample_opts;
-    sample_opts.tr_interp = InterpolationMethod::nearest;
-    sample_opts.att_interp = InterpolationMethod::nearest;
+    sample_opts.translation.interpolation = CartesianInterpolationMethod::nearest;
+    sample_opts.orientation.interpolation = OrientationInterpolationMethod::nearest;
 
     WorldHistory history;
     history.max_samples = 10;

@@ -16,7 +16,7 @@ static StatusCode valid_ephemeris_epoch_metadata(const EphemerisEpochMetadata& e
     if (!std::isfinite(epoch.ref_epoch.day) || !std::isfinite(epoch.ref_epoch.frac))
         return StatusCode::invalid_input;
 
-    if (epoch.ref_epoch.frac >= 1 || epoch.ref_epoch.frac < 0)
+    if (epoch.ref_epoch.frac >= 1.0 || epoch.ref_epoch.frac < 0.0)
         return StatusCode::invalid_input; // normalize the jd?
 
     if (epoch.offset_unit != UTime::second) return StatusCode::invalid_input; // TEMP:
@@ -376,7 +376,7 @@ StatusCode sample_cartesian_ephemeris(
     const CartesianEphemerisTable& table,
     f64 dt,
     StateTr& out,
-    const StateSampleOptions& opts
+    const CartesianSampleOptions& opts
 ) {
 
     StatusCode status;
@@ -400,8 +400,8 @@ StatusCode sample_cartesian_ephemeris(
         }
     } break;
     case EphemerisQueryLocation::interior: {
-        switch (opts.tr_interp) {
-        case InterpolationMethod::nearest: {
+        switch (opts.interpolation) {
+        case CartesianInterpolationMethod::nearest: {
             f64 delta_l = std::abs(dt - table.dt[idx_l]);
             f64 delta_u = std::abs(dt - table.dt[idx_u]);
             i32 idx;
@@ -418,14 +418,11 @@ StatusCode sample_cartesian_ephemeris(
             }
 
         } break;
-        case InterpolationMethod::linear: {
+        case CartesianInterpolationMethod::linear: {
             status = interpolate_cartesian_linear(table, bracket, dt, opts.tol, temp);
             if (status != StatusCode::ok) return status;
         } break;
-        case InterpolationMethod::slerp: {
-            return StatusCode::unsupported_method;
-        } break;
-        case InterpolationMethod::cubic_hermite: {
+        case CartesianInterpolationMethod::cubic_hermite: {
             status
                 = interpolate_cartesian_cubic_hermite(table, bracket, dt, opts.tol, temp);
             if (status != StatusCode::ok) return status;
@@ -435,7 +432,7 @@ StatusCode sample_cartesian_ephemeris(
     case EphemerisQueryLocation::before_coverage: [[fallthrough]];
     case EphemerisQueryLocation::after_coverage: {
         status
-            = extrapolate_cartesian_ephemeris(table, bracket, dt, opts.tr_extrap, temp);
+            = extrapolate_cartesian_ephemeris(table, bracket, dt, opts.extrapolation, temp);
         if (status != StatusCode::ok) return status;
     } break;
     }
@@ -544,7 +541,7 @@ StatusCode sample_orientation_ephemeris(
     const OrientationEphemerisTable& table,
     f64 dt,
     StateAtt& out,
-    const StateSampleOptions& opts
+    const OrientationSampleOptions& opts
 ) {
     if (table.dt.empty() || table.states.empty()) return StatusCode::empty_ephemeris;
     if (table.dt.size() != table.states.size()) return StatusCode::size_mismatch;
@@ -564,26 +561,24 @@ StatusCode sample_orientation_ephemeris(
         if (!table.has_angular_velocity) temp.w = vec3d0;
     } break;
     case EphemerisQueryLocation::interior: {
-        switch (opts.att_interp) {
-        case InterpolationMethod::nearest: {
+        switch (opts.interpolation) {
+        case OrientationInterpolationMethod::nearest: {
             f64 delta_l = std::abs(dt - table.dt[idx_l]);
             f64 delta_u = std::abs(dt - table.dt[idx_u]);
             i32 idx = delta_l <= delta_u ? idx_l : idx_u;
             temp = table.states[idx];
             if (!table.has_angular_velocity) temp.w = vec3d0;
         } break;
-        case InterpolationMethod::slerp: {
+        case OrientationInterpolationMethod::slerp: {
             status = interpolate_orientation_slerp(table, bracket, dt, opts.tol, temp);
             if (status != StatusCode::ok) return status;
         } break;
-        case InterpolationMethod::linear: [[fallthrough]];
-        case InterpolationMethod::cubic_hermite: return StatusCode::unsupported_method;
         }
     } break;
     case EphemerisQueryLocation::before_coverage: [[fallthrough]];
     case EphemerisQueryLocation::after_coverage: {
         status
-            = extrapolate_orientation_ephemeris(table, bracket, dt, opts.att_extrap, temp);
+            = extrapolate_orientation_ephemeris(table, bracket, dt, opts.extrapolation, temp);
         if (status != StatusCode::ok) return status;
     } break;
     }

@@ -66,7 +66,7 @@ StatusCode sample_cartesian_ephemeris(
     const CartesianEphemerisTable& table,
     f64 dt,
     StateTr& out,
-    const StateSampleOptions& opts = StateSampleOptions{}
+    const CartesianSampleOptions& opts = CartesianSampleOptions{}
 );
 
 // Orientation/Attitude --------------------------------------------------------
@@ -149,5 +149,5 @@ StatusCode sample_orientation_ephemeris(
     const OrientationEphemerisTable& table,
     f64 dt,
     StateAtt& out,
-    const StateSampleOptions& opts = StateSampleOptions{}
+    const OrientationSampleOptions& opts = OrientationSampleOptions{}
 );

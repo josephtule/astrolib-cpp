@@ -9,23 +9,32 @@
 #include <algorithm>
 #include <cmath>
 
-enum struct InterpolationMethod {
+enum struct CartesianInterpolationMethod {
     nearest,
     linear,
-    slerp,
     cubic_hermite,
-    // lagrange,
-    // chebyshev,
-    // cubic_catrom
-    // cubic_kobar
+    // TODO: lagrange, chebyshev, Catmull-Rom, and other higher-order splines
 };
 
-inline string interp_str(InterpolationMethod method) {
+inline string interp_str(CartesianInterpolationMethod method) {
     switch (method) {
-    case InterpolationMethod::nearest: return "nearest";
-    case InterpolationMethod::linear: return "linear";
-    case InterpolationMethod::slerp: return "slerp";
-    case InterpolationMethod::cubic_hermite: return "cubic_hermite";
+    case CartesianInterpolationMethod::nearest: return "nearest";
+    case CartesianInterpolationMethod::linear: return "linear";
+    case CartesianInterpolationMethod::cubic_hermite: return "cubic_hermite";
+    }
+    return "unknown";
+}
+
+enum struct OrientationInterpolationMethod {
+    nearest,
+    slerp,
+    // TODO: nlerp, SQUAD, quaternion B-splines, and Lie-group interpolation
+};
+
+inline string interp_str(OrientationInterpolationMethod method) {
+    switch (method) {
+    case OrientationInterpolationMethod::nearest: return "nearest";
+    case OrientationInterpolationMethod::slerp: return "slerp";
     }
     return "unknown";
 }
@@ -46,12 +55,21 @@ inline string extrap_str(ExtrapolationMethod method) {
     return "unknown";
 }
 
-struct StateSampleOptions {
-    InterpolationMethod tr_interp = InterpolationMethod::linear;
-    InterpolationMethod att_interp = InterpolationMethod::slerp;
-    ExtrapolationMethod tr_extrap = ExtrapolationMethod::reject;
-    ExtrapolationMethod att_extrap = ExtrapolationMethod::reject;
+struct CartesianSampleOptions {
+    CartesianInterpolationMethod interpolation = CartesianInterpolationMethod::linear;
+    ExtrapolationMethod extrapolation = ExtrapolationMethod::reject;
     f64 tol = tol12;
+};
+
+struct OrientationSampleOptions {
+    OrientationInterpolationMethod interpolation = OrientationInterpolationMethod::slerp;
+    ExtrapolationMethod extrapolation = ExtrapolationMethod::reject;
+    f64 tol = tol12;
+};
+
+struct StateSampleOptions {
+    CartesianSampleOptions translation{};
+    OrientationSampleOptions orientation{};
 };
 
 inline vecXd interp_linear(f64 t, vecXd v1, f64 t1, vecXd v2, f64 t2, f64 tol = tol12) {

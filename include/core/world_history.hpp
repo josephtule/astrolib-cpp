@@ -474,27 +474,28 @@ inline StatusCode sample_tr_history(
     EntityId id,
     f64 t,
     StateTr& out,
-    const StateSampleOptions& opts
+    const CartesianSampleOptions& opts
 ) {
     StatusCode status = StatusCode::ok;
     const Body* body = world.body(id);
     if (body == nullptr) {
         return StatusCode::body_not_found;
     }
-    switch (opts.tr_interp) {
-    case InterpolationMethod::nearest: {
+    switch (opts.interpolation) {
+    case CartesianInterpolationMethod::nearest: {
         if (body->body_type == BodyType::station) {
             return sample_station_tr_nearest(world, history, id, t, out, opts.tol);
         }
         return sample_tr_nearest(history, id, t, out, opts.tol);
     } break;
-    case InterpolationMethod::linear: {
+    case CartesianInterpolationMethod::linear: {
         if (body->body_type == BodyType::station) {
             return sample_station_tr_interp_linear(world, history, id, t, out, opts.tol);
         }
         return sample_tr_interp_linear(history, id, t, out, opts.tol);
     } break;
-    default: return StatusCode::unsupported_method;
+    case CartesianInterpolationMethod::cubic_hermite:
+        return StatusCode::unsupported_method;
     }
 
     return status;
@@ -506,7 +507,7 @@ inline StatusCode sample_att_history(
     EntityId id,
     f64 t,
     StateAtt& out,
-    const StateSampleOptions& opts
+    const OrientationSampleOptions& opts
 ) {
     StatusCode status = StatusCode::ok;
 
@@ -515,17 +516,15 @@ inline StatusCode sample_att_history(
         return StatusCode::body_not_found;
     }
 
-    switch (opts.att_interp) {
-    case InterpolationMethod::nearest: {
+    switch (opts.interpolation) {
+    case OrientationInterpolationMethod::nearest: {
         if (body->body_type == BodyType::station) {
             status = sample_station_att_nearest(world, history, id, t, out, opts.tol);
             return status;
         }
         return sample_att_nearest(history, id, t, out, opts.tol);
     } break;
-    case InterpolationMethod::linear:
-        [[fallthrough]]; // NOTE: maybe do normalized linear instead of slerp?
-    case InterpolationMethod::slerp: {
+    case OrientationInterpolationMethod::slerp: {
         if (body->body_type == BodyType::station) {
             status
                 = sample_station_att_interp_linear(world, history, id, t, out, opts.tol);
@@ -533,9 +532,6 @@ inline StatusCode sample_att_history(
         }
         status = sample_att_interp_linear(history, id, t, out, opts.tol);
         return status;
-    } break;
-    case InterpolationMethod::cubic_hermite: {
-        return StatusCode::unsupported_method;
     } break;
     }
 
