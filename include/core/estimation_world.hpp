@@ -9,6 +9,7 @@
 #include "core/measurement.hpp"
 #include "core/world.hpp"
 #include "core/world_history.hpp"
+#include "core/measurement_realism.hpp"
 #include "util/constants.hpp"
 #include "util/units.hpp"
 
@@ -67,7 +68,8 @@ StatusCode make_world_measurement_event(
     ODWorldMeasurementEvent& event,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol12
+    f64 tol = tol12,
+    const MeasurementRealismPolicy& realism = MeasurementRealismPolicy{}
 );
 
 struct ODRealtimeEvent {
@@ -120,7 +122,8 @@ StatusCode make_world_measurement_event_instrument(
     ODWorldMeasurementEvent& event,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol12
+    f64 tol = tol12,
+    const MeasurementRealismPolicy& realism = MeasurementRealismPolicy{}
 );
 
 StatusCode make_noisy_world_measurement_event_instrument(
@@ -133,7 +136,8 @@ StatusCode make_noisy_world_measurement_event_instrument(
     const MeasurementNoiseOptions& noise_opts,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol12
+    f64 tol = tol12,
+    const MeasurementRealismPolicy& realism = MeasurementRealismPolicy{}
 );
 
 StatusCode make_world_measurement_event_history(
@@ -148,7 +152,8 @@ StatusCode make_world_measurement_event_history(
     const StateSampleOptions& sample_opts,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol12
+    f64 tol = tol12,
+    const MeasurementRealismPolicy& realism = MeasurementRealismPolicy{}
 );
 
 StatusCode make_world_measurement_event_history_instrument(
@@ -162,7 +167,8 @@ StatusCode make_world_measurement_event_history_instrument(
     const StateSampleOptions& sample_opts,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol12
+    f64 tol = tol12,
+    const MeasurementRealismPolicy& realism = MeasurementRealismPolicy{}
 );
 
 StatusCode make_noisy_world_measurement_event_history_instrument(
@@ -177,5 +183,6 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
     const StateSampleOptions& sample_opts,
     UAngle angle_in = UAngle::radian,
     UAngle angle_out = UAngle::radian,
-    f64 tol = tol12
+    f64 tol = tol12,
+    const MeasurementRealismPolicy& realism = MeasurementRealismPolicy{}
 );

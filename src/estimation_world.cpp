@@ -284,8 +284,18 @@ StatusCode make_world_measurement_event(
     ODWorldMeasurementEvent& event,
     UAngle angle_in,
     UAngle angle_out,
-    f64 tol
+    f64 tol,
+    const MeasurementRealismPolicy& realism
 ) {
+    MeasurementRealismResult availability;
+    StatusCode realism_status = evaluate_measurement_realism(
+        MeasurementRealismQuery{t, type, observer_id, target_id}, realism, availability
+    );
+    if (realism_status != StatusCode::ok) return realism_status;
+    if (availability.availability == MeasurementAvailability::unavailable) {
+        return StatusCode::measurement_unavailable;
+    }
+
     ObserverMeasurementContext observer;
     StatusCode status = resolve_observer_measurement_context(world, observer_id, t, observer);
     if (status != StatusCode::ok) return status;
@@ -361,7 +371,8 @@ StatusCode make_world_measurement_event_instrument(
     ODWorldMeasurementEvent& event,
     UAngle angle_in,
     UAngle angle_out,
-    f64 tol
+    f64 tol,
+    const MeasurementRealismPolicy& realism
 ) {
     const PlatformInstrument* instrument = nullptr;
     StatusCode status = resolve_platform_instrument(
@@ -381,7 +392,8 @@ StatusCode make_world_measurement_event_instrument(
         event,
         angle_in,
         angle_out,
-        tol
+        tol,
+        realism
     );
 }
 
@@ -395,8 +407,10 @@ StatusCode make_noisy_world_measurement_event_instrument(
     const MeasurementNoiseOptions& noise_opts,
     UAngle angle_in,
     UAngle angle_out,
-    f64 tol
+    f64 tol,
+    const MeasurementRealismPolicy& realism
 ) {
+    ODWorldMeasurementEvent temp;
     const PlatformInstrument* instrument = nullptr;
     StatusCode status = resolve_platform_instrument(
         world, observer_id, instrument_id, instrument
@@ -412,10 +426,11 @@ StatusCode make_noisy_world_measurement_event_instrument(
         target_id,
         t,
         instrument->R,
-        event,
+        temp,
         angle_in,
         angle_out,
-        tol
+        tol,
+        realism
     );
     if (status != StatusCode::ok) {
         return status;
@@ -423,20 +438,22 @@ StatusCode make_noisy_world_measurement_event_instrument(
 
     if (noise_opts.enabled) {
         if (noise_opts.diagonal) {
-            return apply_measurement_noise_diagonal(
-                event.measurement,
+            status = apply_measurement_noise_diagonal(
+                temp.measurement,
                 noise_opts,
                 instrument->type
             );
         } else {
-            return apply_measurement_noise_cholesky(
-                event.measurement,
+            status = apply_measurement_noise_cholesky(
+                temp.measurement,
                 noise_opts,
                 instrument->type
             );
         }
     }
 
+    if (status != StatusCode::ok) return status;
+    event = std::move(temp);
     return StatusCode::ok;
 }
 
@@ -452,8 +469,18 @@ StatusCode make_world_measurement_event_history(
     const StateSampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
-    f64 tol
+    f64 tol,
+    const MeasurementRealismPolicy& realism
 ) {
+    MeasurementRealismResult availability;
+    StatusCode realism_status = evaluate_measurement_realism(
+        MeasurementRealismQuery{t, type, observer_id, target_id}, realism, availability
+    );
+    if (realism_status != StatusCode::ok) return realism_status;
+    if (availability.availability == MeasurementAvailability::unavailable) {
+        return StatusCode::measurement_unavailable;
+    }
+
     vecXd z_pred;
     StatusCode status = world_predict_measurement_history(
         world,
@@ -498,7 +525,8 @@ StatusCode make_world_measurement_event_history_instrument(
     const StateSampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
-    f64 tol
+    f64 tol,
+    const MeasurementRealismPolicy& realism
 ) {
     const PlatformInstrument* instrument = nullptr;
     StatusCode status = resolve_platform_instrument(
@@ -520,7 +548,8 @@ StatusCode make_world_measurement_event_history_instrument(
         sample_opts,
         angle_in,
         angle_out,
-        tol
+        tol,
+        realism
     );
     if (status != StatusCode::ok) {
         return status;
@@ -541,8 +570,10 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
     const StateSampleOptions& sample_opts,
     UAngle angle_in,
     UAngle angle_out,
-    f64 tol
+    f64 tol,
+    const MeasurementRealismPolicy& realism
 ) {
+    ODWorldMeasurementEvent temp;
     StatusCode status = make_world_measurement_event_history_instrument(
         world,
         history,
@@ -550,11 +581,12 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
         observer_id,
         target_id,
         t,
-        event,
+        temp,
         sample_opts,
         angle_in,
         angle_out,
-        tol
+        tol,
+        realism
     );
     if (status != StatusCode::ok) {
         return status;
@@ -568,20 +600,22 @@ StatusCode make_noisy_world_measurement_event_history_instrument(
 
     if (noise_opts.enabled) {
         if (noise_opts.diagonal) {
-            return apply_measurement_noise_diagonal(
-                event.measurement,
+            status = apply_measurement_noise_diagonal(
+                temp.measurement,
                 noise_opts,
                 instrument->type
             );
         } else {
-            return apply_measurement_noise_cholesky(
-                event.measurement,
+            status = apply_measurement_noise_cholesky(
+                temp.measurement,
                 noise_opts,
                 instrument->type
             );
         }
     }
 
+    if (status != StatusCode::ok) return status;
+    event = std::move(temp);
     return StatusCode::ok;
 }
 

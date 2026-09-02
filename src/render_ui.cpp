@@ -40,6 +40,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::ok: return DARKGREEN;
 
     // Informational non-failure states
+    case StatusCode::measurement_unavailable:
     case StatusCode::file_overwritten:
     case StatusCode::prediction_only:
     case StatusCode::provider_coverage_end: return SKYBLUE;

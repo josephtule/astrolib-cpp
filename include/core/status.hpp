@@ -33,6 +33,7 @@ enum struct StatusCode {
     target_not_found,
     instrument_not_found,
     instrument_disabled,
+    measurement_unavailable,
     sample_not_found,
     interp_failed,
 
@@ -99,6 +100,7 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::empty_events: return "Empty Events";
     case StatusCode::instrument_not_found: return "Instrument not found";
     case StatusCode::instrument_disabled: return "Instrument disabled";
+    case StatusCode::measurement_unavailable: return "Measurement unavailable";
     case StatusCode::empty_history: return "Empty history";
     case StatusCode::sample_not_found: return "Sample not found";
     case StatusCode::interp_failed: return "Interpolation failed";

@@ -105,3 +105,5 @@ void run_satellite_instrument_scenario_diag();
 void run_observer_measurement_context_diag();
 
 void run_relative_angular_observation_diag();
+
+void run_measurement_realism_seam_diag();
