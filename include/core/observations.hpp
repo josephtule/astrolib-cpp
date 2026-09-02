@@ -4,6 +4,7 @@
 #pragma once
 
 #include "core/state.hpp"
+#include "core/status.hpp"
 #include "util/constants.hpp"
 #include "util/math.hpp"
 #include "util/units.hpp"
@@ -46,6 +47,40 @@ inline vec3d radec_from_pos(
 ) {
     // r_target and r_observer must be in the same frame
     return radec_from_rel(r_target - r_observer, angle_out, tol);
+}
+
+// target minus reference RA/Dec, not tangent-plane offsets
+inline StatusCode delta_radec_from_rel(
+    const vec3d& r_target_observer_I,
+    const vec3d& r_reference_observer_I,
+    vec2d& out,
+    UAngle angle_out = UAngle::radian,
+    f64 tol_range = tol12,
+    f64 tol_pole = tol12
+) {
+    if (!std::isfinite(tol_range) || tol_range < 0.0
+        || !std::isfinite(tol_pole) || tol_pole < 0.0 || tol_pole >= 1.0) {
+        return StatusCode::invalid_input;
+    }
+    for (const vec3d* r : {&r_target_observer_I, &r_reference_observer_I}) {
+        if (!r->allFinite()) return StatusCode::invalid_state;
+        f64 rho = r->stableNorm();
+        if (!std::isfinite(rho) || rho <= tol_range) return StatusCode::invalid_state;
+        vec3d unit = *r / rho;
+        if (std::hypot(unit(0), unit(1)) <= tol_pole) return StatusCode::invalid_state;
+    }
+    vec3d target = radec_from_rel((r_target_observer_I / r_target_observer_I.stableNorm()).eval());
+    vec3d reference = radec_from_rel((r_reference_observer_I / r_reference_observer_I.stableNorm()).eval());
+    vec2d temp{
+        wrap_angle(target(0) - reference(0), -pi, pi),
+        target(1) - reference(1)
+    };
+    if (angle_out != UAngle::radian) {
+        temp *= convert_angle(1.0, UAngle::radian, angle_out);
+    }
+    if (!temp.allFinite()) return StatusCode::non_finite_result;
+    out = temp;
+    return StatusCode::ok;
 }
 
 inline vec3d radec_rates_from_rel(

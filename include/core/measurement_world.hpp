@@ -36,6 +36,61 @@ struct ObserverMeasurementContext {
     const PlatformInstrument* instrument = nullptr;
 };
 
+struct RelativeAngularObservation {
+    f64 t = 0.0; // observation epoch
+    EntityId observer_id = kInvalidEntityId;
+    EntityId reference_target_id = kInvalidEntityId;
+    EntityId target_id = kInvalidEntityId;
+    // target minus reference, radians; not delta_ra * cos(dec)
+    vec2d delta_radec = vec2d0;
+    // supplied differential covariance, rad^2; prediction leaves this unchanged
+    // from absolute angles: R = R_target + R_reference - C_tr - C_tr.transpose()
+    mat2d R = mat2d0;
+};
+
+struct RelativeAngularJacobians {
+    matd<2, 6> target = matd<2, 6>::Zero();
+    matd<2, 6> reference = matd<2, 6>::Zero();
+    matd<2, 6> observer = matd<2, 6>::Zero();
+};
+
+// explicit states share an epoch and inertial axes; output is radians
+StatusCode predict_relative_angular_observation(
+    const ObserverMeasurementContext& observer,
+    const StateTr& reference_target,
+    const StateTr& target,
+    vec2d& out,
+    f64 tol_range = tol12,
+    f64 tol_pole = tol12
+);
+
+StatusCode world_predict_relative_angular_observation(
+    const World& world,
+    EntityId observer_id,
+    EntityId reference_target_id,
+    EntityId target_id,
+    f64 t,
+    RelativeAngularObservation& out,
+    f64 tol_time = tol12,
+    f64 tol_range = tol12,
+    f64 tol_pole = tol12
+);
+
+StatusCode relative_angular_residual(
+    const vec2d& observed,
+    const vec2d& predicted,
+    vec2d& out
+);
+
+StatusCode jacobian_relative_angular_observation(
+    const ObserverMeasurementContext& observer,
+    const StateTr& reference_target,
+    const StateTr& target,
+    RelativeAngularJacobians& out,
+    f64 tol_range = tol12,
+    f64 tol_pole = tol12
+);
+
 StatusCode resolve_observer_measurement_context(
     const World& world,
     EntityId observer_id,
@@ -82,7 +137,10 @@ inline StatusCode make_world_measurement_context(
 
     ObserverMeasurementContext observer_ctx;
     StatusCode status = resolve_observer_measurement_context(
-        world, observer_id, world.t_sim(), observer_ctx
+        world,
+        observer_id,
+        world.t_sim(),
+        observer_ctx
     );
     if (status != StatusCode::ok) return status;
     if (!finite_state(x_tr_target_pred)) return StatusCode::invalid_state;
@@ -129,9 +187,8 @@ inline StatusCode world_predict_measurement(
     if (!world.is_active(target_id)) return StatusCode::inactive_entity;
     if (measurement_dim(type) <= 0) return StatusCode::unsupported_type;
     MeasurementContext ctx;
-    StatusCode status = make_world_measurement_context(
-        world, ctx, observer_id, target->x_tr, type
-    );
+    StatusCode status
+        = make_world_measurement_context(world, ctx, observer_id, target->x_tr, type);
     if (status != StatusCode::ok) return status;
     vecXd temp = predict_measurement(type, ctx, angle_in, angle_out, tol);
     if (temp.size() != measurement_dim(type)) return StatusCode::size_mismatch;
@@ -150,7 +207,16 @@ inline vecXd world_predict_measurement(
     f64 tol = tol12
 ) {
     vecXd z;
-    world_predict_measurement(world, type, observer_id, target_id, z, angle_in, angle_out, tol);
+    world_predict_measurement(
+        world,
+        type,
+        observer_id,
+        target_id,
+        z,
+        angle_in,
+        angle_out,
+        tol
+    );
     return z;
 }
 
@@ -167,13 +233,8 @@ inline StatusCode world_predict_measurement_from_state(
     f64 tol = tol12
 ) {
     MeasurementContext ctx;
-    StatusCode status = make_world_measurement_context(
-        world,
-        ctx,
-        observer_id,
-        x_tr_target_pred,
-        type
-    );
+    StatusCode status
+        = make_world_measurement_context(world, ctx, observer_id, x_tr_target_pred, type);
     if (!od_status_success(status)) {
         return status;
     }
@@ -253,7 +314,8 @@ inline StatusCode world_predict_measurement_history(
     if (type == ObservationType::azel) {
         const Station* station = world.station(observer_id);
         if (station == nullptr || !station->anchored) return StatusCode::unsupported_type;
-        if (world.celestial(station->anchor_id) == nullptr) return StatusCode::anchor_not_found;
+        if (world.celestial(station->anchor_id) == nullptr)
+            return StatusCode::anchor_not_found;
     }
 
     StateTr x_tr_observer;
@@ -353,13 +415,8 @@ inline StatusCode world_jacobian_measurement(
     f64 tol = tol12
 ) {
     MeasurementContext ctx;
-    StatusCode status = make_world_measurement_context(
-        world,
-        ctx,
-        observer_id,
-        x_target_pred,
-        type
-    );
+    StatusCode status
+        = make_world_measurement_context(world, ctx, observer_id, x_target_pred, type);
     if (!od_status_success(status)) {
         return status;
     }

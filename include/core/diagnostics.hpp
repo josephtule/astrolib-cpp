@@ -103,3 +103,5 @@ void run_cspice_provider_diag();
 void run_satellite_instrument_scenario_diag();
 
 void run_observer_measurement_context_diag();
+
+void run_relative_angular_observation_diag();

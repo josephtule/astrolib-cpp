@@ -7462,3 +7462,124 @@ void run_observer_measurement_context_diag() {
     std::println("Observer Context Checks: {}/{}", passed, checks);
     print_diag_title();
 }
+
+void run_relative_angular_observation_diag() {
+    print_diag_title("Relative Angular Observation Diagnostic");
+    i32 checks = 0, passed = 0;
+    auto check = [&](const char* label, bool valid) {
+        ++checks;
+        if (valid) ++passed;
+        std::println("{}: {}", label, valid ? "PASS" : "FAIL");
+    };
+    auto direction = [](f64 ra, f64 dec) -> vec3d {
+        return vec3d{std::cos(dec) * std::cos(ra), std::cos(dec) * std::sin(ra), std::sin(dec)};
+    };
+
+    // Known angles and the RA branch crossing
+    vec2d angles;
+    StatusCode status = delta_radec_from_rel(
+        direction(1.0 * deg_to_rad, 15.0 * deg_to_rad),
+        direction(359.0 * deg_to_rad, 10.0 * deg_to_rad), angles
+    );
+    check("Known Difference", status == StatusCode::ok
+        && (angles - vec2d{2.0 * deg_to_rad, 5.0 * deg_to_rad}).norm() < tol12);
+    status = delta_radec_from_rel(
+        direction(1.0 * deg_to_rad, 15.0 * deg_to_rad),
+        direction(359.0 * deg_to_rad, 10.0 * deg_to_rad), angles, UAngle::degree
+    );
+    check("Degree Output", status == StatusCode::ok && (angles - vec2d{2.0, 5.0}).norm() < tol12);
+    vec2d residual;
+    status = relative_angular_residual(
+        vec2d{-179.0 * deg_to_rad, 2.0}, vec2d{179.0 * deg_to_rad, -2.0}, residual
+    );
+    check("Residual Wraps Only RA", status == StatusCode::ok
+        && std::abs(residual(0) - 2.0 * deg_to_rad) < tol12 && residual(1) == 4.0);
+    angles = vec2d{4.0, 5.0};
+    status = delta_radec_from_rel(vec3d0, axis_x, angles);
+    check("Zero LOS Rejected", status == StatusCode::invalid_state);
+    check("Failure Preserves Output", angles == vec2d(4.0, 5.0));
+    status = delta_radec_from_rel(axis_z, axis_x, angles);
+    check("Pole Rejected", status == StatusCode::invalid_state);
+    status = delta_radec_from_rel(axis_x, axis_x, angles, UAngle::radian, -1.0);
+    check("Invalid Tolerance", status == StatusCode::invalid_input);
+    vec3d bad = axis_x;
+    bad(0) = std::numeric_limits<f64>::quiet_NaN();
+    check("Nonfinite LOS", delta_radec_from_rel(bad, axis_x, angles) == StatusCode::invalid_state);
+
+    // Separate target, reference and observer partials
+    ObserverMeasurementContext observer;
+    observer.x_tr_observer_I.r = vec3d{100.0, -200.0, 50.0};
+    StateTr target, reference;
+    target.r = vec3d{7000.0, 2000.0, 1000.0};
+    reference.r = vec3d{9000.0, -3000.0, 2500.0};
+    RelativeAngularJacobians H;
+    status = jacobian_relative_angular_observation(observer, reference, target, H);
+    check("Analytic Jacobians", status == StatusCode::ok);
+    check("Translation Invariance", (H.target + H.reference + H.observer).norm() < tol12);
+    for (i32 block = 0; block < 3; ++block) {
+        matd<2, 6> H_fd = matd<2, 6>::Zero();
+        bool valid = true;
+        for (i32 i = 0; i < 6; ++i) {
+            ObserverMeasurementContext op = observer, om = observer;
+            StateTr tp = target, tm = target, rp = reference, rm = reference;
+            StateTr& xp = block == 0 ? tp : (block == 1 ? rp : op.x_tr_observer_I);
+            StateTr& xm = block == 0 ? tm : (block == 1 ? rm : om.x_tr_observer_I);
+            f64 eps = i < 3 ? 1e-3 : 1e-6;
+            if (i < 3) { xp.r(i) += eps; xm.r(i) -= eps; }
+            else { xp.v(i - 3) += eps; xm.v(i - 3) -= eps; }
+            vec2d plus, minus, diff;
+            valid = valid && predict_relative_angular_observation(op, rp, tp, plus) == StatusCode::ok;
+            valid = valid && predict_relative_angular_observation(om, rm, tm, minus) == StatusCode::ok;
+            if (!valid) break;
+            valid = relative_angular_residual(plus, minus, diff) == StatusCode::ok;
+            if (!valid) break;
+            H_fd.col(i) = diff / (2.0 * eps);
+        }
+        const auto& analytic = block == 0 ? H.target : (block == 1 ? H.reference : H.observer);
+        f64 error = (analytic - H_fd).norm();
+        std::println("Jacobian Block {} FD Error: {}", block, error);
+        check("Central Difference", valid && error < 1e-9);
+    }
+    status = predict_relative_angular_observation(observer, target, target, angles);
+    check("Same Reference And Target", status == StatusCode::ok && angles.norm() < tol12);
+    target.r = observer.x_tr_observer_I.r + axis_x;
+    reference.r = observer.x_tr_observer_I.r - axis_x;
+    check("Jacobian Branch Cut Rejected", jacobian_relative_angular_observation(
+        observer, reference, target, H) == StatusCode::invalid_state);
+
+    // World prediction, identity fields and caller-owned differential covariance
+    auto scenario = make_earth_sats_stats_scenario();
+    check("Scenario", scenario.success);
+    if (!scenario.success) return;
+    World& world = scenario.world;
+    RelativeAngularObservation observation;
+    observation.R = mat2d1 * 1e-10;
+    status = world_predict_relative_angular_observation(
+        world, scenario.stat1_id, scenario.sat1_id, scenario.sat2_id,
+        world.t_sim(), observation
+    );
+    check("World Prediction", status == StatusCode::ok);
+    check("Covariance Preserved", observation.R == mat2d1 * 1e-10);
+    check("Identity Fields", observation.observer_id == scenario.stat1_id
+        && observation.reference_target_id == scenario.sat1_id
+        && observation.target_id == scenario.sat2_id && observation.t == world.t_sim());
+    status = resolve_observer_measurement_context(world, scenario.stat1_id, world.t_sim(), observer);
+    if (status == StatusCode::ok) status = predict_relative_angular_observation(
+        observer, world.body(scenario.sat1_id)->x_tr, world.body(scenario.sat2_id)->x_tr, angles
+    );
+    check("World Explicit Agreement", status == StatusCode::ok && (angles - observation.delta_radec).norm() < tol12);
+    check("Missing Reference", world_predict_relative_angular_observation(
+        world, scenario.stat1_id, kInvalidEntityId, scenario.sat2_id,
+        world.t_sim(), observation) == StatusCode::missing_reference);
+    check("Self Observation", world_predict_relative_angular_observation(
+        world, scenario.stat1_id, scenario.sat1_id, scenario.stat1_id,
+        world.t_sim(), observation) == StatusCode::invalid_input);
+    check("World Time Mismatch", world_predict_relative_angular_observation(
+        world, scenario.stat1_id, scenario.sat1_id, scenario.sat2_id,
+        world.t_sim() + 1.0, observation) == StatusCode::time_mismatch);
+    check("Satellite Observer", world_predict_relative_angular_observation(
+        world, scenario.sat1_id, scenario.earth_id, scenario.sat2_id,
+        world.t_sim(), observation) == StatusCode::ok);
+    std::println("Relative Angular Checks: {}/{}", passed, checks);
+    print_diag_title();
+}
