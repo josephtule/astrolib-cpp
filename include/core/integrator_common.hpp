@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <utility>
 #include <variant>
 
 enum struct IntegratorFamily : i32 {
@@ -144,6 +145,66 @@ struct RKTableau {
     bool embedded = false;
 };
 
+// compile-time stage order
+template <class Func, size_t... Is>
+inline StatusCode rk_for_each_index(Func&& f, std::index_sequence<Is...>) {
+    StatusCode status = StatusCode::ok;
+    ((status == StatusCode::ok ? status = f(std::integral_constant<size_t, Is>{})
+                               : status),
+     ...);
+    return status;
+}
+
+template <const auto& Tableau, size_t I, class Func>
+inline StatusCode rk_for_each_a(Func&& f) {
+    return rk_for_each_index(
+        [&](auto index) {
+            constexpr size_t j = decltype(index)::value;
+            if constexpr (Tableau.a[I][j] != 0.0) return f(index);
+            return StatusCode::ok;
+        },
+        std::make_index_sequence<I>{}
+    );
+}
+
+template <const auto& Tableau, bool Embedded = false, class Func>
+inline StatusCode rk_for_each_weight(Func&& f) {
+    return rk_for_each_index(
+        [&](auto index) {
+            constexpr size_t i = decltype(index)::value;
+            if constexpr (
+                Tableau.b_high[i] != 0.0 || (Embedded && Tableau.b_low[i] != 0.0)
+            )
+                return f(index);
+            return StatusCode::ok;
+        },
+        std::make_index_sequence<Tableau.c.size()>{}
+    );
+}
+
+// compile-time tableau for speed, rejects 0.0 entries
+template <const auto& Tableau, class State, class Deriv, class Func>
+auto rk_generic_stages(Func&& f, f64 t, const State& x, f64 dt) {
+    array<Deriv, Tableau.c.size()> k{};
+    rk_for_each_index(
+        [&](auto index) {
+            constexpr size_t i = decltype(index)::value;
+            State x_stage = x;
+            rk_for_each_a<Tableau, i>([&](auto j) {
+                x_stage += dt * Tableau.a[i][j] * k[j];
+                return StatusCode::ok;
+            });
+            if constexpr (Tableau.c[i] == 0.0)
+                k[i] = f(t, x_stage);
+            else
+                k[i] = f(t + Tableau.c[i] * dt, x_stage);
+            return StatusCode::ok;
+        },
+        std::make_index_sequence<Tableau.c.size()>{}
+    );
+    return k;
+}
+
 template <class State, class Deriv, class Func, size_t Stages>
 array<Deriv, Stages> rk_generic_stages(
     Func&& f,
@@ -152,8 +213,7 @@ array<Deriv, Stages> rk_generic_stages(
     f64 dt,
     const RKTableau<Stages>& tableau
 ) {
-    // NOTE: unoptimized, requires a bit more multiplication then necessary, maybe
-    // compiler optimizes it away anyways
+    // runtime-tableau fallback for callers without a compile-time tableau
 
     array<Deriv, Stages> k{};
 
@@ -176,6 +236,19 @@ struct GenericRKResult {
     StatusCode status = StatusCode::invalid_state;
     State x{};
 };
+
+template <const auto& Tableau, class State, class Deriv, class Func>
+auto step_generic_rk(Func&& f, f64 t, const State& x, f64 dt) {
+    GenericRKResult<State, Tableau.c.size()> result{};
+    const auto k = rk_generic_stages<Tableau, State, Deriv>(f, t, x, dt);
+    result.x = x;
+    rk_for_each_weight<Tableau>([&](auto i) {
+        result.x += dt * Tableau.b_high[i] * k[i];
+        return StatusCode::ok;
+    });
+    result.status = StatusCode::ok;
+    return result;
+}
 
 template <class State, class Deriv, class Func, size_t Stages>
 GenericRKResult<State, Stages> step_generic_rk(

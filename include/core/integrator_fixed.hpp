@@ -83,6 +83,12 @@ inline std::pair<f64, State> step_rk_tableau(
     return {t + dt, result.x};
 }
 
+template <const auto& Tableau, typename State, typename Deriv, typename Func>
+inline std::pair<f64, State> step_rk_tableau(Func&& f, f64 t, const State& x, f64 dt) {
+    const auto result = step_generic_rk<Tableau, State, Deriv>(f, t, x, dt);
+    return {t + dt, result.x};
+}
+
 template <typename State, typename Deriv, typename Func>
 inline std::pair<f64, State> step_integrator(
     Func&& f,
@@ -103,17 +109,17 @@ inline std::pair<f64, State> step_integrator(
         break;
     case IntegratorTypeFixed::rk3: tx = step_rk3<State, Deriv>(f, t, x, dt); break;
     case IntegratorTypeFixed::rk3_ralston:
-        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk3_ralston_tableau);
+        tx = step_rk_tableau<rk3_ralston_tableau, State, Deriv>(f, t, x, dt);
         break;
     case IntegratorTypeFixed::rk4: tx = step_rk4<State, Deriv>(f, t, x, dt); break;
     case IntegratorTypeFixed::rk4_38:
-        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk4_38_tableau);
+        tx = step_rk_tableau<rk4_38_tableau, State, Deriv>(f, t, x, dt);
         break;
     case IntegratorTypeFixed::rk5_nystrom:
-        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk5_nystrom_tableau);
+        tx = step_rk_tableau<rk5_nystrom_tableau, State, Deriv>(f, t, x, dt);
         break;
     case IntegratorTypeFixed::rk6_butcher:
-        tx = step_rk_tableau<State, Deriv>(f, t, x, dt, rk6_butcher_tableau);
+        tx = step_rk_tableau<rk6_butcher_tableau, State, Deriv>(f, t, x, dt);
         break;
     default: tx = step_rk4<State, Deriv>(f, t, x, dt); break;
     }

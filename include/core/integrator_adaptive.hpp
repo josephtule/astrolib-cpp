@@ -94,22 +94,23 @@ inline AdaptiveTrialResult<State, Deriv> step_dopri54_trial(
 
     constexpr size_t stages = 7;
 
-    // TODO: optimize this to be DP54 specific
     array<Deriv, stages> k_trial
-        = rk_generic_stages<State, Deriv>(f, t, x, dt, dopri45_tableau);
+        = rk_generic_stages<dopri45_tableau, State, Deriv>(f, t, x, dt);
 
     State x_high = x;
-    for (std::size_t i = 0; i < stages; ++i) {
+    rk_for_each_weight<dopri45_tableau>([&](auto i) {
         x_high += dt * dopri45_tableau.b_high[i] * k_trial[i];
-    }
+        return StatusCode::ok;
+    });
 
     Deriv error_delta{};
 
-    for (std::size_t i = 0; i < stages; ++i) {
-        f64 error_weight = dopri45_tableau.b_high[i] - dopri45_tableau.b_low[i];
-
-        error_delta = error_delta + dt * error_weight * k_trial[i];
-    }
+    rk_for_each_weight<dopri45_tableau, true>([&](auto index) {
+        constexpr size_t i = decltype(index)::value;
+        constexpr f64 weight = dopri45_tableau.b_high[i] - dopri45_tableau.b_low[i];
+        if constexpr (weight != 0.0) error_delta = error_delta + dt * weight * k_trial[i];
+        return StatusCode::ok;
+    });
 
     trial.status = StatusCode::ok;
     trial.x_high = x_high;

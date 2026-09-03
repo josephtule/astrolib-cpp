@@ -201,6 +201,7 @@ static StatusCode build_tr_stage(
 ) {
     WorldTrStage stage_new;
     stage_new.ids = wksp.staged_tr_ids;
+    stage_new.x.reserve(wksp.staged_tr_ids.size());
 
     for (EntityId id : wksp.staged_tr_ids) {
         const Body* body = world.body(id);
@@ -211,7 +212,7 @@ static StatusCode build_tr_stage(
         stage_new.x.emplace(id, body->x_tr);
     }
 
-    stage = stage_new;
+    stage = std::move(stage_new);
     return StatusCode::ok;
 }
 
@@ -222,6 +223,7 @@ static StatusCode build_att_stage(
 ) {
     WorldAttStage stage_new;
     stage_new.ids = wksp.staged_att_ids;
+    stage_new.x.reserve(wksp.staged_att_ids.size());
 
     for (EntityId id : wksp.staged_att_ids) {
         const Body* body = world.body(id);
@@ -234,7 +236,7 @@ static StatusCode build_att_stage(
         stage_new.x.emplace(id, body->x_att);
     }
 
-    stage = stage_new;
+    stage = std::move(stage_new);
     return StatusCode::ok;
 }
 
@@ -420,31 +422,30 @@ static StatusCode celestial_att_at_stage(
     return StatusCode::ok;
 }
 
-template <size_t Stages>
+template <const auto& Tableau, size_t StageIndex, size_t Stages = Tableau.c.size()>
 static StatusCode build_att_tableau_stage(
     const World& world,
     const WorldAttStage& base_stage,
     const array<WorldStageDeriv, Stages>& k,
-    size_t stage_index,
     f64 t,
     f64 dt,
-    const RKTableau<Stages>& tableau,
     const WorldStepperWorkspace& wksp,
     WorldAttStage& stage
 ) {
+    constexpr const auto& tableau = Tableau;
+    constexpr size_t stage_index = StageIndex;
     WorldAttStage trial = base_stage;
-
-    trial.ids = base_stage.ids;
 
     if (stage_index >= Stages) return StatusCode::invalid_input;
 
     for (EntityId id : wksp.propagated_att_ids) {
         StateAtt x_stage = base_stage.x.at(id);
 
-        for (i32 j = 0; j < stage_index; ++j) {
+        StatusCode status = rk_for_each_a<Tableau, StageIndex>([&](auto j) {
             x_stage += dt * tableau.a[stage_index][j] * k[j].att.at(id);
-            if (!finite_state_att(x_stage)) return StatusCode::invalid_state;
-        }
+            return finite_state_att(x_stage) ? StatusCode::ok : StatusCode::invalid_state;
+        });
+        if (status != StatusCode::ok) return status;
         trial.x.at(id) = x_stage;
     }
 
@@ -463,7 +464,7 @@ static StatusCode build_att_tableau_stage(
         trial.x.at(id) = x_stage;
     }
 
-    stage = trial;
+    stage = std::move(trial);
     return StatusCode::ok;
 }
 
@@ -521,34 +522,34 @@ static StatusCode source_att_from_stage_or_world(
     return StatusCode::ok;
 }
 
-template <size_t Stages>
+template <const auto& Tableau, size_t StageIndex, size_t Stages = Tableau.c.size()>
 static StatusCode build_tr_tableau_stage(
     const World& world,
     const WorldTrStage& base_stage,
     const array<WorldStageDeriv, Stages>& k,
-    size_t stage_index,
     f64 t,
     f64 dt,
-    const RKTableau<Stages>& tableau,
     const WorldStepperWorkspace& wksp,
     WorldTrStage& stage
 ) {
+    constexpr const auto& tableau = Tableau;
+    constexpr size_t stage_index = StageIndex;
     WorldTrStage trial = base_stage;
-    trial.ids = base_stage.ids;
 
     if (stage_index >= Stages) return StatusCode::invalid_input;
 
     for (EntityId id : wksp.propagated_tr_ids) {
         StateTr x_stage = base_stage.x.at(id);
 
-        for (i32 j = 0; j < stage_index; ++j) {
+        StatusCode status = rk_for_each_a<Tableau, StageIndex>([&](auto j) {
             x_stage += dt * tableau.a[stage_index][j] * k[j].tr.at(id);
-            if (!finite_state_tr(x_stage)) return StatusCode::invalid_state;
-        }
+            return finite_state_tr(x_stage) ? StatusCode::ok : StatusCode::invalid_state;
+        });
+        if (status != StatusCode::ok) return status;
         trial.x.at(id) = x_stage;
     }
 
-    stage = trial;
+    stage = std::move(trial);
 
     return StatusCode::ok;
 }
@@ -686,11 +687,13 @@ static StatusCode evaluate_world_stage_derivatives(
 ) {
     StatusCode status;
     WorldStageDeriv dx_temp{};
+    dx_temp.tr.reserve(wksp.propagated_tr_ids.size());
+    dx_temp.att.reserve(wksp.propagated_att_ids.size());
 
     for (EntityId id : wksp.propagated_att_ids) {
         auto x_att_it = stage.att.x.find(id);
         if (x_att_it == stage.att.x.end()) return StatusCode::invalid_att_state;
-        StateAtt x_att_target = x_att_it->second;
+        const StateAtt& x_att_target = x_att_it->second;
 
         DerivAtt dx_att;
         status = derivatt_world_staged(
@@ -710,7 +713,7 @@ static StatusCode evaluate_world_stage_derivatives(
     for (EntityId id : wksp.propagated_tr_ids) {
         auto x_tr_it = stage.tr.x.find(id);
         if (x_tr_it == stage.tr.x.end()) return StatusCode::invalid_state;
-        StateTr x_tr_target = x_tr_it->second;
+        const StateTr& x_tr_target = x_tr_it->second;
 
         DerivTr dx_tr;
         status = derivtr_world_staged(
@@ -762,41 +765,37 @@ static StatusCode evaluate_world_stage_derivatives(
     return StatusCode::ok;
 }
 
-template <size_t Stages>
+template <const auto& Tableau, size_t StageIndex, size_t Stages = Tableau.c.size()>
 static StatusCode build_world_tableau_stage(
     const World& world,
     const WorldStage& base_stage,
     const array<WorldStageDeriv, Stages>& k,
-    size_t stage_index,
     f64 t,
     f64 dt,
-    const RKTableau<Stages>& tableau,
     const WorldStepperWorkspace& wksp,
     WorldStage& stage
 ) {
+    constexpr const auto& tableau = Tableau;
+    constexpr size_t stage_index = StageIndex;
     StatusCode status = StatusCode::invalid_input;
 
-    status = build_att_tableau_stage(
+    status = build_att_tableau_stage<Tableau, StageIndex>(
         world,
         base_stage.att,
         k,
-        stage_index,
         t,
         dt,
-        tableau,
         wksp,
         stage.att
     );
     if (status != StatusCode::ok) return status;
 
-    status = build_tr_tableau_stage(
+    status = build_tr_tableau_stage<Tableau, StageIndex>(
         world,
         base_stage.tr,
         k,
-        stage_index,
         t,
         dt,
-        tableau,
         wksp,
         stage.tr
     );
@@ -804,8 +803,10 @@ static StatusCode build_world_tableau_stage(
 
     if (wksp.target_stm) {
         stage.Phi = base_stage.Phi;
-        for (size_t j = 0; j < stage_index; ++j)
+        rk_for_each_a<Tableau, StageIndex>([&](auto j) {
             stage.Phi += dt * tableau.a[stage_index][j] * k[j].dPhi;
+            return StatusCode::ok;
+        });
         if (!stage.Phi.allFinite()) return StatusCode::non_finite_result;
     }
 
@@ -816,14 +817,14 @@ static StatusCode build_world_tableau_stage(
     return StatusCode::ok;
 }
 
-template <size_t Stages>
+template <const auto& Tableau, size_t Stages = Tableau.c.size()>
 static WorldFixedTrialResult step_world_fixed_rk_trial(
     const World& world,
     f64 t,
     f64 dt,
-    const RKTableau<Stages>& tableau,
     const WorldStepperWorkspace& wksp
 ) {
+    constexpr const auto& tableau = Tableau;
     WorldFixedTrialResult result;
 
     if (!isfinite(t) || !isfinite(dt) || dt == 0.0 || tableau.embedded) {
@@ -839,23 +840,22 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
     const WorldStage& base_stage = base_result.stage;
 
     array<WorldStageDeriv, Stages> k{};
-    for (size_t i = 0; i < Stages; ++i) {
+    result.status = rk_for_each_index([&](auto index) {
+        constexpr size_t i = decltype(index)::value;
         WorldStage stage_i;
 
-        StatusCode status = build_world_tableau_stage(
+        StatusCode status = build_world_tableau_stage<Tableau, i>(
             world,
             base_stage,
             k,
-            i,
             t,
             dt,
-            tableau,
             wksp,
             stage_i
         );
         if (status != StatusCode::ok) {
             result.status = status;
-            return result;
+            return status;
         }
 
         f64 t_stage = t + tableau.c[i] * dt;
@@ -864,14 +864,18 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
 
         if (status != StatusCode::ok) {
             result.status = status;
-            return result;
+            return status;
         }
-    }
+        return StatusCode::ok;
+    }, std::make_index_sequence<Stages>{});
+    if (result.status != StatusCode::ok) return result;
 
     WorldStage stage_next = base_stage;
     if (wksp.target_stm) {
-        for (size_t i = 0; i < Stages; ++i)
+        rk_for_each_weight<Tableau>([&](auto i) {
             stage_next.Phi += dt * tableau.b_high[i] * k[i].dPhi;
+            return StatusCode::ok;
+        });
     }
 
     for (EntityId id : wksp.propagated_tr_ids) {
@@ -882,14 +886,17 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
         }
         StateTr x_next = x_base_it->second;
 
-        for (size_t i = 0; i < Stages; ++i) {
+        result.status = rk_for_each_weight<Tableau>([&](auto index) {
+            constexpr size_t i = decltype(index)::value;
             auto dx_it = k[i].tr.find(id);
             if (dx_it == k[i].tr.end()) {
                 result.status = StatusCode::invalid_state;
-                return result;
+                return result.status;
             }
             x_next += dt * tableau.b_high[i] * dx_it->second;
-        }
+            return StatusCode::ok;
+        });
+        if (result.status != StatusCode::ok) return result;
         if (!finite_state(x_next)) {
             result.status = StatusCode::invalid_state;
             return result;
@@ -906,14 +913,17 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
         }
         StateAtt x_next = x_base_it->second;
 
-        for (size_t i = 0; i < Stages; ++i) {
+        result.status = rk_for_each_weight<Tableau>([&](auto index) {
+            constexpr size_t i = decltype(index)::value;
             auto dx_it = k[i].att.find(id);
             if (dx_it == k[i].att.end()) {
                 result.status = StatusCode::invalid_att_state;
-                return result;
+                return result.status;
             }
             x_next += dt * tableau.b_high[i] * dx_it->second;
-        }
+            return StatusCode::ok;
+        });
+        if (result.status != StatusCode::ok) return result;
         if (!finite_state(x_next)) {
             result.status = StatusCode::invalid_att_state;
             return result;
@@ -958,14 +968,14 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
     return result;
 }
 
-template <size_t Stages>
+template <const auto& Tableau, size_t Stages = Tableau.c.size()>
 static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
     const World& world,
     f64 t,
     f64 dt,
-    const RKTableau<Stages>& tableau,
     const WorldStepperWorkspace& wksp
 ) {
+    constexpr const auto& tableau = Tableau;
     WorldAdaptiveTrialResult result;
 
     if (!isfinite(t) || !isfinite(dt) || dt == 0.0) {
@@ -982,23 +992,22 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
     const WorldStage& base_stage = base_result.stage;
 
     array<WorldStageDeriv, Stages> k{};
-    for (size_t i = 0; i < Stages; ++i) {
+    result.status = rk_for_each_index([&](auto index) {
+        constexpr size_t i = decltype(index)::value;
         WorldStage stage_i;
 
-        StatusCode status = build_world_tableau_stage(
+        StatusCode status = build_world_tableau_stage<Tableau, i>(
             world,
             base_stage,
             k,
-            i,
             t,
             dt,
-            tableau,
             wksp,
             stage_i
         );
         if (status != StatusCode::ok) {
             result.status = status;
-            return result;
+            return status;
         }
 
         f64 t_stage = t + tableau.c[i] * dt;
@@ -1008,17 +1017,21 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
 
         if (status != StatusCode::ok) {
             result.status = status;
-            return result;
+            return status;
         }
-    }
+        return StatusCode::ok;
+    }, std::make_index_sequence<Stages>{});
+    if (result.status != StatusCode::ok) return result;
 
     WorldStage stage_high = base_stage;
     WorldStage stage_low = base_stage;
     if (wksp.target_stm) {
-        for (size_t i = 0; i < Stages; ++i) {
-            stage_high.Phi += dt * tableau.b_high[i] * k[i].dPhi;
-            stage_low.Phi += dt * tableau.b_low[i] * k[i].dPhi;
-        }
+        rk_for_each_weight<Tableau, true>([&](auto index) {
+            constexpr size_t i = decltype(index)::value;
+            if constexpr (Tableau.b_high[i] != 0.0) stage_high.Phi += dt * tableau.b_high[i] * k[i].dPhi;
+            if constexpr (Tableau.b_low[i] != 0.0) stage_low.Phi += dt * tableau.b_low[i] * k[i].dPhi;
+            return StatusCode::ok;
+        });
     }
 
     for (EntityId id : wksp.propagated_tr_ids) {
@@ -1031,17 +1044,20 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
         StateTr x_high = x_base;
         StateTr x_low = x_base;
 
-        for (i32 i = 0; i < Stages; ++i) {
+        result.status = rk_for_each_weight<Tableau, true>([&](auto index) {
+            constexpr size_t i = decltype(index)::value;
             auto dx_it = k[i].tr.find(id);
             if (dx_it == k[i].tr.end()) {
                 result.status = StatusCode::invalid_state;
-                return result;
+                return result.status;
             }
             DerivTr dx = dx_it->second;
 
-            x_high += dt * tableau.b_high[i] * dx;
-            x_low += dt * tableau.b_low[i] * dx;
-        }
+            if constexpr (Tableau.b_high[i] != 0.0) x_high += dt * tableau.b_high[i] * dx;
+            if constexpr (Tableau.b_low[i] != 0.0) x_low += dt * tableau.b_low[i] * dx;
+            return StatusCode::ok;
+        });
+        if (result.status != StatusCode::ok) return result;
         if (!finite_state(x_high) || !finite_state(x_low)) {
             result.status = StatusCode::invalid_state;
             return result;
@@ -1061,17 +1077,20 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
         StateAtt x_high = x_base;
         StateAtt x_low = x_base;
 
-        for (i32 i = 0; i < Stages; ++i) {
+        result.status = rk_for_each_weight<Tableau, true>([&](auto index) {
+            constexpr size_t i = decltype(index)::value;
             auto dx_it = k[i].att.find(id);
             if (dx_it == k[i].att.end()) {
                 result.status = StatusCode::invalid_state;
-                return result;
+                return result.status;
             }
             DerivAtt dx = dx_it->second;
 
-            x_high += dt * tableau.b_high[i] * dx;
-            x_low += dt * tableau.b_low[i] * dx;
-        }
+            if constexpr (Tableau.b_high[i] != 0.0) x_high += dt * tableau.b_high[i] * dx;
+            if constexpr (Tableau.b_low[i] != 0.0) x_low += dt * tableau.b_low[i] * dx;
+            return StatusCode::ok;
+        });
+        if (result.status != StatusCode::ok) return result;
 
         if (!finite_state(x_high) || !finite_state(x_low)) {
             result.status = StatusCode::invalid_state;
@@ -1407,16 +1426,16 @@ static StatusCode commit_world_stage(
     return StatusCode::ok;
 }
 
-template <size_t Stages>
+template <const auto& Tableau, size_t Stages = Tableau.c.size()>
 static StatusCode step_world_fixed_tableau(
     World& world,
     f64 t,
     f64 dt,
-    const RKTableau<Stages>& tableau,
     const WorldStepperConfig& cfg,
     const WorldStepperWorkspace& wksp
 ) {
-    WorldFixedTrialResult trial = step_world_fixed_rk_trial(world, t, dt, tableau, wksp);
+    constexpr const auto& tableau = Tableau;
+    WorldFixedTrialResult trial = step_world_fixed_rk_trial<Tableau>(world, t, dt, wksp);
     if (trial.status != StatusCode::ok) return trial.status;
     return commit_world_stage(world, trial.stage, cfg, wksp);
 }
@@ -1431,38 +1450,38 @@ static StatusCode dispatch_world_fixed_tableau(
 ) {
     switch (integrator) {
     case IntegratorTypeFixed::rk1:
-        return step_world_fixed_tableau(world, t, dt, rk1_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk1_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk2:
-        return step_world_fixed_tableau(world, t, dt, rk2_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk2_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk2_heun:
-        return step_world_fixed_tableau(world, t, dt, rk2_heun_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk2_heun_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk2_ralston:
-        return step_world_fixed_tableau(world, t, dt, rk2_ralston_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk2_ralston_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk3:
-        return step_world_fixed_tableau(world, t, dt, rk3_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk3_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk3_ralston:
-        return step_world_fixed_tableau(world, t, dt, rk3_ralston_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk3_ralston_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk4:
-        return step_world_fixed_tableau(world, t, dt, rk4_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk4_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk4_38:
-        return step_world_fixed_tableau(world, t, dt, rk4_38_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk4_38_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk5_nystrom:
-        return step_world_fixed_tableau(world, t, dt, rk5_nystrom_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk5_nystrom_tableau>(world, t, dt, cfg, wksp);
     case IntegratorTypeFixed::rk6_butcher:
-        return step_world_fixed_tableau(world, t, dt, rk6_butcher_tableau, cfg, wksp);
+        return step_world_fixed_tableau<rk6_butcher_tableau>(world, t, dt, cfg, wksp);
     }
 
     return StatusCode::unsupported_method;
 }
 
-template <size_t Stages>
+template <const auto& Tableau, size_t Stages = Tableau.c.size()>
 static WorldStepResult propagate_world_embedded_rk(
     World& world,
     f64 tf,
-    const RKTableau<Stages>& tableau,
     const WorldStepperConfig& stepper_cfg,
     const WorldStepperWorkspace& wksp
 ) {
+    constexpr const auto& tableau = Tableau;
     WorldStepResult result;
     AdaptiveIntegratorStats& adaptive_stats = result.stats.adaptive;
 
@@ -1507,7 +1526,7 @@ static WorldStepResult propagate_world_embedded_rk(
             return result;
         }
         WorldAdaptiveTrialResult trial
-            = step_world_embedded_rk_trial(world, t, dt_trial, tableau, wksp);
+            = step_world_embedded_rk_trial<Tableau>(world, t, dt_trial, wksp);
         ++adaptive_stats.attempted_steps;
         adaptive_stats.deriv_evals += trial.deriv_evals;
         if (trial.status != StatusCode::ok) {
@@ -1599,41 +1618,23 @@ static WorldStepResult dispatch_world_adaptive_tableau(
 
     switch (method) {
     case IntegratorTypeAdaptive::rkf12:
-        return propagate_world_embedded_rk(world, tf, rkf12_tableau, stepper_cfg, wksp);
+        return propagate_world_embedded_rk<rkf12_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::heuneuler21:
-        return propagate_world_embedded_rk(
-            world,
-            tf,
-            heuneuler12_tableau,
-            stepper_cfg,
-            wksp
-        );
+        return propagate_world_embedded_rk<heuneuler12_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::bosha32:
-        return propagate_world_embedded_rk(world, tf, bosha23_tableau, stepper_cfg, wksp);
+        return propagate_world_embedded_rk<bosha23_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::rkf54:
-        return propagate_world_embedded_rk(world, tf, rkf45_tableau, stepper_cfg, wksp);
+        return propagate_world_embedded_rk<rkf45_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::cashkarp54:
-        return propagate_world_embedded_rk(
-            world,
-            tf,
-            cashkarp45_tableau,
-            stepper_cfg,
-            wksp
-        );
+        return propagate_world_embedded_rk<cashkarp45_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::dopri54:
-        return propagate_world_embedded_rk(world, tf, dopri45_tableau, stepper_cfg, wksp);
+        return propagate_world_embedded_rk<dopri45_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::rkf78:
-        return propagate_world_embedded_rk(world, tf, rkf78_tableau, stepper_cfg, wksp);
+        return propagate_world_embedded_rk<rkf78_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::tsit54:
-        return propagate_world_embedded_rk(world, tf, tsit54_tableau, stepper_cfg, wksp);
+        return propagate_world_embedded_rk<tsit54_tableau>(world, tf, stepper_cfg, wksp);
     case IntegratorTypeAdaptive::stepanov54:
-        return propagate_world_embedded_rk(
-            world,
-            tf,
-            stepanov54_tableau,
-            stepper_cfg,
-            wksp
-        );
+        return propagate_world_embedded_rk<stepanov54_tableau>(world, tf, stepper_cfg, wksp);
     }
 
     result.status = StatusCode::unsupported_method;
