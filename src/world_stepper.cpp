@@ -3,6 +3,7 @@
 
 #include "core/world_stepper.hpp"
 #include "core/body.hpp"
+#include "core/od_dynamics.hpp"
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"
 #include "core/ephemeris_provider.hpp"
@@ -182,11 +183,13 @@ struct WorldAttStage {
     umap<EntityId, StateAtt> x;
 };
 struct WorldStage {
+    mat6d Phi = mat6d1;
     WorldTrStage tr;
     WorldAttStage att;
 };
 
 struct WorldStageDeriv {
+    mat6d dPhi = mat6d0;
     WorldTrDerivMap tr;
     WorldAttDerivMap att;
 };
@@ -360,6 +363,7 @@ static WorldStageBuildResult build_world_stage(
     const WorldStepperWorkspace& wksp
 ) {
     WorldStageBuildResult result;
+    if (wksp.target_stm) result.stage.Phi = wksp.target_stm->Phi;
 
     result.status = build_tr_stage(world, wksp, result.stage.tr);
     if (result.status != StatusCode::ok) return result;
@@ -723,6 +727,37 @@ static StatusCode evaluate_world_stage_derivatives(
         dx_temp.tr.emplace(id, dx_tr);
     }
 
+    if (wksp.target_stm) {
+        EntityId target_id = wksp.target_stm->target_id;
+        const StateTr& x_target = stage.tr.x.at(target_id);
+        mat6d A = mat6d0;
+        A.block<3, 3>(0, 3) = mat3d::Identity();
+        for (EntityId id : wksp.gravity_source_ids) {
+            const Celestial* source = world.celestial(id);
+            if (!source) return StatusCode::unsupported_type;
+            StateTr xs;
+            StateAtt qs;
+            status = source_tr_from_stage_or_world(world, stage.tr, id, xs);
+            if (status != StatusCode::ok) return status;
+            status = source_att_from_stage_or_world(world, stage.att, id, qs);
+            if (status != StatusCode::ok) return status;
+            StateTr relative;
+            relative.r = x_target.r - xs.r;
+            if (!relative.r.allFinite() || relative.r.norm() <= tol12)
+                return StatusCode::invalid_state;
+            mat6d J;
+            if (source->gravity_model == GravityModel::pointmass) {
+                J = jacobian_tr_two_body(relative, source->mu);
+            } else if (source->gravity_model == GravityModel::zonal) {
+                J = jacobian_tr_zonal(relative, source->mu, source->ref_radius,
+                    source->degree, qs.q, source->J);
+            } else return StatusCode::unsupported_method;
+            A.block<3, 3>(3, 0) += J.block<3, 3>(3, 0);
+        }
+        dx_temp.dPhi = A * stage.Phi;
+        if (!dx_temp.dPhi.allFinite()) return StatusCode::non_finite_result;
+    }
+
     dx = std::move(dx_temp);
     return StatusCode::ok;
 }
@@ -766,6 +801,13 @@ static StatusCode build_world_tableau_stage(
         stage.tr
     );
     if (status != StatusCode::ok) return status;
+
+    if (wksp.target_stm) {
+        stage.Phi = base_stage.Phi;
+        for (size_t j = 0; j < stage_index; ++j)
+            stage.Phi += dt * tableau.a[stage_index][j] * k[j].dPhi;
+        if (!stage.Phi.allFinite()) return StatusCode::non_finite_result;
+    }
 
     f64 t_stage = t + tableau.c[stage_index] * dt;
     status = query_provider_states_at_time(world, t_stage, wksp, stage);
@@ -827,6 +869,10 @@ static WorldFixedTrialResult step_world_fixed_rk_trial(
     }
 
     WorldStage stage_next = base_stage;
+    if (wksp.target_stm) {
+        for (size_t i = 0; i < Stages; ++i)
+            stage_next.Phi += dt * tableau.b_high[i] * k[i].dPhi;
+    }
 
     for (EntityId id : wksp.propagated_tr_ids) {
         auto x_base_it = base_stage.tr.x.find(id);
@@ -968,6 +1014,12 @@ static WorldAdaptiveTrialResult step_world_embedded_rk_trial(
 
     WorldStage stage_high = base_stage;
     WorldStage stage_low = base_stage;
+    if (wksp.target_stm) {
+        for (size_t i = 0; i < Stages; ++i) {
+            stage_high.Phi += dt * tableau.b_high[i] * k[i].dPhi;
+            stage_low.Phi += dt * tableau.b_low[i] * k[i].dPhi;
+        }
+    }
 
     for (EntityId id : wksp.propagated_tr_ids) {
         auto x_base_it = base_stage.tr.x.find(id);
@@ -1244,6 +1296,18 @@ static f64 adaptive_error_norm_world(
         }
     }
 
+    if (wksp.target_stm) {
+        const auto& stm = *wksp.target_stm;
+        if (!trial.stage_high.Phi.allFinite() || !trial.stage_low.Phi.allFinite())
+            return inf<f64>;
+        mat6d scale = stm.abs_tol + stm.rel_tol
+            * stm.Phi.cwiseAbs().cwiseMax(trial.stage_high.Phi.cwiseAbs());
+        f64 norm = (trial.stage_high.Phi - trial.stage_low.Phi).cwiseAbs()
+            .cwiseQuotient(scale).maxCoeff();
+        if (!std::isfinite(norm)) return inf<f64>;
+        world_norm = std::max(world_norm, norm);
+        evaluated_block = true;
+    }
     if (!evaluated_block) return 0.0;
     if (!std::isfinite(world_norm)) return inf<f64>;
 
@@ -1256,6 +1320,8 @@ static StatusCode commit_world_stage(
     const WorldStepperConfig& stepper_cfg,
     const WorldStepperWorkspace& wksp
 ) {
+    if (wksp.target_stm && !accepted_stage.Phi.allFinite())
+        return StatusCode::non_finite_result;
     // validate every state before mutating the world
     if (stepper_cfg.step_tr) {
         for (EntityId id : wksp.propagated_tr_ids) {
@@ -1310,6 +1376,7 @@ static StatusCode commit_world_stage(
         if (!finite_state_att(x_it->second)) return StatusCode::invalid_att_state;
     }
 
+    if (wksp.target_stm) wksp.target_stm->Phi = accepted_stage.Phi;
     // commit integrated and simple-model states
     if (stepper_cfg.step_tr) {
         for (EntityId id : wksp.propagated_tr_ids) {
@@ -2078,6 +2145,30 @@ WorldStepResult step_world(
     }
 
     if (wksp.dirty) rebuild_world_stepper_workspace(world, wksp);
+
+    if (wksp.target_stm) {
+        const auto& stm = *wksp.target_stm;
+        const Body* target = world.body(stm.target_id);
+        if (!cfg.step_tr || !target || target->emits_gravity
+            || target->body_type != BodyType::satellite
+            || std::find(wksp.propagated_tr_ids.begin(), wksp.propagated_tr_ids.end(),
+                         stm.target_id) == wksp.propagated_tr_ids.end())
+            return WorldStepResult{.status = StatusCode::unsupported_method, .t = world.t_sim()};
+        if (!stm.Phi.allFinite() || !stm.abs_tol.allFinite() || stm.abs_tol.minCoeff() <= 0.0
+            || !std::isfinite(stm.rel_tol) || stm.rel_tol < 0.0)
+            return WorldStepResult{.status = StatusCode::invalid_input, .t = world.t_sim()};
+        for (EntityId id : wksp.gravity_source_ids) {
+            const Celestial* source = world.celestial(id);
+            if (!source || (source->gravity_model != GravityModel::pointmass
+                           && source->gravity_model != GravityModel::zonal))
+                return WorldStepResult{.status = StatusCode::unsupported_method, .t = world.t_sim()};
+            if (!finite_pos(source->mu) || (source->gravity_model == GravityModel::zonal
+                && (!finite_pos(source->ref_radius) || source->degree < 0
+                    || source->degree > 6 || !source->J.allFinite())))
+                return WorldStepResult{.status = StatusCode::invalid_input, .t = world.t_sim()};
+        }
+    }
+
 
     result.status = validate_world_provider_step(world, wksp);
     if (result.status != StatusCode::ok) return result;

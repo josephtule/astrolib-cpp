@@ -6,11 +6,12 @@
 #include "core/measurement.hpp"
 #include "core/od_dynamics.hpp"
 #include "core/state.hpp"
+#include "core/od_estimator_context.hpp"
 
 #include <cmath>
 
 StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input) {
-    if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0) {
+    if ((!input.propagation && input.dyn_config.mu <= 0.0) || input.prop_steps <= 0) {
         return StatusCode::validation_failed;
     }
     if (!std::isfinite(input.tol_time) || input.tol_time < 0.0) {
@@ -35,11 +36,11 @@ StatusCode od_ekf_step_validate_input(const ODEKFStepInput& input) {
         return StatusCode::invalid_state;
     }
 
-    if (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6) {
+    if (!input.propagation && (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6)) {
         return StatusCode::validation_failed;
     }
 
-    return StatusCode::ok;
+    return input.propagation ? validate_od_estimator_context(*input.propagation) : StatusCode::ok;
 }
 
 StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
@@ -51,7 +52,7 @@ StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
     if (input.measurements.size() != input.observer_states.size()) {
         return StatusCode::size_mismatch;
     }
-    if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0) {
+    if ((!input.propagation && input.dyn_config.mu <= 0.0) || input.prop_steps <= 0) {
         return StatusCode::validation_failed;
     }
     if (!std::isfinite(input.tol_time) || input.tol_time < 0.0) {
@@ -78,7 +79,7 @@ StatusCode od_ekf_validate_input(const ODEKFOfflineInput& input) {
             return StatusCode::invalid_covariance;
         }
     }
-    return StatusCode::ok;
+    return input.propagation ? validate_od_estimator_context(*input.propagation) : StatusCode::ok;
 }
 
 ODEKFPredictResult od_ekf_predict(
@@ -87,9 +88,14 @@ ODEKFPredictResult od_ekf_predict(
     const ODDynamicsConfig& dyn_config,
     i32 prop_steps,
     const mat6d& Q,
-    f64 tol
+    f64 tol,
+    const ODEstimatorContext* propagation
 ) {
     ODEKFPredictResult result;
+    result.y.x = filter.x;
+    result.y.Phi = mat6d1;
+    result.P = filter.P;
+    result.t = filter.t;
     f64 dt = t_target - filter.t;
     if (dt < -tol) {
         result.status = StatusCode::propagation_failed;
@@ -110,8 +116,20 @@ ODEKFPredictResult od_ekf_predict(
     y0.Phi = mat6d1;
 
     // propagate prediction state and STM
-    VarStateTr yf;
-    if (propagate) {
+    VarStateTr yf = y0;
+    if (propagation) {
+        result.status = propagate_od_estimator(*propagation, filter.t, filter.x,
+            filter.t + dt, prop_steps, false, yf);
+        if (result.status != StatusCode::ok) {
+            if (propagation->world && propagation->world->world().t_sim() != filter.t) {
+                result.y = yf;
+                result.t = propagation->world->world().t_sim();
+                // partial interval: no full-interval Q injection on failed propagation
+                result.P = yf.Phi * filter.P * yf.Phi.transpose();
+            }
+            return result;
+        }
+    } else if (propagate) {
         yf = propagate_var_tr_od(filter.t, y0, dt, prop_steps, dyn_config);
     } else {
         yf = y0;
@@ -159,10 +177,14 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
         input.dyn_config,
         input.prop_steps,
         input.Q,
-        input.tol_time
+        input.tol_time,
+        input.propagation
     );
 
     if (prediction.status != StatusCode::ok) {
+        result.filter.x = prediction.y.x;
+        result.filter.P = prediction.P;
+        result.filter.t = prediction.t;
         result.status = prediction.status;
         return result;
     }
@@ -183,14 +205,22 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
 
     // measurement prediction
     MeasurementContext ctx = make_measurement_context(x_pred, x_tr_obsv);
-    vecXd z_pred = predict_measurement(meas.type, ctx);
+    mat3d R_measurement_I = mat3d::Identity();
+    if (input.propagation) {
+        Measurement geometry_measurement = meas;
+        geometry_measurement.t = t_pred;
+        result.status = od_estimator_measurement_context(*input.propagation, geometry_measurement,
+            x_pred, x_tr_obsv, ctx, R_measurement_I);
+        if (result.status != StatusCode::ok) return result;
+    }
+    vecXd z_pred = predict_measurement(meas.type, ctx, input.angle_in, input.angle_out, input.tol_measurement);
     if (z_pred.size() != dim) {
         result.status = StatusCode::size_mismatch;
         return result;
     }
 
     // residuals
-    vecXd res = measurement_residual(meas.type, meas.z, z_pred);
+    vecXd res = measurement_residual(meas.type, meas.z, z_pred, input.angle_out);
     if (!res.allFinite()) {
         result.status = StatusCode::invalid_state;
         return result;
@@ -198,11 +228,14 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     result.raw_residual_norm = res.norm();
 
     // measurement jacobian
-    matXd H = measurement_jacobian(meas.type, ctx);
+    matXd H = measurement_jacobian(meas.type, ctx, input.angle_in, input.angle_out,
+        input.eps_pos, input.eps_vel, input.tol_measurement);
     if (H.cols() != 6 || H.rows() != dim || !H.allFinite()) {
         result.status = StatusCode::size_mismatch;
         return result;
     }
+
+    H.leftCols(3) = (H.leftCols(3) * R_measurement_I).eval();
 
     // measurement covariance
     matXd R;
@@ -214,7 +247,8 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
 
     if (input.observer_uncertainty.enabled) {
         matXd H_observer;
-        result.status = measurement_observer_jacobian(meas.type, ctx, H_observer);
+        result.status = measurement_observer_jacobian(meas.type, ctx, H_observer,
+            input.angle_in, input.angle_out, input.eps_pos, input.eps_vel, input.tol_measurement);
         if (result.status != StatusCode::ok) return result;
         result.status = effective_measurement_covariance(
             meas.R, H_observer, input.observer_uncertainty.P, R
@@ -271,11 +305,13 @@ ODEKFStepResult od_ekf_step(const ODEKFStepInput& input) {
     // store results
     result.filter.x = x_post;
     result.filter.P = P_post;
-    result.filter.t = meas.t;
+    result.filter.t = t_pred;
     result.residual = res;
     result.residual_norm = std::sqrt(res_norm2);
     // result.residual_norm = std::sqrt(res.transpose() * S.inverse() * res);
     result.raw_residual_norm = res.norm();
+    if (input.propagation && input.propagation->world)
+        input.propagation->world->world().body(input.propagation->world->target_id())->x_tr = x_post;
     result.status = StatusCode::ok;
     return result;
 }
@@ -289,6 +325,14 @@ ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input) {
         return result;
     }
 
+    if (input.propagation && input.propagation->world) {
+        if (filter.t != input.propagation->world->reference_time()) {
+            result.status = StatusCode::time_mismatch;
+            return result;
+        }
+        result.status = input.propagation->world->reset(filter.x);
+        if (result.status != StatusCode::ok) return result;
+    }
     // EKF loop
     for (i32 i = 0; i < input.measurements.size(); ++i) {
         const Measurement& meas = input.measurements[i];
@@ -305,6 +349,7 @@ ODEKFResult od_ekf_offline(const ODEKFOfflineInput& input) {
         if (!input.observer_uncertainties.empty()) {
             step_input.observer_uncertainty = input.observer_uncertainties[i];
         }
+        step_input.propagation = input.propagation;
         ODEKFStepResult step_result = od_ekf_step(step_input);
         if (!od_status_success(step_result.status)) {
             result.filter = step_result.filter;

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/estimation_world.hpp"
+#include "core/od_estimator_context.hpp"
 #include "core/body.hpp"
 #include "core/entity.hpp"
 #include "core/estimation_common.hpp"
@@ -27,7 +28,8 @@ ODEKFStepResult od_ekf_step_world(
     UAngle angle_out,
     f64 eps_pos,
     f64 eps_vel,
-    f64 tol
+    f64 tol,
+    const ODEstimatorContext* propagation
 ) {
     ODEKFStepResult result;
 
@@ -35,6 +37,44 @@ ODEKFStepResult od_ekf_step_world(
     if (target == nullptr) {
         result.status = StatusCode::target_not_found;
         return result;
+    }
+
+    if (propagation) {
+        EntityId expected_target = propagation->world ? propagation->world->target_id()
+            : (propagation->dynamics ? propagation->dynamics->propagation.target_id : kInvalidEntityId);
+        if (event.target_id != expected_target) {
+            result.status = StatusCode::invalid_input;
+            return result;
+        }
+        const Body* observer = world.body(event.observer_id);
+        if (!observer) { result.status = StatusCode::observer_not_found; return result; }
+        const Station* station = world.station(event.observer_id);
+        if ((!station || !station->anchored)
+            && std::abs(world.t_sim() - event.measurement.t) > tol_time) {
+            result.status = StatusCode::time_mismatch;
+            return result;
+        }
+        ODEstimatorContext selected = *propagation;
+        if (!selected.observer_geometry && !selected.world) selected.observer_geometry = &world;
+        ODEKFStepInput step_input;
+        step_input.filter = filter;
+        step_input.measurement = event.measurement;
+        step_input.measurement.observer_id = event.observer_id;
+        step_input.measurement.target_id = event.target_id;
+        step_input.x_tr_observer = observer->body_type == BodyType::station
+            ? world.stat_x_tr_inertial(event.observer_id) : observer->x_tr;
+        step_input.dyn_config = dyn_config;
+        step_input.prop_steps = prop_steps;
+        step_input.Q = Q;
+        step_input.tol_time = tol_time;
+        step_input.observer_uncertainty = event.observer_uncertainty;
+        step_input.propagation = &selected;
+        step_input.angle_in = angle_in;
+        step_input.angle_out = angle_out;
+        step_input.eps_pos = eps_pos;
+        step_input.eps_vel = eps_vel;
+        step_input.tol_measurement = tol;
+        return od_ekf_step(step_input);
     }
 
     StateTr x_tr_observer;

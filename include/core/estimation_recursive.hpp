@@ -10,6 +10,8 @@
 #include "core/state.hpp"
 #include "util/constants.hpp"
 
+struct ODEstimatorContext;
+
 struct ODEKFState {
     StateTr x; // state
     mat6d P;   // state estimate covariance
@@ -26,6 +28,12 @@ struct ODEKFStepInput {
     mat6d Q = mat6d0; // process noise covariance (process uncertainty)
     f64 tol_time = tol12;
     ObserverUncertainty observer_uncertainty;
+    const ODEstimatorContext* propagation = nullptr; // optional absolute-inertial path
+    UAngle angle_in = UAngle::radian;
+    UAngle angle_out = UAngle::radian;
+    f64 eps_pos = 1e-3;
+    f64 eps_vel = 1e-6;
+    f64 tol_measurement = tol12;
 };
 
 struct ODEKFStepResult {
@@ -47,6 +55,7 @@ struct ODEKFOfflineInput {
     f64 tol_time = tol12;
     // empty disables all; otherwise one entry per measurement
     svec<ObserverUncertainty> observer_uncertainties;
+    const ODEstimatorContext* propagation = nullptr; // optional absolute-inertial path
 };
 
 struct ODEKFResult {
@@ -75,5 +84,6 @@ ODEKFPredictResult od_ekf_predict(
     const ODDynamicsConfig& dyn_config,
     i32 prop_steps,
     const mat6d& Q,
-    f64 tol = tol12
+    f64 tol = tol12,
+    const ODEstimatorContext* propagation = nullptr
 );

@@ -30,6 +30,13 @@ struct WorldStepperConfig {
     WorldAdaptiveConfig adaptive{};
 };
 
+struct WorldTargetSTM {
+    EntityId target_id = kInvalidEntityId;
+    mat6d Phi = mat6d1;
+    mat6d abs_tol = mat6d::Constant(1e-9); // entry units follow Phi's position/velocity blocks
+    f64 rel_tol = 1e-9;
+};
+
 struct WorldStepperWorkspace {
     svec<EntityId> propagated_tr_ids;  // numerically propagated translation
     svec<EntityId> propagated_att_ids; // satellites and free stations
@@ -41,6 +48,7 @@ struct WorldStepperWorkspace {
     svec<EntityId> staged_tr_ids;      // propagated and provider translation
     svec<EntityId> staged_att_ids;     // propagated and celestial attitude
     bool dirty = true;
+    WorldTargetSTM* target_stm = nullptr; // borrowed only during a synchronous step call
 };
 
 void rebuild_world_stepper_workspace(

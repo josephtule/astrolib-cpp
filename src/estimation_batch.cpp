@@ -5,6 +5,7 @@
 #include "core/estimation_common.hpp"
 #include "core/measurement.hpp"
 #include "core/od_dynamics.hpp"
+#include "core/od_estimator_context.hpp"
 
 #include <Eigen/Core>
 #include <cmath>
@@ -28,14 +29,14 @@ StatusCode od_batch_validate_input(const ODBatchInput& input) {
     if (input.measurements.size() != input.observer_states.size()) {
         return StatusCode::size_mismatch;
     }
-    if (input.dyn_config.mu <= 0.0 || input.prop_steps <= 0 || input.max_iters <= 0)
+    if ((!input.propagation && input.dyn_config.mu <= 0.0) || input.prop_steps <= 0 || input.max_iters <= 0)
         return StatusCode::validation_failed;
 
-    if (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6) {
+    if (!input.propagation && (input.dyn_config.zonal_degree < 0 || input.dyn_config.zonal_degree > 6)) {
         return StatusCode::validation_failed;
     }
 
-    return StatusCode::ok;
+    return input.propagation ? validate_od_estimator_context(*input.propagation) : StatusCode::ok;
 }
 
 namespace {
@@ -94,8 +95,16 @@ ODBatchResidualEval batch_eval_residual_norm(
 
         // propagate candidate state to measurement time
         f64 dt = meas.t - input.t0;
-        StateTr x_pred_i
-            = propagate_tr_od(input.t0, x0_ref, dt, input.prop_steps, input.dyn_config);
+        StateTr x_pred_i;
+        if (input.propagation) {
+            VarStateTr yf;
+            eval.status = propagate_od_estimator(*input.propagation, input.t0,
+                x0_ref, meas.t, input.prop_steps, true, yf);
+            if (eval.status != StatusCode::ok) return eval;
+            x_pred_i = yf.x;
+        } else {
+            x_pred_i = propagate_tr_od(input.t0, x0_ref, dt, input.prop_steps, input.dyn_config);
+        }
         if (!statetr_to_vec6d(x_pred_i).allFinite()) {
             eval.status = StatusCode::propagation_failed;
             return eval;
@@ -103,6 +112,12 @@ ODBatchResidualEval batch_eval_residual_norm(
 
         // measurement prediction
         MeasurementContext ctx = make_measurement_context(x_pred_i, x_obsv);
+        if (input.propagation) {
+            mat3d R;
+            eval.status = od_estimator_measurement_context(*input.propagation, meas,
+                x_pred_i, x_obsv, ctx, R);
+            if (eval.status != StatusCode::ok) return eval;
+        }
         vecXd z_pred = predict_measurement(meas.type, ctx);
         if (z_pred.size() != dim) {
             eval.status = StatusCode::size_mismatch;
@@ -238,13 +253,14 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
             VarStateTr y0;
             y0.x = x0_ref;
             y0.Phi = mat6d1;
-            VarStateTr yf = propagate_var_tr_od(
-                input.t0,
-                y0,
-                dt,
-                input.prop_steps,
-                input.dyn_config
-            );
+            VarStateTr yf;
+            if (input.propagation) {
+                result.status = propagate_od_estimator(*input.propagation, input.t0,
+                    x0_ref, meas.t, input.prop_steps, true, yf);
+                if (result.status != StatusCode::ok) return result;
+            } else {
+                yf = propagate_var_tr_od(input.t0, y0, dt, input.prop_steps, input.dyn_config);
+            }
 
             vec6d xf_vec = statetr_to_vec6d(yf.x);
             if (!xf_vec.allFinite() || !yf.Phi.allFinite()) {
@@ -254,6 +270,12 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
 
             // measurement prediction
             MeasurementContext ctx = make_measurement_context(yf.x, x_obsv);
+            mat3d R_measurement_I = mat3d::Identity();
+            if (input.propagation) {
+                result.status = od_estimator_measurement_context(*input.propagation, meas,
+                    yf.x, x_obsv, ctx, R_measurement_I);
+                if (result.status != StatusCode::ok) return result;
+            }
 
             vecXd z_pred = predict_measurement(meas.type, ctx);
             if (z_pred.size() != dim) {
@@ -275,6 +297,7 @@ ODBatchResult od_batch_lumve(const ODBatchInput& input) {
                 result.status = StatusCode::invalid_input;
                 return result;
             }
+            G_i.leftCols(3) = (G_i.leftCols(3) * R_measurement_I).eval();
             matXd H_i = G_i * yf.Phi;
 
             matXd& R = frozen_covariances[i];

@@ -10,6 +10,8 @@
 #include "core/state.hpp"
 #include "util/vecdefs.hpp"
 
+struct ODEstimatorContext;
+
 struct ODBatchInput {
     StateTr x0_guess;
     svec<Measurement> measurements;
@@ -26,6 +28,7 @@ struct ODBatchInput {
     bool use_line_search = true;
     // empty disables all; otherwise one entry per measurement
     svec<ObserverUncertainty> observer_uncertainties;
+    const ODEstimatorContext* propagation = nullptr; // optional absolute-inertial path
 };
 
 struct ODBatchResult {

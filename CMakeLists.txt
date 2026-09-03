@@ -137,3 +137,24 @@ target_compile_definitions(${TARGET_NAME} PRIVATE
 target_compile_options(${TARGET_NAME} PRIVATE
     $<$<AND:$<CONFIG:Release>,$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>>:-march=native>
 )
+
+#[[
+# TODO: remove this temporary target after the orbit tool comparison
+if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ref/tudat")
+    set(TOOL_COMPARISON_SOURCES ${SOURCES})
+    list(FILTER TOOL_COMPARISON_SOURCES EXCLUDE REGEX ".*/src/(main|diagnostics)\\.cpp$")
+    add_executable(tool_comparison EXCLUDE_FROM_ALL
+        ref/tudat/tool_comparison.cpp
+        ${TOOL_COMPARISON_SOURCES}
+    )
+    # reuse the application's dependencies/options without changing its entry point
+    foreach(property IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS COMPILE_OPTIONS COMPILE_FEATURES)
+        set_property(TARGET tool_comparison PROPERTY ${property}
+            "$<TARGET_PROPERTY:${TARGET_NAME},${property}>"
+        )
+    endforeach()
+    target_link_libraries(tool_comparison PRIVATE
+        $<TARGET_PROPERTY:${TARGET_NAME},LINK_LIBRARIES>
+    )
+endif()
+]]
