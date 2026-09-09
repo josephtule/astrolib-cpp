@@ -3,10 +3,14 @@
 #include "core/od_estimator_context.hpp"
 #include "od_environment_internal.hpp"
 #include "core/station_geometry.hpp"
+#include <algorithm>
 #include <cmath>
 
 StatusCode validate_od_estimator_context(const ODEstimatorContext& ctx) {
     if ((ctx.dynamics == nullptr) == (ctx.world == nullptr)) return StatusCode::invalid_input;
+    if (!std::isfinite(ctx.fixed_step_size) || ctx.fixed_step_size < 0.0)
+        return StatusCode::invalid_input;
+    if (ctx.world && ctx.fixed_step_size != 0.0) return StatusCode::unsupported_method;
     if (ctx.world) return ctx.world->target_id() == kInvalidEntityId
         ? StatusCode::invalid_input : StatusCode::ok;
     switch (ctx.integrator) {
@@ -46,7 +50,11 @@ StatusCode propagate_od_estimator(
         return result.status;
     }
     VarStateTr y; y.x = x0; y.Phi = mat6d1;
-    f64 dt = (tf - t0) / steps;
+    const f64 interval = tf - t0;
+    if (!std::isfinite(interval)) return StatusCode::invalid_input;
+    f64 dt = ctx.fixed_step_size > 0.0
+        ? std::copysign(std::min(ctx.fixed_step_size, std::abs(interval)), interval)
+        : interval / steps;
     if (!std::isfinite(dt) || (tf != t0 && t0 + dt == t0))
         return StatusCode::step_size_underflow;
     auto derivative = [&](f64 t, const VarStateTr& state) {
@@ -69,11 +77,21 @@ StatusCode propagate_od_estimator(
         return d;
     };
     if (tf != t0) {
-        for (i32 i=0; i<steps; ++i) {
-            y = step_integrator<VarStateTr, VarDerivTr>(derivative, t0+i*dt, y, dt, ctx.integrator).second;
+        f64 t = t0;
+        i32 i = 0;
+        while (ctx.fixed_step_size > 0.0 ? t != tf : i < steps) {
+            // Keep the requested step; shorten only the step reaching tf.
+            const f64 remaining = tf - t;
+            const f64 h = ctx.fixed_step_size > 0.0
+                ? std::copysign(std::min(ctx.fixed_step_size, std::abs(remaining)), remaining)
+                : dt;
+            if (t + h == t) return StatusCode::step_size_underflow;
+            y = step_integrator<VarStateTr, VarDerivTr>(derivative, t, y, h, ctx.integrator).second;
             if (status != StatusCode::ok) return status;
             if (!statetr_to_vec6d(y.x).allFinite() || !y.Phi.allFinite())
                 return StatusCode::non_finite_result;
+            if (ctx.fixed_step_size > 0.0) t = std::abs(h) == std::abs(remaining) ? tf : t + h;
+            else t = t0 + (++i) * dt;
         }
     }
     out = y;

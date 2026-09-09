@@ -10,6 +10,7 @@ struct ODEstimatorContext {
     ODWorldWorkspace* world = nullptr; // exactly one of dynamics/world; borrowed per run
     const World* observer_geometry = nullptr; // station IDs and fixed attachment geometry
     IntegratorTypeFixed integrator = IntegratorTypeFixed::rk4;
+    f64 fixed_step_size = 0.0; // dynamics path: 0 uses steps; positive uses fixed steps + final remainder
     ODWorldPropagationOptions options;
 };
 StatusCode validate_od_estimator_context(const ODEstimatorContext& ctx);

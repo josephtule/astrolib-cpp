@@ -36,6 +36,7 @@ enum struct StatusCode {
     measurement_unavailable,
     sample_not_found,
     interp_failed,
+    divide_by_zero,
 
     file_not_found,
     file_write_failed,
@@ -130,6 +131,7 @@ inline std::string status_string(StatusCode status) {
     case StatusCode::external_library_unavailable: return "External library unavailable";
     case StatusCode::external_library_error: return "External library error";
     case StatusCode::kernel_not_loaded: return "Kernel not loaded";
+    case StatusCode::divide_by_zero: return "Divide by zero";
     }
 
     return "Unknown Status";
