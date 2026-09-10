@@ -3,6 +3,7 @@
 
 #include "core/diagnostics.hpp"
 #include "core/body.hpp"
+#include "core/body_printing.hpp"
 #include "core/cspice_provider.hpp"
 #include "core/dynamics_rotational.hpp"
 #include "core/entity.hpp"

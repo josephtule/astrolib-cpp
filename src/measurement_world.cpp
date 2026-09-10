@@ -4,6 +4,7 @@
 #include "core/measurement_world.hpp"
 #include "core/body.hpp"
 #include "core/entity.hpp"
+#include "core/observations.hpp"
 #include "core/state.hpp"
 #include "core/status.hpp"
 #include <cmath>
