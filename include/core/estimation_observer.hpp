@@ -49,8 +49,9 @@ struct ODObserverSample {
     string center;     // origin the observer state is relative to
     string frame_name; // coordinate axes used to express the observer state
 
-    ObserverStateSource source = ObserverStateSource::world; // backend used for this sample
-    string source_id; // backend registry key or empty for world
+    ObserverStateSource source
+        = ObserverStateSource::world; // backend used for this sample
+    string source_id;                 // backend registry key or empty for world
     bool known_state = false;
 };
 
@@ -75,14 +76,17 @@ struct ODObserverQueryContext {
 
     ODObserverEpochContext epoch;
 
-    string center;     // required origin for the returned observer state
-    string frame_name; // required axes for the returned observer state
+    string center;           // required origin for the returned observer state
+    string frame_name;       // required axes for the returned observer state
+    string world_center;     // native origin of states stored in world/history
+    string world_frame_name; // native axes of states stored in world/history
     f64 tol_time = tol12;
+    f64 tol_covariance = tol12;
 };
 
 StatusCode validate_od_observer_sample(
     const ODObserverSample& sample,
-    f64 tol_time = tol12
+    f64 tol_covariance = tol12
 );
 
 StatusCode query_od_observer(

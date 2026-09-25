@@ -130,11 +130,16 @@ static StatusCode observer_query_epoch(
     return StatusCode::ok;
 }
 
-StatusCode validate_od_observer_sample(const ODObserverSample& sample, f64 tol) {
+StatusCode validate_od_observer_sample(
+    const ODObserverSample& sample,
+    f64 tol_covariance
+) {
     if (sample.observer_id == kInvalidEntityId) return StatusCode::invalid_input;
 
-    if (!std::isfinite(sample.t) || !finite_state(sample.x) || !finite_nonneg(tol))
+    if (!std::isfinite(sample.t) || !finite_state(sample.x)
+        || !finite_nonneg(tol_covariance)) {
         return StatusCode::invalid_input;
+    }
 
     if (sample.center.empty() || sample.frame_name.empty())
         return StatusCode::invalid_input;
@@ -149,17 +154,14 @@ StatusCode validate_od_observer_sample(const ODObserverSample& sample, f64 tol) 
         if (sample.source_id.empty()) return StatusCode::invalid_input;
     }
 
-    if (!covariance_is_psd(sample.P, tol)) return StatusCode::invalid_covariance;
+    if (!covariance_is_psd(sample.P, tol_covariance))
+        return StatusCode::invalid_covariance;
 
     if (sample.known_state) {
         if (sample.source == ObserverStateSource::estimate)
             return StatusCode::invalid_input;
 
-        if (!sample.P.isZero(tol)) {
-            return StatusCode::invalid_covariance;
-        }
-    } else {
-        if (sample.P.isZero(tol)) {
+        if (!sample.P.isZero(tol_covariance)) {
             return StatusCode::invalid_covariance;
         }
     }
@@ -169,8 +171,10 @@ StatusCode validate_od_observer_sample(const ODObserverSample& sample, f64 tol) 
 
 static StatusCode validate_od_observer_query_context(const ODObserverQueryContext& ctx) {
     if (ctx.center.empty() || ctx.frame_name.empty()) return StatusCode::invalid_input;
-    if (!finite_nonneg(ctx.tol_time) || !std::isfinite(ctx.epoch.t_ref))
+    if (!finite_nonneg(ctx.tol_time) || !finite_nonneg(ctx.tol_covariance)
+        || !std::isfinite(ctx.epoch.t_ref)) {
         return StatusCode::invalid_input;
+    }
 
     if (ctx.epoch.has_calendar_epoch) {
         StatusCode status = validate_julian_date(ctx.epoch.jd_ref);
@@ -197,6 +201,10 @@ static StatusCode query_world_observer(
     if (binding.source != ObserverStateSource::world) return StatusCode::invalid_input;
 
     if (ctx.world == nullptr) return StatusCode::invalid_input;
+    if (ctx.world_center.empty() || ctx.world_frame_name.empty())
+        return StatusCode::invalid_input;
+    if (ctx.center != ctx.world_center || ctx.frame_name != ctx.world_frame_name)
+        return StatusCode::unsupported_method;
 
     ODObserverSample temp;
     const Body* body = ctx.world->body(binding.observer_id);
@@ -266,14 +274,11 @@ static StatusCode query_world_observer(
     temp.observer_id = binding.observer_id;
     temp.t = t;
     temp.P = mat6d0;
-    temp.center = ctx.center;
-    temp.frame_name = ctx.frame_name;
+    temp.center = ctx.world_center;
+    temp.frame_name = ctx.world_frame_name;
     temp.source = ObserverStateSource::world;
     temp.source_id = binding.source_id;
     temp.known_state = true;
-
-    status = validate_od_observer_sample(temp, ctx.tol_time);
-    if (status != StatusCode::ok) return status;
 
     out = temp;
     return StatusCode::ok;
@@ -344,9 +349,6 @@ static StatusCode query_provider_observer(
     temp.source_id = binding.source_id;
     temp.known_state = true;
 
-    status = validate_od_observer_sample(temp, ctx.tol_time);
-    if (status != StatusCode::ok) return status;
-
     out = temp;
     return StatusCode::ok;
 }
@@ -357,6 +359,10 @@ StatusCode query_od_observer(
     f64 t,
     ODObserverSample& out
 ) {
+    if (!std::isfinite(t)) {
+        return StatusCode::invalid_input;
+    }
+
     StatusCode status = validate_od_observer_binding(binding);
     if (status != StatusCode::ok) return status;
 
@@ -370,14 +376,28 @@ StatusCode query_od_observer(
         status = query_world_observer(binding, ctx, t, temp);
     } break;
     case ObserverStateSource::provider: {
-        status = query_provider_observer(binding, ctx, t, out);
+        status = query_provider_observer(binding, ctx, t, temp);
     } break;
     case ObserverStateSource::estimate: {
         // status = query_estimate_observer(binding, ctx, t, out);
+        return StatusCode::unsupported_method;
     } break;
     }
-
     if (status != StatusCode::ok) return status;
 
+    status = validate_od_observer_sample(temp, ctx.tol_covariance);
+    if (status != StatusCode::ok) return status;
+
+    if (temp.observer_id != binding.observer_id) return StatusCode::observer_not_found;
+
+    if (std::abs(temp.t - t) > ctx.tol_time) return StatusCode::time_mismatch;
+
+    if (temp.source != binding.source) return StatusCode::invalid_input;
+    if (temp.source_id != binding.source_id) return StatusCode::missing_reference;
+
+    if (temp.center != ctx.center || temp.frame_name != ctx.frame_name)
+        return StatusCode::unsupported_method;
+
+    out = temp;
     return StatusCode::ok;
 }
