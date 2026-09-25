@@ -10,9 +10,11 @@ StatusCode evaluate_measurement_realism(
     const MeasurementRealismPolicy& policy,
     MeasurementRealismResult& out
 ) {
-    if (!std::isfinite(query.t) || measurement_dim(query.type) <= 0
+    if (
+        !std::isfinite(query.t) || measurement_dim(query.type) <= 0
         || query.observer_id == kInvalidEntityId || query.target_id == kInvalidEntityId
-        || query.observer_id == query.target_id) {
+        || query.observer_id == query.target_id
+    ) {
         return StatusCode::invalid_input;
     }
     // TODO: implement each requested check; disabled does not mean verified visible

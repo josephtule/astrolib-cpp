@@ -254,3 +254,71 @@ StatusCode query_orientation_provider(
     out = temp;
     return StatusCode::ok;
 }
+
+StatusCode query_in_coverage(
+    const EphemerisEpochMetadata& epoch_metadata,
+    const JulianDate& query_epoch,
+    const CartesianEphemerisTable& table,
+    const TimeScale scale,
+    const TimeOffsets& offsets,
+    const CartesianSampleOptions& options,
+    bool& covered
+) {
+    StatusCode status;
+
+    if (!finite_pos(options.tol)) {
+        return StatusCode::invalid_input;
+    }
+
+    f64 provider_dt;
+    status = ephemeris_query_dt(epoch_metadata, query_epoch, scale, offsets, provider_dt);
+    if (status != StatusCode::ok) return status;
+
+    if (table.dt.empty()) {
+        return StatusCode::empty_ephemeris;
+    }
+
+    const f64 t_min = table.dt.front();
+    const f64 t_max = table.dt.back();
+    const f64 tol = options.tol;
+
+    bool before_start = provider_dt < t_min - tol;
+    bool after_end = provider_dt > t_max + tol;
+    covered = !(before_start || after_end);
+
+    return StatusCode::ok;
+}
+
+StatusCode query_in_coverage(
+    const EphemerisEpochMetadata& epoch_metadata,
+    const JulianDate& query_epoch,
+    const OrientationEphemerisTable& table,
+    const TimeScale scale,
+    const TimeOffsets& offsets,
+    const OrientationSampleOptions& options,
+    bool& covered
+) {
+    StatusCode status;
+
+    if (!finite_pos(options.tol)) {
+        return StatusCode::invalid_input;
+    }
+
+    f64 provider_dt;
+    status = ephemeris_query_dt(epoch_metadata, query_epoch, scale, offsets, provider_dt);
+    if (status != StatusCode::ok) return status;
+
+    if (table.dt.empty()) {
+        return StatusCode::empty_ephemeris;
+    }
+
+    const f64 t_min = table.dt.front();
+    const f64 t_max = table.dt.back();
+    const f64 tol = options.tol;
+
+    bool before_start = provider_dt < t_min - tol;
+    bool after_end = provider_dt > t_max + tol;
+    covered = !(before_start || after_end);
+
+    return StatusCode::ok;
+}

@@ -9,6 +9,7 @@
 #include "util/constants.hpp"
 #include "util/units.hpp"
 #include "util/vecdefs.hpp"
+#include <Eigen/Eigenvalues>
 #include <cmath>
 #include <type_traits>
 
@@ -280,6 +281,20 @@ inline bool finite_nonempty_mat(const eig::DenseBase<Derived>& A) {
     return finite_nonempty_dense(A);
 }
 
+template <class Derived>
+inline bool is_symmetric(
+    const eig::MatrixBase<Derived>& A,
+    typename Derived::RealScalar tol = typename Derived::RealScalar(tol12)
+) {
+    using T = typename Derived::RealScalar;
+    if (A.rows() != A.cols() || !finite_mat(A) || !std::isfinite(tol) || tol < T(0)) {
+        return false;
+    }
+    if (A.size() == 0) return true;
+
+    return (A.derived() - A.transpose()).cwiseAbs().maxCoeff() <= tol;
+}
+
 template <class Derived, class T>
 inline bool finite_norm_nonzero(const eig::MatrixBase<Derived>& v, T tol = tol12) {
     return finite_dense(v) && finite_nonzero(v.norm(), tol);
@@ -352,4 +367,89 @@ inline mat3<T> inertia_PAT(const mat3<T>& I_o, T mass, const vec3<T>& offset) {
     const T d2 = offset.dot(offset);
     mat3<T> D = d2 * eig::Matrix<T, 3, 3>::Identity() - offset * offset.transpose();
     return I_o - mass * D;
+}
+
+template <class Derived>
+inline bool symmetric_is_psd(
+    const eig::MatrixBase<Derived>& A,
+    typename Derived::Scalar tol = typename Derived::Scalar(tol12)
+) {
+    using T = typename Derived::Scalar;
+    static_assert(std::is_floating_point_v<T>, "symmetric_is_psd requires real values");
+
+    if (A.rows() != A.cols() || A.size() == 0 || !finite_mat(A) || !std::isfinite(tol)
+        || tol < T(0)) {
+        return false;
+    }
+
+    T scale = std::max(T(1), A.cwiseAbs().maxCoeff());
+    if (!is_symmetric(A, tol * scale)) return false;
+
+    typename Derived::PlainObject A_sym = (T(0.5) * (A.derived() + A.transpose())).eval();
+
+    eig::SelfAdjointEigenSolver<typename Derived::PlainObject> solver(
+        A_sym,
+        eig::EigenvaluesOnly
+    );
+    if (solver.info() != eig::Success) return false;
+
+    T eig_scale = std::max(T(1), solver.eigenvalues().cwiseAbs().maxCoeff());
+
+    return solver.eigenvalues().minCoeff() >= -tol * eig_scale;
+}
+
+template <class Derived>
+inline bool covariance_is_psd(
+    const eig::MatrixBase<Derived>& P,
+    typename Derived::Scalar tol = typename Derived::Scalar(tol12)
+) {
+    using T = typename Derived::Scalar;
+    static_assert(std::is_floating_point_v<T>, "covariance_is_psd requires real values");
+
+    if (P.rows() != P.cols() || P.size() == 0 || !finite_mat(P) || !std::isfinite(tol)
+        || tol < T(0)) {
+        return false;
+    }
+
+    typename Derived::PlainObject P_abs = P.cwiseAbs();
+    typename Derived::PlainObject symmetry_scale = P_abs.cwiseMax(P_abs.transpose());
+    symmetry_scale = symmetry_scale.array().max(T(1));
+
+    if (((P.derived() - P.transpose()).cwiseAbs().array()
+         > tol * symmetry_scale.array())
+            .any()) {
+        return false;
+    }
+
+    typename Derived::PlainObject P_sym = (T(0.5) * (P.derived() + P.transpose())).eval();
+    vecX<T> inv_sigma(P.rows());
+
+    for (eig::Index i = 0; i < P.rows(); ++i) {
+        T variance = P_sym(i, i);
+        if (variance < T(0)) return false;
+
+        if (variance == T(0)) {
+            if (!P_sym.row(i).isZero(tol)) return false;
+            inv_sigma(i) = T(1);
+        } else {
+            inv_sigma(i) = T(1) / std::sqrt(variance);
+        }
+    }
+
+    typename Derived::PlainObject P_normalized = P_sym;
+    for (eig::Index i = 0; i < P.rows(); ++i) {
+        for (eig::Index j = 0; j < P.cols(); ++j) {
+            P_normalized(i, j) *= inv_sigma(i) * inv_sigma(j);
+        }
+    }
+
+    eig::SelfAdjointEigenSolver<typename Derived::PlainObject> solver(
+        P_normalized,
+        eig::EigenvaluesOnly
+    );
+    if (solver.info() != eig::Success) return false;
+
+    T eig_scale = std::max(T(1), solver.eigenvalues().cwiseAbs().maxCoeff());
+
+    return solver.eigenvalues().minCoeff() >= -tol * eig_scale;
 }

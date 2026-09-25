@@ -501,7 +501,7 @@ StatusCode sample_cspice_ephemeris(
     string observer = cspice_body_string(query.observer);
     string frame = cspice_frame_string(query.frame);
     temp.metadata.epoch = grid.epoch;
-    temp.metadata.frame = {.object = target, .center = observer, .frame = frame};
+    temp.metadata.frame = {.object = target, .center = observer, .frame_name = frame};
     temp.metadata.units = {.length = ULength::kilometer, .time = UTime::second};
     {
         std::scoped_lock lock(cspice_mutex);

@@ -58,7 +58,7 @@ StatusCode validate_od_dynamics_context(const ODDynamicsContext& ctx) {
             if (status != StatusCode::ok) return status;
             const auto& frame = provider.table.metadata.frame;
             if (ctx.center.empty() || frame.center != ctx.center
-                || frame.frame != ctx.inertial_frame || frame.object != source.object)
+                || frame.frame_name != ctx.inertial_frame || frame.object != source.object)
                 return StatusCode::invalid_input;
         }
         if (source.providers.orientation) {

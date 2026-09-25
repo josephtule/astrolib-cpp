@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/status.hpp"
 #include "util/math.hpp"
 #include "util/printing.hpp"
 #include "util/tools.hpp"
@@ -100,9 +101,9 @@ inline f64 seconds_of_day(i32 hour, i32 minute, f64 second) {
     return hour * 3600.0 + minute * 60.0 + second;
 }
 
+inline constexpr f64 seconds_per_day = 24.0 * 3600.; // assumes uniform 86400s day
 inline HMSTime frac_day_to_hms(f64 frac_day) {
-    f64 sec_in_day = 24 * 3600; // assumes uniform 86400s day
-    f64 total_sec = frac_day * sec_in_day;
+    f64 total_sec = frac_day * seconds_per_day;
     i32 hours = i32(total_sec / 3600);
     total_sec -= f64(hours) * 3600.0; // remaining seconds
     i32 minutes = i32(total_sec / 60);
@@ -119,19 +120,6 @@ inline f64 hms_to_frac_day(HMSTime hms) {
 
 inline HMSTime hms_from_cal(const CalendarTime& cal) {
     return HMSTime{.hour = cal.hour, .minute = cal.minute, .second = cal.second};
-}
-
-inline JulianDate normalize_jd(JulianDate jd) {
-    f64 whole = std::floor(jd.frac);
-    jd.day += whole;
-    jd.frac -= whole;
-    return jd;
-}
-inline ModifiedJulianDate normalize_mjd(ModifiedJulianDate mjd) {
-    f64 whole = std::floor(mjd.frac);
-    mjd.day += whole;
-    mjd.frac -= whole;
-    return mjd;
 }
 
 inline f64 jd_to_scalar(const JulianDate& jd) { return jd.day + jd.frac; }
@@ -221,6 +209,32 @@ inline CalendarTime jd_to_cal(const JulianDate& jd) {
     cal.second = hms.second;
 
     return cal;
+}
+
+inline JulianDate normalize_jd(JulianDate jd) {
+    f64 whole = std::floor(jd.frac);
+    jd.day += whole;
+    jd.frac -= whole;
+    return jd;
+}
+inline StatusCode validate_julian_date(const JulianDate& jd) {
+    JulianDate temp = jd;
+    temp = normalize_jd(temp);
+    if (!std::isfinite(jd.day) || !std::isfinite(jd.frac)) {
+        return StatusCode::non_finite_result;
+    }
+
+    return StatusCode::ok;
+}
+
+inline ModifiedJulianDate normalize_mjd(ModifiedJulianDate mjd) {
+    f64 whole = std::floor(mjd.frac);
+    mjd.day += whole;
+    mjd.frac -= whole;
+    return mjd;
+}
+inline StatusCode validate_mjd(const ModifiedJulianDate& mjd) {
+    return validate_julian_date(mjd_to_jd(mjd));
 }
 
 struct TimeOffsets {

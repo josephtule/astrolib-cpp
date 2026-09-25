@@ -4,7 +4,10 @@
 #pragma once
 
 #include "core/ephemeris.hpp"
+#include "core/interpolation.hpp"
 #include "core/state.hpp"
+#include "core/status.hpp"
+#include "core/time.hpp"
 
 enum struct ProviderCoverageAction {
     reject_step,
@@ -63,4 +66,24 @@ StatusCode ephemeris_query_dt(
     TimeScale query_scale,
     const TimeOffsets& offsets,
     f64& dt
+);
+
+StatusCode query_in_coverage(
+    const EphemerisEpochMetadata& epoch_metadata,
+    const JulianDate& query_epoch,
+    const CartesianEphemerisTable& table,
+    const TimeScale scale,
+    const TimeOffsets& offsets,
+    const CartesianSampleOptions& options,
+    bool& covered
+);
+
+StatusCode query_in_coverage(
+    const EphemerisEpochMetadata& epoch_metadata,
+    const JulianDate& query_epoch,
+    const OrientationEphemerisTable& table,
+    const TimeScale scale,
+    const TimeOffsets& offsets,
+    const OrientationSampleOptions& options,
+    bool& covered
 );

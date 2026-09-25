@@ -5934,7 +5934,7 @@ void run_ephemeris_io_diag() {
           };
 
     CartesianEphemerisTable cart;
-    cart.metadata.frame = {.object = "SATELLITE", .center = "EARTH", .frame = "J2000"};
+    cart.metadata.frame = {.object = "SATELLITE", .center = "EARTH", .frame_name = "J2000"};
     cart.metadata.source
         = {.source_type = "generated",
            .source_name = "ephemeris_io_diag",
@@ -6009,7 +6009,7 @@ void run_ephemeris_io_diag() {
     const bool cart_metadata_ok
         = cart_loaded.metadata.frame.object == cart.metadata.frame.object
           && cart_loaded.metadata.frame.center == cart.metadata.frame.center
-          && cart_loaded.metadata.frame.frame == cart.metadata.frame.frame
+          && cart_loaded.metadata.frame.frame_name == cart.metadata.frame.frame_name
           && cart_loaded.metadata.source.source_type == cart.metadata.source.source_type
           && cart_loaded.metadata.source.source_name == cart.metadata.source.source_name;
     check_bool(
@@ -6248,7 +6248,7 @@ static sptr<EphemerisProvider> make_ephemeris_diag_tr_provider(
 ) {
     auto provider = std::make_shared<EphemerisProvider>();
     provider->table.metadata.frame
-        = {.object = "SOURCE", .center = "SIMULATION_ORIGIN", .frame = "J2000"};
+        = {.object = "SOURCE", .center = "SIMULATION_ORIGIN", .frame_name = "J2000"};
     provider->table.metadata.source
         = {.source_type = "generated", .source_name = "ephemeris_provider_diag"};
     provider->table.dt = {0.0, coverage_end};

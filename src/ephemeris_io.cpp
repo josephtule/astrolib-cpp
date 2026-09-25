@@ -319,10 +319,10 @@ static StatusCode parse_cartesian_ephemeris_frame_metadata(
     if (status != StatusCode::ok) return ephemeris_metadata_status(status);
     status = parse_req_string(*child, "center", temp.center, path + ".frame");
     if (status != StatusCode::ok) return ephemeris_metadata_status(status);
-    status = parse_req_string(*child, "frame", temp.frame, path + ".frame");
+    status = parse_req_string(*child, "frame", temp.frame_name, path + ".frame");
     if (status != StatusCode::ok) return ephemeris_metadata_status(status);
 
-    if (temp.object.empty() || temp.center.empty() || temp.frame.empty())
+    if (temp.object.empty() || temp.center.empty() || temp.frame_name.empty())
         return StatusCode::invalid_ephemeris_metadata;
 
     out = std::move(temp);
@@ -1034,7 +1034,7 @@ static json json_from_cartesian_ephemeris_metadata(
     json frame{
         {"object", metadata.frame.object},
         {"center", metadata.frame.center},
-        {"frame", metadata.frame.frame}
+        {"frame", metadata.frame.frame_name}
     };
     json units{
         {"length", ulength_str(metadata.units.length)},

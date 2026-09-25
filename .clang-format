@@ -61,6 +61,8 @@ BreakBeforeTernaryOperators: true
 BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeColon
 BreakAfterJavaFieldAnnotations: false
+BreakAfterOpenBracketIf: true
+BreakBeforeCloseBracketIf: true
 BreakStringLiterals: true
 # BreakBeforeClosingBracket: True #
 # BreakBeforeClosingParen: True #

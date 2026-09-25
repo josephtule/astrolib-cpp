@@ -46,7 +46,7 @@ static StatusCode valid_cartesian_ephemeris_metadata(
     status = valid_ephemeris_epoch_metadata(metadata.epoch);
     if (status != StatusCode::ok) return status;
 
-    if (metadata.frame.frame.empty() || metadata.frame.center.empty()
+    if (metadata.frame.frame_name.empty() || metadata.frame.center.empty()
         || metadata.frame.object.empty())
         return StatusCode::invalid_ephemeris_metadata;
 

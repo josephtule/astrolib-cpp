@@ -22,13 +22,13 @@ struct EphemerisEpochMetadata {
 // Cartesian/Position ----------------------------------------------------------
 
 struct CartesianEphemerisFrameMetadata {
-    string object;
-    string center;
-    string frame;
+    string object;     // body whose state is tabulated
+    string center;     // origin the object state is relative to
+    string frame_name; // coordinate axes used to express the state
     /* Example
     object = "MOON";
     center = "EARTH";
-    frame = "J2000";
+    frame_name = "J2000";
     */
 };
 
@@ -38,11 +38,11 @@ struct CartesianEphemerisUnitMetadata {
 };
 
 struct EphemerisSource {
-    string source_type;
+    string source_type; // data/provider kind, not a coordinate frame
     // TODO: "native_csv","ccsds_oem","cspice_spk","generated","world_history"
     // currently only support native_csv
-    string source_name;
-    string source_path;
+    string source_name; // dataset/provider label, not the object or center
+    string source_path; // original file, kernel, or other external resource
     string description;
 };
 
@@ -90,9 +90,9 @@ enum struct AngularVelocityDirection {
 };
 
 struct OrientationEphemerisFrameMetadata {
-    string object;
-    string source_frame;
-    string target_frame;
+    string object;       // body whose orientation is tabulated
+    string source_frame; // frame rotated from under the stored convention
+    string target_frame; // frame rotated into under the stored convention
     /* Example
     object       = "MARS"
     source_frame = "J2000"
