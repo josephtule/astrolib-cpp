@@ -1,6 +1,7 @@
 #include "core/propagation/state_layout.hpp"
 #include "core/entity.hpp"
 #include "core/status.hpp"
+#include "util/typedefs.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -81,6 +82,8 @@ StatusCode initialize_propagation_state_layout(
 StatusCode validate_propagation_state_layout(const PropagationStateLayout& layout) {
     StatusCode status;
 
+    if (layout.state_size < 0) return StatusCode::invalid_input;
+
     if (layout.body_indices.size() != layout.bodies.size())
         return StatusCode::size_mismatch;
 
@@ -132,6 +135,78 @@ StatusCode validate_propagation_state_layout(const PropagationStateLayout& layou
     if (expected_offset != layout.state_size) return StatusCode::invalid_input;
 
     return StatusCode::ok;
+}
+
+i32 count_layout_domain(
+    const PropagationStateLayout& layout,
+    PropagationStateDomain domain
+) {
+    i32 count = 0;
+    for (const auto& body : layout.bodies) {
+        for (const auto& block : body.blocks) {
+            if (block.domain == domain) ++count;
+        }
+    }
+
+    return count;
+}
+
+i32 count_layout_domain_size(
+    const PropagationStateLayout& layout,
+    PropagationStateDomain domain
+) {
+    i32 size = 0;
+    for (const auto& body : layout.bodies) {
+        for (const auto& block : body.blocks) {
+            if (block.domain == domain) size += block.size;
+        }
+    }
+
+    return size;
+}
+
+i32 count_layout_integrated(const PropagationStateLayout& layout) {
+    i32 count = 0;
+    for (const auto& body : layout.bodies) {
+        for (const auto& block : body.blocks) {
+            if (block.domain == PropagationStateDomain::integrated) ++count;
+        }
+    }
+
+    return count;
+}
+
+i32 count_layout_nonintegrated(const PropagationStateLayout& layout) {
+    i32 count = 0;
+    for (const auto& body : layout.bodies) {
+        for (const auto& block : body.blocks) {
+            if (block.domain != PropagationStateDomain::integrated) ++count;
+        }
+    }
+
+    return count;
+}
+
+i32 count_layout_integrated_size(const PropagationStateLayout& layout) {
+    i32 size = 0;
+    for (const auto& body : layout.bodies) {
+        for (const auto& block : body.blocks) {
+            if (block.domain == PropagationStateDomain::integrated) size += block.size;
+        }
+    }
+
+    return size;
+}
+
+i32 count_layout_nonintegrated_size(const PropagationStateLayout& layout) {
+    i32 size = 0;
+    for (const auto& body : layout.bodies) {
+        for (const auto& block : body.blocks) {
+            if (block.domain != PropagationStateDomain::integrated) size += block.size;
+        }
+    }
+
+    return size;
 }
 
 PropagationBodyIndex find_propagation_body_index(

@@ -17,6 +17,7 @@ constexpr auto eUp = eig::Upper;
 constexpr auto eSUp = eig::StrictlyUpper;
 constexpr auto eLo = eig::Lower;
 constexpr auto eSLo = eig::StrictlyLower;
+template <typename M> using emap = eig::Map<M>;
 
 template <typename T, int N, int M> using mat = eig::Matrix<T, N, M>;
 template <int N, int M> using matd = eig::Matrix<f64, N, M>;

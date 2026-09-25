@@ -74,6 +74,19 @@ StatusCode validate_propagation_state_block(const PropagationStateBlock& block);
 StatusCode validate_propagation_body_layout(const PropagationBodyLayout& body);
 StatusCode validate_propagation_state_layout(const PropagationStateLayout& layout);
 
+i32 count_layout_domain(
+    const PropagationStateLayout& layout,
+    PropagationStateDomain domain
+);
+i32 count_layout_domain_size(
+    const PropagationStateLayout& layout,
+    PropagationStateDomain domain
+);
+i32 count_layout_integrated(const PropagationStateLayout& layout);
+i32 count_layout_nonintegrated(const PropagationStateLayout& layout);
+i32 count_layout_integrated_size(const PropagationStateLayout& layout);
+i32 count_layout_nonintegrated_size(const PropagationStateLayout& layout);
+
 PropagationBodyIndex find_propagation_body_index(
     const PropagationStateLayout& layout,
     EntityId entity_id
