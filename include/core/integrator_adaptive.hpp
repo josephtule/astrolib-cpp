@@ -25,6 +25,31 @@ struct AdaptiveIntegratorConfig {
     i64 max_rejections = 1000;
 };
 
+inline bool operator==(
+    const AdaptiveIntegratorConfig& first,
+    const AdaptiveIntegratorConfig& second
+) {
+    return first.rel_tol == second.rel_tol
+        && first.abs_tol_r == second.abs_tol_r
+        && first.abs_tol_v == second.abs_tol_v
+        && first.abs_tol_angle == second.abs_tol_angle
+        && first.abs_tol_w == second.abs_tol_w
+        && first.dt_initial == second.dt_initial
+        && first.dt_min == second.dt_min
+        && first.dt_max == second.dt_max
+        && first.safety == second.safety
+        && first.scale_min == second.scale_min
+        && first.scale_max == second.scale_max
+        && first.max_attempts == second.max_attempts
+        && first.max_rejections == second.max_rejections;
+}
+inline bool operator!=(
+    const AdaptiveIntegratorConfig& first,
+    const AdaptiveIntegratorConfig& second
+) {
+    return !(first == second);
+}
+
 inline StatusCode validate_adaptive_integrator_config(
     const AdaptiveIntegratorConfig& cfg
 ) {
@@ -94,8 +119,8 @@ inline AdaptiveTrialResult<State, Deriv> step_dopri54_trial(
 
     constexpr size_t stages = 7;
 
-    array<Deriv, stages> k_trial
-        = rk_generic_stages<dopri45_tableau, State, Deriv>(f, t, x, dt);
+    array<Deriv, stages> k_trial =
+        rk_generic_stages<dopri45_tableau, State, Deriv>(f, t, x, dt);
 
     State x_high = x;
     rk_for_each_weight<dopri45_tableau>([&](auto i) {
@@ -206,8 +231,8 @@ AdaptivePropagationResult<State> propagate_dopri54(
             dt = t_rem;
         }
 
-        AdaptiveTrialResult<State, Deriv> trial
-            = step_dopri54_trial<State, Deriv>(f, result.t, result.x, dt);
+        AdaptiveTrialResult<State, Deriv> trial =
+            step_dopri54_trial<State, Deriv>(f, result.t, result.x, dt);
         ++result.stats.attempted_steps;
         result.stats.deriv_evals += trial.derivative_evaluations;
         if (trial.status != StatusCode::ok) {

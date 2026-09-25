@@ -43,6 +43,22 @@ enum struct IntegratorTypeFixed : i32 {
     rk6_butcher,
 };
 
+inline i64 fixed_stage_count(IntegratorTypeFixed method) {
+    switch (method) {
+    case IntegratorTypeFixed::rk1: return 1;
+    case IntegratorTypeFixed::rk2: [[fallthrough]];
+    case IntegratorTypeFixed::rk2_heun: [[fallthrough]];
+    case IntegratorTypeFixed::rk2_ralston: return 2;
+    case IntegratorTypeFixed::rk3: [[fallthrough]];
+    case IntegratorTypeFixed::rk3_ralston: return 3;
+    case IntegratorTypeFixed::rk4: [[fallthrough]];
+    case IntegratorTypeFixed::rk4_38: return 4;
+    case IntegratorTypeFixed::rk5_nystrom: return 6;
+    case IntegratorTypeFixed::rk6_butcher: return 7;
+    }
+    return 0;
+}
+
 inline string integrator_name(IntegratorTypeFixed type) {
     switch (type) {
     case IntegratorTypeFixed::rk1: return "RK1";

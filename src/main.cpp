@@ -120,12 +120,12 @@ int main() {
     // run_render_pipeline_diag();
     // run_world_history_ekf_diag();
 
-
     // run_ephemeris_io_diag();
     // run_ephemeris_sampling_diag();
     // run_ephemeris_provider_diag();
     // run_world_provider_diag();
-    run_cspice_provider_diag();
+    // run_cspice_provider_diag();
+    run_propagation_v1_baseline_diag();
 
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");

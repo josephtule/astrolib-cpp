@@ -299,6 +299,9 @@ static StatusCode query_provider_states_at_time(
             return StatusCode::invalid_input;
 
         StateTr x_tr;
+        if (wksp.instrumentation) {
+            ++wksp.instrumentation->provider_translation_queries;
+        }
         status = query_ephemeris_provider(
             *body->ephemeris_providers.translation,
             epoch,
@@ -318,6 +321,9 @@ static StatusCode query_provider_states_at_time(
             return StatusCode::invalid_input;
 
         StateAtt x_att;
+        if (wksp.instrumentation) {
+            ++wksp.instrumentation->provider_orientation_queries;
+        }
         status = query_orientation_provider(
             *body->ephemeris_providers.orientation,
             epoch,
@@ -365,6 +371,7 @@ static WorldStageBuildResult build_world_stage(
     const WorldStepperWorkspace& wksp
 ) {
     WorldStageBuildResult result;
+    if (wksp.instrumentation) ++wksp.instrumentation->stage_builds;
     if (wksp.target_stm) result.stage.Phi = wksp.target_stm->Phi;
 
     result.status = build_tr_stage(world, wksp, result.stage.tr);
@@ -686,6 +693,7 @@ static StatusCode evaluate_world_stage_derivatives(
     WorldStageDeriv& dx
 ) {
     StatusCode status;
+    if (wksp.instrumentation) ++wksp.instrumentation->derivative_evaluations;
     WorldStageDeriv dx_temp{};
     dx_temp.tr.reserve(wksp.propagated_tr_ids.size());
     dx_temp.att.reserve(wksp.propagated_att_ids.size());
@@ -778,6 +786,7 @@ static StatusCode build_world_tableau_stage(
     constexpr const auto& tableau = Tableau;
     constexpr size_t stage_index = StageIndex;
     StatusCode status = StatusCode::invalid_input;
+    if (wksp.instrumentation) ++wksp.instrumentation->stage_builds;
 
     status = build_att_tableau_stage<Tableau, StageIndex>(
         world,

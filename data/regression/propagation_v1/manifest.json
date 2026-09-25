@@ -1,0 +1,85 @@
+{
+    "adaptive_dopri54": {
+        "absolute_angle_tolerance": 1e-13,
+        "absolute_angular_velocity_tolerance": 1e-13,
+        "absolute_position_tolerance": 1e-10,
+        "absolute_velocity_tolerance": 1e-13,
+        "backend": "world_stepper",
+        "integrator": "dormand_prince54",
+        "relative_tolerance": 1e-11
+    },
+    "body_config_ids": [
+        "earth",
+        "moon",
+        "sat1"
+    ],
+    "comparison_tolerance": {
+        "angular_velocity": 1e-12,
+        "invariant": 1e-08,
+        "position": 1e-08,
+        "quaternion": 1e-12,
+        "time": 1e-12,
+        "velocity": 1e-10
+    },
+    "expected_status": {
+        "adaptive_dopri54": "Ok",
+        "fixed_rk4_current": "Ok",
+        "fixed_rk4_legacy": "Ok",
+        "provider_coverage_reject": "Sample not found",
+        "provider_states": "Ok"
+    },
+    "files": {
+        "adaptive_dopri54": "adaptive_dopri54.csv",
+        "fixed_rk4_current": "fixed_rk4_current.csv",
+        "fixed_rk4_legacy": "fixed_rk4_legacy.csv",
+        "provider_states": "provider_states.csv"
+    },
+    "fixed_rk4": {
+        "current_backend": "world_stepper",
+        "integrator": "rk4",
+        "legacy_backend": "world_stepper_legacy",
+        "nominal_dt": 0.1,
+        "step_attitude": true,
+        "step_translation": true
+    },
+    "provider": {
+        "backend": "world_stepper",
+        "orientation_queries": 60000,
+        "translation_queries": 60000
+    },
+    "requested_sample_epochs": [
+        0.0,
+        100.0,
+        250.0,
+        500.0,
+        750.0,
+        1000.0
+    ],
+    "scenario": "scenarios/propagation_baseline_demo.json",
+    "schema": {
+        "name": "astrolib.propagation_v1",
+        "version": 1
+    },
+    "statistics": {
+        "adaptive_dopri54": {
+            "accepted_steps": 71,
+            "derivative_evaluations": 497,
+            "rejected_steps": 0,
+            "stage_builds": 568
+        },
+        "fixed_rk4_current": {
+            "derivative_evaluations": 40000,
+            "stage_builds": 50000
+        },
+        "fixed_rk4_legacy": {
+            "derivative_evaluations": 0,
+            "stage_builds": 0
+        },
+        "provider_states": {
+            "derivative_evaluations": 40000,
+            "orientation_queries": 60000,
+            "stage_builds": 50000,
+            "translation_queries": 60000
+        }
+    }
+}

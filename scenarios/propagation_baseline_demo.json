@@ -1,0 +1,120 @@
+{
+    "schema": {
+        "name": "astrolib.scenario",
+        "version": 1
+    },
+    "metadata": {
+        "name": "propagation_baseline_demo",
+        "rng_seed": 12345
+    },
+    "time": {
+        "t0": 0.0,
+        "date": {
+            "input_type": "jd",
+            "jd": {
+                "day": 2451545.0,
+                "frac": 0.0
+            },
+            "time_scale": "utc"
+        }
+    },
+    "celestials": [
+        {
+            "id": "earth",
+            "name": "Earth",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [0.0, 0.0, 0.0],
+                "v": [0.0, 0.0, 0.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "axis_angle",
+                "axis": [1.0, 0.0, 0.0],
+                "angle": 23.44,
+                "w": [0.0, 0.0, 0.00417807413],
+                "units_angle": "degree"
+            },
+            "attitude_model": "simple_spin",
+            "model": {
+                "id": "wgs84",
+                "gravity": {
+                    "model": "zonal",
+                    "degree": 2,
+                    "order": 0,
+                    "units_length": "kilometer"
+                },
+                "units_length": "kilometer"
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        },
+        {
+            "id": "moon",
+            "name": "Moon",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [384400.0, 0.0, 0.0],
+                "v": [0.0, 1.022, 0.0],
+                "units_length": "kilometer"
+            },
+            "model": {
+                "id": "custom",
+                "gravity": {
+                    "model": "pointmass",
+                    "mu": 4902.800066,
+                    "units_length": "kilometer"
+                },
+                "semimajor_axis": 1738.1,
+                "semiminor_axis": 1736.0,
+                "units_length": "kilometer"
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": false
+            }
+        }
+    ],
+    "satellites": [
+        {
+            "id": "sat1",
+            "name": "Baseline Satellite",
+            "state_tr": {
+                "input_type": "pos_vel",
+                "r": [7000.0, 0.0, 0.0],
+                "v": [0.0, 7.5, 1.0],
+                "units_length": "kilometer"
+            },
+            "state_att": {
+                "input_type": "quaternion",
+                "q": [0.0, 0.0, 0.0, 1.0],
+                "w": [1.0e-6, 2.5e-3, 1.0e-6],
+                "units_angle": "radian"
+            },
+            "mass_properties": {
+                "mass": 100.0,
+                "inertia_tensor": {
+                    "principle_axes": true,
+                    "type": "diagonal",
+                    "values": [100.0, 200.0, 300.0]
+                }
+            },
+            "propagation": {
+                "translation": true,
+                "attitude": true
+            }
+        }
+    ],
+    "world_stepper": {
+        "translation_integrator": "rk4",
+        "attitude_integrator": "rk4",
+        "substeps": 1,
+        "ticks": 1,
+        "dt_scale": 1.0,
+        "paused": false,
+        "step_translation": true,
+        "step_attitude": true
+    }
+}

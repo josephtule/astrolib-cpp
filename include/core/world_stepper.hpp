@@ -5,8 +5,10 @@
 
 #include "core/entity.hpp"
 #include "core/integrator_adaptive.hpp"
+#include "core/integrator_common.hpp"
 #include "core/integrator_fixed.hpp"
 #include "core/state.hpp"
+#include "core/status.hpp"
 #include "core/world.hpp"
 
 #include <algorithm>
@@ -30,11 +32,34 @@ struct WorldStepperConfig {
     WorldAdaptiveConfig adaptive{};
 };
 
+inline StatusCode validate_world_stepper_config(const WorldStepperConfig& cfg) {
+    if (cfg.substeps < 1 || cfg.ticks < 1 || !finite_pos(cfg.dt_scale)) {
+        return StatusCode::invalid_input;
+    }
+
+    if (cfg.step_tr && cfg.step_att && cfg.integrator_tr != cfg.integrator_att) {
+        return StatusCode::unsupported_method;
+    }
+
+    StatusCode status = validate_adaptive_integrator_config(cfg.adaptive.opts);
+    if (status != StatusCode::ok) return status;
+
+    return StatusCode::ok;
+}
+
 struct WorldTargetSTM {
     EntityId target_id = kInvalidEntityId;
     mat6d Phi = mat6d1;
-    mat6d abs_tol = mat6d::Constant(1e-9); // entry units follow Phi's position/velocity blocks
+    mat6d abs_tol =
+        mat6d::Constant(1e-9); // entry units follow Phi's position/velocity blocks
     f64 rel_tol = 1e-9;
+};
+
+struct WorldStepperInstrumentation {
+    i64 derivative_evaluations = 0;
+    i64 provider_translation_queries = 0;
+    i64 provider_orientation_queries = 0;
+    i64 stage_builds = 0;
 };
 
 struct WorldStepperWorkspace {
@@ -49,6 +74,7 @@ struct WorldStepperWorkspace {
     svec<EntityId> staged_att_ids;     // propagated and celestial attitude
     bool dirty = true;
     WorldTargetSTM* target_stm = nullptr; // borrowed only during a synchronous step call
+    WorldStepperInstrumentation* instrumentation = nullptr; // borrowed during a run
 };
 
 void rebuild_world_stepper_workspace(
@@ -89,10 +115,10 @@ inline WorldStepperStats operator+(
             adaptive.min_accepted_dt = stats2.adaptive.min_accepted_dt;
             adaptive.max_accepted_dt = stats2.adaptive.max_accepted_dt;
         } else {
-            adaptive.min_accepted_dt
-                = std::min(adaptive.min_accepted_dt, stats2.adaptive.min_accepted_dt);
-            adaptive.max_accepted_dt
-                = std::max(adaptive.max_accepted_dt, stats2.adaptive.max_accepted_dt);
+            adaptive.min_accepted_dt =
+                std::min(adaptive.min_accepted_dt, stats2.adaptive.min_accepted_dt);
+            adaptive.max_accepted_dt =
+                std::max(adaptive.max_accepted_dt, stats2.adaptive.max_accepted_dt);
         }
         adaptive.final_accepted_dt = stats2.adaptive.final_accepted_dt;
     }

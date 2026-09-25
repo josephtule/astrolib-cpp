@@ -27,6 +27,7 @@
 #include "core/orbit_determination.hpp"
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
+#include "core/propagation_comparison.hpp"
 #include "core/scenario_io.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
@@ -5852,6 +5853,665 @@ void run_world_embedded_rk_diag() {
     }
 
     std::println("World Fixed/Embedded RK Comparison Passed = {}", all_passed);
+}
+
+static StatusCode build_propagation_v1_provider_world(
+    World& world,
+    umap<string, EntityId>& body_ids,
+    f64 coverage_end = 1000.0
+) {
+    world.set_date(JulianDate{}, TimeScale::tdb);
+
+    EntityId source_id = world.spawn_celestial();
+    Celestial* source = world.celestial(source_id);
+    if (source == nullptr) return StatusCode::body_not_found;
+
+    source->name = "Baseline Provider Source";
+    source->mu = 398600.4418;
+    source->gravity_model = GravityModel::pointmass;
+
+    auto tr_provider = std::make_shared<EphemerisProvider>();
+    tr_provider->table.metadata.frame
+        = {.object = "SOURCE", .center = "SIMULATION_ORIGIN", .frame_name = "J2000"};
+    tr_provider->table.metadata.source
+        = {.source_type = "generated", .source_name = "propagation_v1_baseline"};
+    tr_provider->table.dt = {0.0, coverage_end};
+    tr_provider->table.states = {
+        {.r = vec3d{0.0, 0.0, 0.0}, .v = vec3d{0.01, 0.0, 0.0}},
+        {.r = vec3d{0.01 * coverage_end, 0.0, 0.0}, .v = vec3d{0.01, 0.0, 0.0}}
+    };
+    tr_provider->options.interpolation = CartesianInterpolationMethod::linear;
+    tr_provider->options.extrapolation = ExtrapolationMethod::constant_velocity;
+    tr_provider->coverage = {
+        .before_start = ProviderCoverageAction::reject_step,
+        .after_end = ProviderCoverageAction::reject_step
+    };
+
+    auto att_provider = std::make_shared<OrientationProvider>();
+    att_provider->table.metadata.frame
+        = {.object = "SOURCE", .source_frame = "J2000", .target_frame = "SOURCE_BODY"};
+    att_provider->table.metadata.source
+        = {.source_type = "generated", .source_name = "propagation_v1_baseline"};
+    att_provider->table.dt = {0.0, coverage_end};
+    att_provider->table.states = {
+        {.q = vec4d{0.0, 0.0, 0.0, 1.0}, .w = vec3d{0.0, 0.0, 0.001}},
+        {.q = vec4d{0.0, 0.0, std::sin(0.0005 * coverage_end),
+         std::cos(0.0005 * coverage_end)},
+         .w = vec3d{0.0, 0.0, 0.001}}
+    };
+    att_provider->options.interpolation = OrientationInterpolationMethod::slerp;
+    att_provider->options.extrapolation = ExtrapolationMethod::constant_velocity;
+    att_provider->coverage = {
+        .before_start = ProviderCoverageAction::reject_step,
+        .after_end = ProviderCoverageAction::reject_step
+    };
+
+    StatusCode status = set_celestial_ephemeris_providers(
+        *source,
+        {.translation = std::move(tr_provider), .orientation = std::move(att_provider)}
+    );
+    if (status != StatusCode::ok) return status;
+
+    EntityId sat_id = world.spawn_satellite();
+    Satellite* sat = world.satellite(sat_id);
+    if (sat == nullptr) return StatusCode::body_not_found;
+
+    sat->name = "Baseline Provider Satellite";
+    sat->x_tr = {.r = vec3d{7000.0, 0.0, 0.0}, .v = vec3d{0.0, 7.5, 0.2}};
+    sat->x_att = {.q = vec4d{0.0, 0.0, 0.0, 1.0}, .w = vec3d0};
+
+    body_ids = {{"source", source_id}, {"sat1", sat_id}};
+    return StatusCode::ok;
+}
+
+static StatusCode save_propagation_v1_manifest(
+    const std::filesystem::path& path,
+    const PropagationRunConfig& fixed_cfg,
+    const PropagationRunConfig& adaptive_cfg,
+    const PropagationRunResult& legacy,
+    const PropagationRunResult& current,
+    const PropagationRunResult& adaptive,
+    const PropagationRunResult& provider
+) {
+    std::error_code error;
+    if (std::filesystem::exists(path, error)) {
+        return error ? StatusCode::file_open_failed : StatusCode::file_already_exists;
+    }
+    std::filesystem::create_directories(path.parent_path(), error);
+    if (error) return StatusCode::file_write_failed;
+
+    nlohmann::json manifest;
+    manifest["schema"] = {{"name", "astrolib.propagation_v1"}, {"version", 1}};
+    manifest["scenario"] = "scenarios/propagation_baseline_demo.json";
+    manifest["files"] = {
+        {"fixed_rk4_legacy", "fixed_rk4_legacy.csv"},
+        {"fixed_rk4_current", "fixed_rk4_current.csv"},
+        {"adaptive_dopri54", "adaptive_dopri54.csv"},
+        {"provider_states", "provider_states.csv"}
+    };
+    manifest["requested_sample_epochs"] = fixed_cfg.sample_epochs;
+    manifest["body_config_ids"] = fixed_cfg.body_config_ids;
+    manifest["fixed_rk4"] = {
+        {"legacy_backend", propagation_backend_string(legacy.backend)},
+        {"current_backend", propagation_backend_string(current.backend)},
+        {"integrator", integrator_str(fixed_cfg.integrator)},
+        {"nominal_dt", fixed_cfg.nominal_dt},
+        {"step_translation", fixed_cfg.step_tr},
+        {"step_attitude", fixed_cfg.step_att}
+    };
+    manifest["adaptive_dopri54"] = {
+        {"backend", propagation_backend_string(adaptive.backend)},
+        {"integrator", integrator_str(adaptive_cfg.integrator)},
+        {"relative_tolerance", adaptive_cfg.adaptive.rel_tol},
+        {"absolute_position_tolerance", adaptive_cfg.adaptive.abs_tol_r},
+        {"absolute_velocity_tolerance", adaptive_cfg.adaptive.abs_tol_v},
+        {"absolute_angle_tolerance", adaptive_cfg.adaptive.abs_tol_angle},
+        {"absolute_angular_velocity_tolerance", adaptive_cfg.adaptive.abs_tol_w}
+    };
+    manifest["provider"] = {
+        {"backend", propagation_backend_string(provider.backend)},
+        {"translation_queries", provider.metrics.provider_translation_queries},
+        {"orientation_queries", provider.metrics.provider_orientation_queries}
+    };
+    manifest["comparison_tolerance"] = {
+        {"time", fixed_cfg.tolerance.time},
+        {"position", fixed_cfg.tolerance.position},
+        {"velocity", fixed_cfg.tolerance.velocity},
+        {"quaternion", fixed_cfg.tolerance.quaternion},
+        {"angular_velocity", fixed_cfg.tolerance.angular_velocity},
+        {"invariant", fixed_cfg.tolerance.invariant}
+    };
+    manifest["expected_status"] = {
+        {"fixed_rk4_legacy", status_string(legacy.status)},
+        {"fixed_rk4_current", status_string(current.status)},
+        {"adaptive_dopri54", status_string(adaptive.status)},
+        {"provider_states", status_string(provider.status)},
+        {"provider_coverage_reject", status_string(StatusCode::sample_not_found)}
+    };
+    manifest["statistics"] = {
+        {"fixed_rk4_legacy",
+         {{"derivative_evaluations", legacy.metrics.derivative_evaluations},
+          {"stage_builds", legacy.metrics.stage_builds}}},
+        {"fixed_rk4_current",
+         {{"derivative_evaluations", current.metrics.derivative_evaluations},
+          {"stage_builds", current.metrics.stage_builds}}},
+        {"adaptive_dopri54",
+         {{"derivative_evaluations", adaptive.metrics.derivative_evaluations},
+          {"stage_builds", adaptive.metrics.stage_builds},
+          {"accepted_steps", adaptive.stats.adaptive.accepted_steps},
+          {"rejected_steps", adaptive.stats.adaptive.rejected_steps}}},
+        {"provider_states",
+         {{"derivative_evaluations", provider.metrics.derivative_evaluations},
+          {"stage_builds", provider.metrics.stage_builds},
+          {"translation_queries", provider.metrics.provider_translation_queries},
+          {"orientation_queries", provider.metrics.provider_orientation_queries}}}
+    };
+
+    std::ofstream file(path);
+    if (!file.is_open()) return StatusCode::file_open_failed;
+    file << manifest.dump(4) << '\n';
+    if (!file.good()) return StatusCode::file_write_failed;
+    file.close();
+    return file.fail() ? StatusCode::file_close_failed : StatusCode::ok;
+}
+
+void run_propagation_v1_baseline_diag() {
+    print_diag_title("Propagation V1 Baseline");
+
+    ScenarioConfig scenario_cfg;
+    StatusCode status = load_scenario_json(
+        pwd + "/scenarios/propagation_baseline_demo.json",
+        scenario_cfg
+    );
+    if (status != StatusCode::ok) {
+        std::println("Scenario Load Status = {}", status_string(status));
+        return;
+    }
+
+    status = validate_scenario_config(scenario_cfg);
+    if (status != StatusCode::ok) {
+        std::println("Scenario Validation Status = {}", status_string(status));
+        return;
+    }
+
+    AdaptiveIntegratorConfig adaptive;
+    adaptive.rel_tol = 1e-11;
+    adaptive.abs_tol_r = 1e-10;
+    adaptive.abs_tol_v = 1e-13;
+    adaptive.abs_tol_angle = 1e-13;
+    adaptive.abs_tol_w = 1e-13;
+    adaptive.dt_initial = 0.1;
+    adaptive.dt_min = 1e-10;
+    adaptive.dt_max = 20.0;
+
+    auto run_case = [&](const string& label,
+                        PropagationBackend backend,
+                        IntegratorType method,
+                        bool step_tr,
+                        bool step_att,
+                        PropagationRunResult& result) {
+            World world;
+            WorldStepperConfig stepper_cfg;
+            ScenarioBuildResult build_result;
+            StatusCode run_status = build_world_from_scenario_config(
+                scenario_cfg,
+                world,
+                build_result,
+                stepper_cfg
+            );
+            if (run_status != StatusCode::ok) return run_status;
+
+            PropagationRunConfig run_cfg;
+            run_cfg.label = label;
+            run_cfg.backend = backend;
+            run_cfg.integrator = method;
+            run_cfg.t0 = 0.0;
+            run_cfg.tf = 1000.0;
+            run_cfg.sample_epochs = {0.0, 100.0, 250.0, 500.0, 750.0, 1000.0};
+            run_cfg.nominal_dt = 0.1;
+            run_cfg.body_config_ids = {"earth", "moon", "sat1"};
+            run_cfg.step_tr = step_tr;
+            run_cfg.step_att = step_att;
+            run_cfg.include_attitude_output = true;
+            run_cfg.adaptive = adaptive;
+            run_cfg.invariants = {
+                .central_body_config_id = "earth",
+                .include_orbital_invariants = true
+            };
+
+            return run_propagation_case(
+                world,
+                build_result.body_ids,
+                stepper_cfg,
+                run_cfg,
+                result
+            );
+        };
+
+    PropagationRunResult legacy;
+    PropagationRunResult current;
+    PropagationRunResult current_repeat;
+    PropagationRunResult adaptive_result;
+    PropagationRunResult adaptive_repeat;
+    StatusCode legacy_status = run_case(
+        "fixed_rk4_legacy",
+        PropagationBackend::world_stepper_legacy,
+        IntegratorTypeFixed::rk4,
+        true,
+        true,
+        legacy
+    );
+    StatusCode current_status = run_case(
+        "fixed_rk4_current",
+        PropagationBackend::world_stepper,
+        IntegratorTypeFixed::rk4,
+        true,
+        true,
+        current
+    );
+    StatusCode repeat_status = run_case(
+        "fixed_rk4_current_repeat",
+        PropagationBackend::world_stepper,
+        IntegratorTypeFixed::rk4,
+        true,
+        true,
+        current_repeat
+    );
+    StatusCode adaptive_status = run_case(
+        "adaptive_dopri54",
+        PropagationBackend::world_stepper,
+        IntegratorTypeAdaptive::dopri54,
+        true,
+        true,
+        adaptive_result
+    );
+    StatusCode adaptive_repeat_status = run_case(
+        "adaptive_dopri54_repeat",
+        PropagationBackend::world_stepper,
+        IntegratorTypeAdaptive::dopri54,
+        true,
+        true,
+        adaptive_repeat
+    );
+
+    PropagationComparisonTolerance deterministic_tolerance;
+    deterministic_tolerance.time = tol12;
+    deterministic_tolerance.position = tol12;
+    deterministic_tolerance.velocity = tol12;
+    deterministic_tolerance.quaternion = tol12;
+    deterministic_tolerance.angular_velocity = tol12;
+    deterministic_tolerance.invariant = tol12;
+
+    PropagationComparisonResult deterministic_comparison;
+    StatusCode deterministic_status = compare_propagation_runs(
+        current,
+        current_repeat,
+        deterministic_tolerance,
+        deterministic_comparison
+    );
+
+    PropagationComparisonTolerance adaptive_tolerance;
+    adaptive_tolerance.time = tol12;
+    adaptive_tolerance.position = 1e-5;
+    adaptive_tolerance.velocity = 1e-8;
+    adaptive_tolerance.quaternion = 1e-9;
+    adaptive_tolerance.angular_velocity = 1e-10;
+    adaptive_tolerance.invariant = 1e-4;
+
+    PropagationComparisonResult adaptive_comparison;
+    StatusCode comparison_status = compare_propagation_runs(
+        legacy,
+        adaptive_result,
+        adaptive_tolerance,
+        adaptive_comparison
+    );
+
+    PropagationComparisonTolerance legacy_current_tolerance;
+    legacy_current_tolerance.time = tol12;
+    legacy_current_tolerance.position = 1e-8;
+    legacy_current_tolerance.velocity = 1e-10;
+    legacy_current_tolerance.quaternion = 1e-12;
+    legacy_current_tolerance.angular_velocity = 1e-12;
+    legacy_current_tolerance.invariant = 1e-8;
+
+    PropagationComparisonResult legacy_current_comparison;
+    StatusCode legacy_current_status = compare_propagation_runs(
+        legacy,
+        current,
+        legacy_current_tolerance,
+        legacy_current_comparison
+    );
+
+    auto domain_unchanged = [](const PropagationRunResult& result, bool translation) {
+        umap<string, PropagationStateSample> initial;
+        for (const PropagationStateSample& sample : result.samples) {
+            const auto [it, inserted] = initial.emplace(sample.body_config_id, sample);
+            if (inserted) continue;
+
+            if (translation) {
+                if ((sample.x_tr.r - it->second.x_tr.r).norm() > tol12
+                    || (sample.x_tr.v - it->second.x_tr.v).norm() > tol12) {
+                    return false;
+                }
+            } else if (sample.has_attitude) {
+                const f64 q_error = std::min(
+                    (sample.x_att.q - it->second.x_att.q).norm(),
+                    (sample.x_att.q + it->second.x_att.q).norm()
+                );
+                if (q_error > tol12 || (sample.x_att.w - it->second.x_att.w).norm() > tol12) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    auto valid_quaternions = [](const PropagationRunResult& result) {
+        for (const PropagationStateSample& sample : result.samples) {
+            if (sample.has_attitude
+                && (!std::isfinite(sample.quaternion_norm)
+                    || std::abs(sample.quaternion_norm - 1.0) > tol9)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    auto max_invariant_drift = [](const PropagationRunResult& result) {
+        umap<string, PropagationInvariantSample> initial;
+        f64 max_drift = 0.0;
+        for (const PropagationStateSample& sample : result.samples) {
+            if (!sample.invariants.has_orbital_invariants) continue;
+            const auto [it, inserted] = initial.emplace(
+                sample.body_config_id,
+                sample.invariants
+            );
+            if (inserted) continue;
+            max_drift = std::max(
+                max_drift,
+                std::abs(sample.invariants.specific_energy - it->second.specific_energy)
+            );
+        }
+        return max_drift;
+    };
+
+    PropagationRunResult translation_disabled;
+    PropagationRunResult attitude_disabled;
+    StatusCode translation_disabled_status = run_case(
+        "fixed_rk4_translation_disabled",
+        PropagationBackend::world_stepper,
+        IntegratorTypeFixed::rk4,
+        false,
+        true,
+        translation_disabled
+    );
+    StatusCode attitude_disabled_status = run_case(
+        "fixed_rk4_attitude_disabled",
+        PropagationBackend::world_stepper,
+        IntegratorTypeFixed::rk4,
+        true,
+        false,
+        attitude_disabled
+    );
+
+    World provider_world;
+    umap<string, EntityId> provider_body_ids;
+    StatusCode provider_build_status =
+        build_propagation_v1_provider_world(provider_world, provider_body_ids);
+    PropagationRunResult provider_result;
+    PropagationRunConfig provider_cfg;
+    provider_cfg.label = "provider_states";
+    provider_cfg.backend = PropagationBackend::world_stepper;
+    provider_cfg.integrator = IntegratorTypeFixed::rk4;
+    provider_cfg.t0 = 0.0;
+    provider_cfg.tf = 1000.0;
+    provider_cfg.sample_epochs = {0.0, 250.0, 500.0, 750.0, 1000.0};
+    provider_cfg.nominal_dt = 0.1;
+    provider_cfg.body_config_ids = {"source", "sat1"};
+    provider_cfg.invariants = {
+        .central_body_config_id = "source",
+        .include_orbital_invariants = true
+    };
+    WorldStepperConfig provider_stepper_cfg;
+    StatusCode provider_status = provider_build_status;
+    if (provider_status == StatusCode::ok) {
+        provider_status = run_propagation_case(
+            provider_world,
+            provider_body_ids,
+            provider_stepper_cfg,
+            provider_cfg,
+            provider_result
+        );
+    }
+
+    World provider_repeat_world;
+    umap<string, EntityId> provider_repeat_body_ids;
+    StatusCode provider_repeat_build_status =
+        build_propagation_v1_provider_world(provider_repeat_world, provider_repeat_body_ids);
+    PropagationRunResult provider_repeat;
+    StatusCode provider_repeat_status = provider_repeat_build_status;
+    if (provider_repeat_status == StatusCode::ok) {
+        provider_repeat_status = run_propagation_case(
+            provider_repeat_world,
+            provider_repeat_body_ids,
+            provider_stepper_cfg,
+            provider_cfg,
+            provider_repeat
+        );
+    }
+
+    World provider_coverage_world;
+    umap<string, EntityId> provider_coverage_body_ids;
+    StatusCode provider_coverage_build_status = build_propagation_v1_provider_world(
+        provider_coverage_world,
+        provider_coverage_body_ids,
+        500.0
+    );
+    PropagationRunResult provider_coverage_result;
+    StatusCode provider_coverage_status = provider_coverage_build_status;
+    if (provider_coverage_status == StatusCode::ok) {
+        provider_coverage_status = run_propagation_case(
+            provider_coverage_world,
+            provider_coverage_body_ids,
+            provider_stepper_cfg,
+            provider_cfg,
+            provider_coverage_result
+        );
+    }
+
+    auto print_run = [](const PropagationRunResult& result) {
+        std::println("{}", result.label);
+        std::println("    Status = {}", status_string(result.status));
+        std::println("    Final Time = {}", result.actual_tf);
+        std::println("    Samples = {}", result.samples.size());
+        std::println(
+            "    Derivative Evaluations = {}",
+            result.metrics.derivative_evaluations
+        );
+        std::println("    Stage Builds = {}", result.metrics.stage_builds);
+        std::println(
+            "    Provider Translation Queries = {}",
+            result.metrics.provider_translation_queries
+        );
+        std::println(
+            "    Provider Orientation Queries = {}",
+            result.metrics.provider_orientation_queries
+        );
+        std::println("    Workspace Rebuilds = {}", result.metrics.workspace_rebuilds);
+        std::println(
+            "    Allocation Count Available = {}",
+            result.metrics.allocation_count_available
+        );
+        std::println("    Runtime (ms) = {}", result.metrics.runtime_ms);
+        if (integrator_family(result.integrator) == IntegratorFamily::adaptive) {
+            std::println(
+                "    Accepted/Rejected = {}/{}",
+                result.stats.adaptive.accepted_steps,
+                result.stats.adaptive.rejected_steps
+            );
+        }
+    };
+
+    auto print_comparison = [](const string& label,
+                               const PropagationComparisonResult& result) {
+        std::println("{}", label);
+        std::println("    Status = {}", status_string(result.status));
+        std::println("    Passed = {}", result.passed);
+        std::println("    Maximum Position Error = {}", result.max_position);
+        std::println("    Maximum Velocity Error = {}", result.max_velocity);
+        std::println("    Maximum Quaternion Error = {}", result.max_quaternion);
+        std::println(
+            "    Maximum Angular Velocity Error = {}",
+            result.max_angular_velocity
+        );
+        std::println("    Maximum Energy Error = {}", result.max_specific_energy);
+        std::println(
+            "    Maximum Angular Momentum Error = {}",
+            result.max_specific_angular_momentum
+        );
+        if (!result.passed) {
+            std::println(
+                "    First Failure = {} at t = {}",
+                result.first_failed_body_config_id,
+                result.first_failed_t
+            );
+        }
+    };
+
+    print_run(legacy);
+    print_run(current);
+    print_run(current_repeat);
+    print_run(adaptive_result);
+    print_run(adaptive_repeat);
+    print_run(provider_result);
+    print_run(provider_repeat);
+    print_comparison("Legacy/Current RK4 Comparison", legacy_current_comparison);
+    print_comparison("Deterministic RK4 Comparison", deterministic_comparison);
+    print_comparison("Legacy RK4/DOPRI5(4) Comparison", adaptive_comparison);
+    std::println("Legacy Run Status = {}", status_string(legacy_status));
+    std::println("Current Run Status = {}", status_string(current_status));
+    std::println("Repeat Run Status = {}", status_string(repeat_status));
+    std::println("Adaptive Run Status = {}", status_string(adaptive_status));
+    std::println("Adaptive Repeat Run Status = {}", status_string(adaptive_repeat_status));
+    std::println(
+        "Provider Coverage-Reject Status = {}",
+        status_string(provider_coverage_status)
+    );
+    std::println(
+        "Deterministic Comparison Status = {}",
+        status_string(deterministic_status)
+    );
+    std::println("Adaptive Comparison Status = {}", status_string(comparison_status));
+
+    const bool final_times_ok =
+        legacy_status == StatusCode::ok && current_status == StatusCode::ok
+        && repeat_status == StatusCode::ok && adaptive_status == StatusCode::ok
+        && adaptive_repeat_status == StatusCode::ok && provider_status == StatusCode::ok
+        && provider_repeat_status == StatusCode::ok
+        && std::abs(legacy.actual_tf - legacy.requested_tf) <= tol12
+        && std::abs(current.actual_tf - current.requested_tf) <= tol12
+        && std::abs(current_repeat.actual_tf - current_repeat.requested_tf) <= tol12
+        && std::abs(adaptive_result.actual_tf - adaptive_result.requested_tf) <= tol12
+        && std::abs(adaptive_repeat.actual_tf - adaptive_repeat.requested_tf) <= tol12
+        && std::abs(provider_result.actual_tf - provider_result.requested_tf) <= tol12
+        && std::abs(provider_repeat.actual_tf - provider_repeat.requested_tf) <= tol12;
+    const bool disabled_domains_ok =
+        translation_disabled_status == StatusCode::ok
+        && attitude_disabled_status == StatusCode::ok
+        && domain_unchanged(translation_disabled, true)
+        && domain_unchanged(attitude_disabled, false);
+    const bool provider_ok =
+        provider_build_status == StatusCode::ok
+        && provider_repeat_build_status == StatusCode::ok && provider_status == StatusCode::ok
+        && provider_repeat_status == StatusCode::ok
+        && provider_coverage_build_status == StatusCode::ok
+        && provider_coverage_status == StatusCode::sample_not_found
+        && provider_result.metrics.provider_translation_queries > 0
+        && provider_result.metrics.provider_orientation_queries > 0
+        && provider_result.metrics.provider_translation_queries
+               == provider_repeat.metrics.provider_translation_queries
+        && provider_result.metrics.provider_orientation_queries
+               == provider_repeat.metrics.provider_orientation_queries;
+    const bool eval_counts_ok =
+        current.metrics.derivative_evaluations > 0
+        && current.metrics.derivative_evaluations
+               == current_repeat.metrics.derivative_evaluations
+        && adaptive_result.metrics.derivative_evaluations > 0
+        && adaptive_result.metrics.derivative_evaluations
+               == adaptive_repeat.metrics.derivative_evaluations;
+    const bool quaternions_ok = valid_quaternions(legacy)
+        && valid_quaternions(current) && valid_quaternions(adaptive_result)
+        && valid_quaternions(provider_result);
+    const f64 legacy_drift = max_invariant_drift(legacy);
+    const f64 current_drift = max_invariant_drift(current);
+    const f64 adaptive_drift = max_invariant_drift(adaptive_result);
+    const bool conserved_values_finite = std::isfinite(legacy_drift)
+        && std::isfinite(current_drift) && std::isfinite(adaptive_drift);
+
+    std::println("Final-Time Coverage = {}", final_times_ok);
+    std::println("Disabled Domain Preservation = {}", disabled_domains_ok);
+    std::println("Provider Query Coverage = {}", provider_ok);
+    std::println("Measured Evaluation Counts = {}", eval_counts_ok);
+    std::println("Quaternion Norms = {}", quaternions_ok);
+    std::println("Legacy Maximum Energy Drift = {}", legacy_drift);
+    std::println("Current Maximum Energy Drift = {}", current_drift);
+    std::println("Adaptive Maximum Energy Drift = {}", adaptive_drift);
+
+    const bool acceptance_passed = legacy_current_status == StatusCode::ok
+        && legacy_current_comparison.passed && deterministic_status == StatusCode::ok
+        && deterministic_comparison.passed && comparison_status == StatusCode::ok
+        && adaptive_comparison.passed && final_times_ok && disabled_domains_ok
+        && provider_ok && eval_counts_ok && quaternions_ok && conserved_values_finite;
+
+    const std::filesystem::path artifact_dir
+        = std::filesystem::path{PROJECT_ROOT} / "data/regression/propagation_v1";
+    StatusCode legacy_write = StatusCode::invalid_state;
+    StatusCode current_write = StatusCode::invalid_state;
+    StatusCode adaptive_write = StatusCode::invalid_state;
+    StatusCode provider_write = StatusCode::invalid_state;
+    StatusCode manifest_write = StatusCode::invalid_state;
+    if (acceptance_passed) {
+        legacy_write = save_propagation_run_csv(
+            (artifact_dir / "fixed_rk4_legacy.csv").string(), legacy
+        );
+        current_write = save_propagation_run_csv(
+            (artifact_dir / "fixed_rk4_current.csv").string(), current
+        );
+        adaptive_write = save_propagation_run_csv(
+            (artifact_dir / "adaptive_dopri54.csv").string(), adaptive_result
+        );
+        provider_write = save_propagation_run_csv(
+            (artifact_dir / "provider_states.csv").string(), provider_result
+        );
+
+        PropagationRunConfig fixed_cfg;
+        fixed_cfg.integrator = IntegratorTypeFixed::rk4;
+        fixed_cfg.nominal_dt = 0.1;
+        fixed_cfg.sample_epochs = {0.0, 100.0, 250.0, 500.0, 750.0, 1000.0};
+        fixed_cfg.body_config_ids = {"earth", "moon", "sat1"};
+        fixed_cfg.tolerance = legacy_current_tolerance;
+        PropagationRunConfig adaptive_cfg = fixed_cfg;
+        adaptive_cfg.integrator = IntegratorTypeAdaptive::dopri54;
+        adaptive_cfg.adaptive = adaptive;
+        manifest_write = save_propagation_v1_manifest(
+            artifact_dir / "manifest.json",
+            fixed_cfg,
+            adaptive_cfg,
+            legacy,
+            current,
+            adaptive_result,
+            provider_result
+        );
+    }
+
+    auto artifact_ok = [](StatusCode status) {
+        return status == StatusCode::ok || status == StatusCode::file_already_exists;
+    };
+    const bool artifacts_ok = acceptance_passed && artifact_ok(legacy_write)
+        && artifact_ok(current_write) && artifact_ok(adaptive_write)
+        && artifact_ok(provider_write) && artifact_ok(manifest_write);
+    std::println("Baseline Artifact Status = {}", artifacts_ok);
+    std::println("Propagation V1 Acceptance Gate = {}", acceptance_passed && artifacts_ok);
 }
 
 void run_ephemeris_io_diag() {
