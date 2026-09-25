@@ -4,6 +4,9 @@
 #include "core/status.hpp"
 #include "util/typedefs.hpp"
 
+using PropagationBodyIndex = i32;
+inline constexpr PropagationBodyIndex kInvalidPropagationBodyIndex = -1;
+
 enum struct PropagationStateDomain {
     integrated, // numerically integrated
     prescribed, // provider or simple model
@@ -49,7 +52,7 @@ struct PropagationStateBlock {
 
 struct PropagationBodyLayout {
     EntityId entity_id = kInvalidEntityId;
-    i32 body_index = -1;
+    PropagationBodyIndex body_index = kInvalidPropagationBodyIndex;
 
     svec<PropagationStateBlock> blocks;
 };
@@ -57,10 +60,43 @@ struct PropagationBodyLayout {
 struct PropagationStateLayout {
     // layout for dense/contiguous vector of propagation states
     svec<PropagationBodyLayout> bodies;
+    umap<EntityId, PropagationBodyIndex> body_indices;
+
     i32 state_size = 0;
 };
 
+StatusCode initialize_propagation_state_layout(
+    const svec<EntityId>& entity_ids,
+    PropagationStateLayout& out
+);
+
+StatusCode validate_propagation_state_block(const PropagationStateBlock& block);
+StatusCode validate_propagation_body_layout(const PropagationBodyLayout& body);
 StatusCode validate_propagation_state_layout(const PropagationStateLayout& layout);
+
+PropagationBodyIndex find_propagation_body_index(
+    const PropagationStateLayout& layout,
+    EntityId entity_id
+);
+
+const PropagationBodyLayout* find_propagation_body_layout(
+    const PropagationStateLayout& layout,
+    EntityId entity_id
+);
+
+PropagationBodyLayout* find_propagation_body_layout(
+    PropagationStateLayout& layout,
+    EntityId entity_id
+);
+
+StatusCode add_propagation_state_block(
+    PropagationStateLayout& layout,
+    EntityId entity_id,
+    PropagationStateKind kind,
+    const string& key,
+    PropagationStateDomain domain,
+    i32 size
+);
 
 const PropagationStateBlock* find_state_block(
     const PropagationBodyLayout& body,
