@@ -28,6 +28,9 @@
 #include "core/orbital_elements.hpp"
 #include "core/planets.hpp"
 #include "core/propagation_comparison.hpp"
+#include "core/propagation/state.hpp"
+#include "core/propagation/state_layout.hpp"
+#include "core/propagation/state_world.hpp"
 #include "core/scenario_io.hpp"
 #include "core/state.hpp"
 #include "core/station_geometry.hpp"
@@ -6512,6 +6515,419 @@ void run_propagation_v1_baseline_diag() {
         && artifact_ok(provider_write) && artifact_ok(manifest_write);
     std::println("Baseline Artifact Status = {}", artifacts_ok);
     std::println("Propagation V1 Acceptance Gate = {}", acceptance_passed && artifacts_ok);
+}
+
+void run_propagation_state_layout_diag() {
+    print_diag_title("Propagation State Layout Diagnostic");
+
+    i32 checks = 0, passed = 0;
+    auto check = [&](const char* label, bool valid) {
+        ++checks;
+        if (valid) ++passed;
+        std::println("{}: {}", label, valid ? "PASS" : "FAIL");
+    };
+
+    World world;
+    const EntityId sat1_id = world.spawn_satellite();
+    const EntityId sat2_id = world.spawn_satellite();
+    Satellite* sat1 = world.satellite(sat1_id);
+    Satellite* sat2 = world.satellite(sat2_id);
+    check("World Setup", sat1 != nullptr && sat2 != nullptr);
+    if (sat1 == nullptr || sat2 == nullptr) return;
+
+    sat1->x_tr = {
+        .r = vec3d{7001.0, 2.0, 3.0},
+        .v = vec3d{4.0, 7.5, 6.0}
+    };
+    sat1->x_att = {
+        .q = vec4d{0.1, 0.2, 0.3, 0.9}.normalized(),
+        .w = vec3d{0.01, 0.02, 0.03}
+    };
+    sat1->mass_properties.mass = 425.0;
+    sat2->x_tr = {
+        .r = vec3d{7100.0, 20.0, 30.0},
+        .v = vec3d{0.0, 7.4, 0.1}
+    };
+
+    PropagationStateLayout layout;
+    StatusCode status = initialize_propagation_state_layout(
+        {sat2_id, sat1_id},
+        layout
+    );
+    check("Initialize Layout", status == StatusCode::ok);
+    if (status != StatusCode::ok) return;
+
+    auto add_block = [&](EntityId id,
+                         PropagationStateKind kind,
+                         const string& key,
+                         PropagationStateDomain domain,
+                         i32 size) {
+        if (status != StatusCode::ok) return;
+        status = add_propagation_state_block(layout, id, kind, key, domain, size);
+    };
+    add_block(
+        sat1_id,
+        PropagationStateKind::translation,
+        default_block_key,
+        PropagationStateDomain::integrated,
+        6
+    );
+    add_block(
+        sat1_id,
+        PropagationStateKind::attitude,
+        default_block_key,
+        PropagationStateDomain::integrated,
+        7
+    );
+    add_block(
+        sat1_id,
+        PropagationStateKind::mass,
+        default_block_key,
+        PropagationStateDomain::integrated,
+        1
+    );
+    add_block(
+        sat2_id,
+        PropagationStateKind::translation,
+        default_block_key,
+        PropagationStateDomain::inactive,
+        0
+    );
+    add_block(
+        sat2_id,
+        PropagationStateKind::resource,
+        "battery",
+        PropagationStateDomain::prescribed,
+        0
+    );
+    add_block(
+        sat2_id,
+        PropagationStateKind::resource,
+        "propellant",
+        PropagationStateDomain::algebraic,
+        0
+    );
+    check("Add Layout Blocks", status == StatusCode::ok);
+    if (status != StatusCode::ok) return;
+
+    status = validate_propagation_state_layout(layout);
+    check("Validate Layout", status == StatusCode::ok);
+    check(
+        "Deterministic Dense Indices",
+        layout.bodies.size() == 2 && layout.bodies[0].entity_id == sat1_id
+            && layout.bodies[1].entity_id == sat2_id
+            && layout.body_indices.at(sat1_id) == 0
+            && layout.body_indices.at(sat2_id) == 1
+    );
+
+    const PropagationBodyLayout* sat1_layout
+        = find_propagation_body_layout(layout, sat1_id);
+    const PropagationBodyLayout* sat2_layout
+        = find_propagation_body_layout(layout, sat2_id);
+    const PropagationStateBlock* tr_block = sat1_layout == nullptr
+        ? nullptr
+        : find_state_block(
+              *sat1_layout,
+              PropagationStateKind::translation,
+              default_block_key
+          );
+    const PropagationStateBlock* att_block = sat1_layout == nullptr
+        ? nullptr
+        : find_state_block(
+              *sat1_layout,
+              PropagationStateKind::attitude,
+              default_block_key
+          );
+    const PropagationStateBlock* mass_block = sat1_layout == nullptr
+        ? nullptr
+        : find_state_block(*sat1_layout, PropagationStateKind::mass, default_block_key);
+    check(
+        "Contiguous Block Offsets",
+        tr_block != nullptr && att_block != nullptr && mass_block != nullptr
+            && tr_block->offset == 0 && att_block->offset == 6
+            && mass_block->offset == 13 && layout.state_size == 14
+    );
+    check(
+        "Distinct Same-Kind Blocks",
+        sat2_layout != nullptr
+            && find_state_blocks(*sat2_layout, PropagationStateKind::resource).size() == 2
+    );
+
+    PropagationStateLayout duplicate_layout = layout;
+    check(
+        "Duplicate Kind-Key Rejected",
+        add_propagation_state_block(
+            duplicate_layout,
+            sat1_id,
+            PropagationStateKind::translation,
+            default_block_key,
+            PropagationStateDomain::integrated,
+            6
+        ) == StatusCode::duplicate_id
+    );
+
+    status = finalize_world_propagation_state_layout(world, layout);
+    check(
+        "Finalize Layout",
+        status == StatusCode::ok && layout.revisions.bound
+            && validate_world_propagation_state_layout(world, layout) == StatusCode::ok
+    );
+    if (status != StatusCode::ok || tr_block == nullptr || att_block == nullptr
+        || mass_block == nullptr) {
+        return;
+    }
+
+    // Storage and typed views
+    PropagationState typed_state;
+    status = initialize_propagation_state(layout, typed_state);
+    check("Initialize State", status == StatusCode::ok);
+    if (status != StatusCode::ok) return;
+
+    const vec3d r_typed{11.0, 12.0, 13.0};
+    const vec3d v_typed{21.0, 22.0, 23.0};
+    const vec4d q_typed{0.1, 0.2, 0.3, 0.4};
+    const vec3d w_typed{31.0, 32.0, 33.0};
+    PropagationTranslationView tr_view;
+    PropagationAttitudeView att_view;
+    PropagationScalarView mass_view;
+    StatusCode tr_status
+        = make_propagation_translation_view(typed_state, *tr_block, tr_view);
+    if (tr_status == StatusCode::ok) {
+        tr_view.r() = r_typed;
+        tr_view.v() = v_typed;
+    }
+    check(
+        "Translation View Isolation",
+        tr_status == StatusCode::ok && typed_state.values.head(6).isApprox(
+            (vec6d{} << r_typed, v_typed).finished()
+        ) && typed_state.values.tail(8).isZero(0.0)
+    );
+
+    StatusCode att_status = make_propagation_attitude_view(
+        typed_state,
+        *att_block,
+        att_view
+    );
+    if (att_status == StatusCode::ok) {
+        att_view.q() = q_typed;
+        att_view.w() = w_typed;
+    }
+    StatusCode mass_status
+        = make_propagation_scalar_view(typed_state, *mass_block, mass_view);
+    if (mass_status == StatusCode::ok) mass_view.value() = 525.0;
+
+    const PropagationState& const_typed_state = typed_state;
+    PropagationConstTranslationView tr_const_view;
+    PropagationConstAttitudeView att_const_view;
+    PropagationConstScalarView mass_const_view;
+    StatusCode tr_const_status = make_propagation_translation_view(
+        const_typed_state,
+        *tr_block,
+        tr_const_view
+    );
+    StatusCode att_const_status = make_propagation_attitude_view(
+        const_typed_state,
+        *att_block,
+        att_const_view
+    );
+    StatusCode mass_const_status = make_propagation_scalar_view(
+        const_typed_state,
+        *mass_block,
+        mass_const_view
+    );
+    check(
+        "Typed Const Views",
+        att_status == StatusCode::ok && mass_status == StatusCode::ok
+            && tr_const_status == StatusCode::ok
+            && att_const_status == StatusCode::ok
+            && mass_const_status == StatusCode::ok
+            && tr_const_view.r().isApprox(r_typed)
+            && tr_const_view.v().isApprox(v_typed)
+            && att_const_view.q().isApprox(q_typed)
+            && att_const_view.w().isApprox(w_typed)
+            && mass_const_view.value() == 525.0
+            && validate_propagation_state(layout, typed_state) == StatusCode::ok
+    );
+
+    PropagationTranslationView invalid_view;
+    PropagationStateBlock invalid_size_block = *tr_block;
+    invalid_size_block.size = 5;
+    check(
+        "Invalid Typed Views Rejected",
+        make_propagation_translation_view(typed_state, *att_block, invalid_view)
+                == StatusCode::invalid_input
+            && make_propagation_translation_view(
+                   typed_state,
+                   invalid_size_block,
+                   invalid_view
+               ) == StatusCode::invalid_input
+    );
+
+    // World packing and accepted-state commit
+    const WorldRevisions revisions_before_pack = world.get_revisions();
+    const StateTr x_tr_before_pack = sat1->x_tr;
+    const StateAtt x_att_before_pack = sat1->x_att;
+    const f64 mass_before_pack = sat1->mass_properties.mass;
+    PropagationState packed_state;
+    status = pack_world_propagation_state(world, layout, packed_state);
+    check(
+        "Pack World State",
+        status == StatusCode::ok
+            && packed_state.values.segment<3>(tr_block->offset).isApprox(sat1->x_tr.r)
+            && packed_state.values.segment<3>(tr_block->offset + 3).isApprox(sat1->x_tr.v)
+            && packed_state.values.segment<4>(att_block->offset).isApprox(sat1->x_att.q)
+            && packed_state.values.segment<3>(att_block->offset + 4).isApprox(sat1->x_att.w)
+            && packed_state.values(mass_block->offset) == sat1->mass_properties.mass
+    );
+    check(
+        "Pack Preserves World",
+        sat1->x_tr.r.isApprox(x_tr_before_pack.r)
+            && sat1->x_tr.v.isApprox(x_tr_before_pack.v)
+            && sat1->x_att.q.isApprox(x_att_before_pack.q)
+            && sat1->x_att.w.isApprox(x_att_before_pack.w)
+            && sat1->mass_properties.mass == mass_before_pack
+            && world.get_revisions().state == revisions_before_pack.state
+    );
+
+    PropagationStateLayout unsupported_layout = layout;
+    status = add_propagation_state_block(
+        unsupported_layout,
+        sat2_id,
+        PropagationStateKind::resource,
+        "integrated_resource",
+        PropagationStateDomain::integrated,
+        1
+    );
+    if (status == StatusCode::ok) {
+        status = finalize_world_propagation_state_layout(world, unsupported_layout);
+    }
+    PropagationState preserved_output;
+    preserved_output.values = vecXd::Constant(2, 42.0);
+    StatusCode unsupported_status = status;
+    if (unsupported_status == StatusCode::ok) {
+        unsupported_status = pack_world_propagation_state(
+            world,
+            unsupported_layout,
+            preserved_output
+        );
+    }
+    check(
+        "Unsupported Pack Preserves Output",
+        unsupported_status == StatusCode::unsupported_method
+            && preserved_output.values.size() == 2
+            && preserved_output.values.isConstant(42.0)
+    );
+
+    packed_state.values.segment<3>(tr_block->offset) = vec3d{8001.0, 82.0, 83.0};
+    packed_state.values.segment<3>(tr_block->offset + 3) = vec3d{8.1, 8.2, 8.3};
+    packed_state.values.segment<4>(att_block->offset) = vec4d{0.2, 0.4, 0.6, 1.8};
+    packed_state.values.segment<3>(att_block->offset + 4) = vec3d{0.04, 0.05, 0.06};
+    packed_state.values(mass_block->offset) = 400.0;
+    const WorldRevisions revisions_before_commit = world.get_revisions();
+    status = commit_world_propagation_state(world, layout, packed_state);
+    check(
+        "Commit World State",
+        status == StatusCode::ok
+            && sat1->x_tr.r.isApprox(vec3d{8001.0, 82.0, 83.0})
+            && sat1->x_tr.v.isApprox(vec3d{8.1, 8.2, 8.3})
+            && sat1->x_att.w.isApprox(vec3d{0.04, 0.05, 0.06})
+            && std::abs(sat1->x_att.q.norm() - 1.0) <= tol12
+            && sat1->mass_properties.mass == 400.0
+            && world.get_revisions().state == revisions_before_commit.state + 1
+            && world.get_revisions().topology == revisions_before_commit.topology
+            && world.get_revisions().dynamics == revisions_before_commit.dynamics
+            && world.get_revisions().providers == revisions_before_commit.providers
+            && validate_world_propagation_state_layout(world, layout) == StatusCode::ok
+    );
+
+    const StateTr committed_x_tr = sat1->x_tr;
+    const StateAtt committed_x_att = sat1->x_att;
+    const f64 committed_mass = sat1->mass_properties.mass;
+    const WorldRevision committed_state_revision = world.get_revisions().state;
+    PropagationState invalid_commit = packed_state;
+    invalid_commit.values(mass_block->offset) = -1.0;
+    status = commit_world_propagation_state(world, layout, invalid_commit);
+    check(
+        "Failed Commit Is Transactional",
+        status == StatusCode::invalid_mass_properties
+            && sat1->x_tr.r.isApprox(committed_x_tr.r)
+            && sat1->x_tr.v.isApprox(committed_x_tr.v)
+            && sat1->x_att.q.isApprox(committed_x_att.q)
+            && sat1->x_att.w.isApprox(committed_x_att.w)
+            && sat1->mass_properties.mass == committed_mass
+            && world.get_revisions().state == committed_state_revision
+    );
+
+    // Revision invalidation
+    world.mark_state_changed();
+    world.mark_instruments_changed();
+    world.mark_graphics_changed();
+    check(
+        "Nonstructural Revisions Preserve Layout",
+        validate_world_propagation_state_layout(world, layout) == StatusCode::ok
+    );
+
+    const EntityId inactive_id = world.spawn_satellite();
+    check(
+        "Topology Change Stales Layout",
+        validate_world_propagation_state_layout(world, layout)
+            == StatusCode::stale_revision
+            && pack_world_propagation_state(world, layout, packed_state)
+                   == StatusCode::stale_revision
+            && commit_world_propagation_state(world, layout, packed_state)
+                   == StatusCode::stale_revision
+    );
+
+    status = finalize_world_propagation_state_layout(world, layout);
+    check("Refinalize After Topology Change", status == StatusCode::ok);
+    if (status == StatusCode::ok) world.mark_dynamics_changed();
+    check(
+        "Dynamics Change Stales Layout",
+        status == StatusCode::ok
+            && validate_world_propagation_state_layout(world, layout)
+                   == StatusCode::stale_revision
+    );
+
+    status = finalize_world_propagation_state_layout(world, layout);
+    if (status == StatusCode::ok) world.mark_providers_changed();
+    check(
+        "Provider Change Stales Layout",
+        status == StatusCode::ok
+            && validate_world_propagation_state_layout(world, layout)
+                   == StatusCode::stale_revision
+    );
+
+    status = finalize_world_propagation_state_layout(world, layout);
+    if (status == StatusCode::ok) {
+        status = add_propagation_state_block(
+            layout,
+            sat2_id,
+            PropagationStateKind::parameter,
+            "extra_parameter",
+            PropagationStateDomain::inactive,
+            0
+        );
+    }
+    check(
+        "Layout Mutation Clears Binding",
+        status == StatusCode::ok && !layout.revisions.bound
+            && validate_world_propagation_state_layout(world, layout)
+                   == StatusCode::stale_revision
+    );
+
+    status = finalize_world_propagation_state_layout(world, layout);
+    check("Finalize Mutated Layout", status == StatusCode::ok);
+    if (status == StatusCode::ok) {
+        check("Deactivate Body", world.make_inactive(inactive_id));
+        check(
+            "Activation Change Stales Layout",
+            validate_world_propagation_state_layout(world, layout)
+                == StatusCode::stale_revision
+        );
+    }
+
+    std::println("Propagation State Layout Checks: {}/{}", passed, checks);
+    print_diag_title();
 }
 
 void run_ephemeris_io_diag() {

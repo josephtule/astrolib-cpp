@@ -96,6 +96,7 @@ void run_build_world_from_scenario();
 void run_scenario_render_diag();
 void run_world_embedded_rk_diag();
 void run_propagation_v1_baseline_diag();
+void run_propagation_state_layout_diag();
 void run_ephemeris_io_diag();
 void run_ephemeris_sampling_diag();
 void run_ephemeris_provider_diag();

@@ -125,7 +125,8 @@ int main() {
     // run_ephemeris_provider_diag();
     // run_world_provider_diag();
     // run_cspice_provider_diag();
-    run_propagation_v1_baseline_diag();
+    // run_propagation_v1_baseline_diag();
+    run_propagation_state_layout_diag();
 
     auto stop = std::chrono::high_resolution_clock::now();
     std::println("-----------------------------------------------------------");
