@@ -5906,8 +5906,8 @@ static StatusCode build_propagation_v1_provider_world(
         .after_end = ProviderCoverageAction::reject_step
     };
 
-    StatusCode status = set_celestial_ephemeris_providers(
-        *source,
+    StatusCode status = world.set_celestial_ephemeris_providers(
+        source_id,
         {.translation = std::move(tr_provider), .orientation = std::move(att_provider)}
     );
     if (status != StatusCode::ok) return status;
@@ -6977,7 +6977,8 @@ static StatusCode build_ephemeris_provider_diag_world(
             spin_rate
         )
     };
-    StatusCode status = set_celestial_ephemeris_providers(*source, std::move(providers));
+    StatusCode status
+        = world.set_celestial_ephemeris_providers(source_id, std::move(providers));
     if (status != StatusCode::ok) return status;
 
     sat_id = world.spawn_satellite();

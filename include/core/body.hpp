@@ -175,5 +175,7 @@ struct Station : public Body {
 };
 
 StatusCode instrument_suite_from_body(Body& body, InstrumentSuite*& out);
-
 StatusCode instrument_suite_from_body(const Body& body, const InstrumentSuite*& out);
+
+StatusCode mass_properties_from_body(Body& body, MassProperties*& out);
+StatusCode mass_properties_from_body(const Body& body, const MassProperties*& out);

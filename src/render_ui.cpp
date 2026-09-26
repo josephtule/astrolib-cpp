@@ -67,6 +67,7 @@ static Color status_color(const StatusCode code) {
     case StatusCode::invalid_covariance:
     case StatusCode::invalid_ephemeris_metadata:
     case StatusCode::non_monotonic_time:
+    case StatusCode::stale_revision:
     case StatusCode::unsupported_method:
     case StatusCode::parse_failed: return ORANGE;
 
@@ -101,7 +102,8 @@ static Color status_color(const StatusCode code) {
     case StatusCode::max_steps_reached:
     case StatusCode::max_rejections_reached:
     case StatusCode::non_finite_derivative:
-    case StatusCode::non_finite_result: return RED;
+    case StatusCode::non_finite_result:
+    case StatusCode::divide_by_zero: return RED;
     case StatusCode::external_library_error:
     case StatusCode::kernel_not_loaded: return RED;
     }

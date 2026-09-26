@@ -10,6 +10,23 @@
 StatusCode validate_propagation_state_block(const PropagationStateBlock& block) {
     if (block.key.empty()) return StatusCode::invalid_input;
 
+    switch (block.kind) {
+    case PropagationStateKind::translation: [[fallthrough]];
+    case PropagationStateKind::attitude: [[fallthrough]];
+    case PropagationStateKind::mass: [[fallthrough]];
+    case PropagationStateKind::resource: [[fallthrough]];
+    case PropagationStateKind::parameter: break;
+    default: return StatusCode::unsupported_type;
+    }
+
+    switch (block.domain) {
+    case PropagationStateDomain::integrated: [[fallthrough]];
+    case PropagationStateDomain::prescribed: [[fallthrough]];
+    case PropagationStateDomain::algebraic: [[fallthrough]];
+    case PropagationStateDomain::inactive: break;
+    default: return StatusCode::unsupported_type;
+    }
+
     if (block.domain == PropagationStateDomain::integrated) {
         if (block.size <= 0) return StatusCode::invalid_input;
         if (block.offset < 0) return StatusCode::invalid_input;
@@ -76,6 +93,7 @@ StatusCode initialize_propagation_state_layout(
     if (status != StatusCode::ok) return status;
 
     out = std::move(temp);
+    out.revisions = {};
     return StatusCode::ok;
 }
 
@@ -274,6 +292,7 @@ StatusCode add_propagation_state_block(
 
     body->blocks.push_back(block);
     layout.state_size += block.size;
+    layout.revisions = {};
 
     return StatusCode::ok;
 }

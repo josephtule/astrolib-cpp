@@ -27,8 +27,6 @@ StatusCode initialize_propagation_state(
     status = validate_propagation_state(layout, temp);
     if (status != StatusCode::ok) return status;
 
-    // TODO: complete this
-
     out = std::move(temp);
     return StatusCode::ok;
 }

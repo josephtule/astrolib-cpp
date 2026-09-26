@@ -2,6 +2,7 @@
 
 #include "core/entity.hpp"
 #include "core/status.hpp"
+#include "core/world/world_revision.hpp"
 #include "util/typedefs.hpp"
 
 using PropagationBodyIndex = i32;
@@ -41,9 +42,10 @@ inline string propagation_state_kind_string(PropagationStateKind kind) {
     return "unknown";
 }
 
+inline constexpr string default_block_key = "primary";
 struct PropagationStateBlock {
     PropagationStateKind kind = PropagationStateKind::translation;
-    string key = "primary";
+    string key = default_block_key;
 
     PropagationStateDomain domain = PropagationStateDomain::inactive;
     i32 offset = -1; // index in contiguous propagation state
@@ -57,10 +59,19 @@ struct PropagationBodyLayout {
     svec<PropagationStateBlock> blocks;
 };
 
+struct PropagationLayoutRevisions {
+    WorldRevision topology = 0;
+    WorldRevision dynamics = 0;
+    WorldRevision providers = 0;
+    bool bound = false;
+};
+
 struct PropagationStateLayout {
     // layout for dense/contiguous vector of propagation states
     svec<PropagationBodyLayout> bodies;
     umap<EntityId, PropagationBodyIndex> body_indices;
+
+    PropagationLayoutRevisions revisions{};
 
     i32 state_size = 0;
 };

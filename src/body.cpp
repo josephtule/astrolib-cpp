@@ -4,6 +4,7 @@
 #include "core/body.hpp"
 
 #include "core/ephemeris_provider.hpp"
+#include "core/status.hpp"
 
 #include <utility>
 
@@ -66,6 +67,38 @@ StatusCode instrument_suite_from_body(const Body& body, const InstrumentSuite*& 
     case BodyType::celestial: [[fallthrough]];
     case BodyType::unknown: {
         return StatusCode::unsupported_type;
+    } break;
+    }
+
+    return StatusCode::ok;
+}
+
+StatusCode mass_properties_from_body(Body& body, MassProperties*& out) {
+    out = nullptr;
+    switch (body.body_type) {
+    case BodyType::unknown: return StatusCode::unsupported_type;
+    case BodyType::celestial: return StatusCode::unsupported_type;
+    case BodyType::satellite: {
+        out = &static_cast<Satellite&>(body).mass_properties;
+    } break;
+    case BodyType::station: {
+        out = &static_cast<Station&>(body).mass_properties;
+    } break;
+    }
+
+    return StatusCode::ok;
+}
+
+StatusCode mass_properties_from_body(const Body& body, const MassProperties*& out) {
+    out = nullptr;
+    switch (body.body_type) {
+    case BodyType::unknown: return StatusCode::unsupported_type;
+    case BodyType::celestial: return StatusCode::unsupported_type;
+    case BodyType::satellite: {
+        out = &static_cast<const Satellite&>(body).mass_properties;
+    } break;
+    case BodyType::station: {
+        out = &static_cast<const Station&>(body).mass_properties;
     } break;
     }
 

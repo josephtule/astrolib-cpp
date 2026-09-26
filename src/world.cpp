@@ -14,39 +14,66 @@
 
 #include <cstddef>
 #include <memory>
+#include <utility>
+
+namespace {
+
+bool same_julian_date(const JulianDate& lhs, const JulianDate& rhs) {
+    return lhs.day == rhs.day && lhs.frac == rhs.frac;
+}
+
+bool same_time_offsets(const TimeOffsets& lhs, const TimeOffsets& rhs) {
+    return lhs.ut1_utc == rhs.ut1_utc && lhs.tai_utc == rhs.tai_utc
+        && lhs.tt_tai == rhs.tt_tai && lhs.tai_gps == rhs.tai_gps;
+}
+
+} // namespace
 
 f64 World::t_sim() const { return t_sim_; }
 
 void World::reset_time(f64 t0) {
+    if (t0 == t_sim_) return;
+
     if (date_active) {
         jd.frac = jd.frac - (t_sim_ - t0) / 86400.0;
         jd = normalize_jd(jd);
     }
     t_sim_ = t0;
+    mark_state_changed();
 }
 
 void World::advance_time(f64 dt) {
+    const f64 t_new = t_sim_ + dt;
+    if (t_new == t_sim_) return;
+
     if (date_active) {
         jd.frac = jd.frac + dt / 86400.0;
         jd = normalize_jd(jd);
     }
-    t_sim_ += dt;
+    t_sim_ = t_new;
+    mark_state_changed();
 }
 
 void World::set_date(JulianDate jd_in, TimeScale scale) {
+    const JulianDate jd_new = normalize_jd(jd_in);
+    if (date_active && time_scale == scale && same_julian_date(jd, jd_new)) return;
+
     date_active = true;
     time_scale = scale;
-    jd = normalize_jd(jd_in);
+    jd = jd_new;
+    mark_providers_changed();
 }
 void World::set_date(ModifiedJulianDate mjd, TimeScale scale) {
-    date_active = true;
-    time_scale = scale;
-    jd = normalize_jd(mjd_to_jd(mjd));
+    set_date(mjd_to_jd(mjd), scale);
 }
 void World::set_date(CalendarTime cal, TimeScale scale) {
-    date_active = true;
-    time_scale = scale;
-    jd = normalize_jd(cal_to_jd(cal));
+    set_date(cal_to_jd(cal), scale);
+}
+
+void World::set_time_offsets(TimeOffsets offsets) {
+    if (same_time_offsets(time_offsets, offsets)) return;
+    time_offsets = offsets;
+    mark_providers_changed();
 }
 
 JulianDate World::get_date_jd() const { return jd; }
@@ -96,6 +123,16 @@ bool World::restore_checkpoint_state(const WorldStateSnapshot& snapshot) {
         if (body_snapshot.body_type != temp->body_type) return false;
     }
 
+    bool dynamics_changed = false;
+    for (const BodySnapshot& body_snapshot : snapshot.bodies) {
+        const Body* temp = body(body_snapshot.id);
+        dynamics_changed
+            = dynamics_changed || temp->propagate_tr != body_snapshot.propagate_tr
+            || temp->propagate_att != body_snapshot.propagate_att
+            || temp->emits_gravity != body_snapshot.emits_gravity
+            || temp->emits_radiation != body_snapshot.emits_radiation;
+    }
+
     this->next_id = snapshot.next_id;
     this->active_ids = snapshot.active_ids;
     this->t_sim_ = snapshot.t_sim_;
@@ -112,6 +149,9 @@ bool World::restore_checkpoint_state(const WorldStateSnapshot& snapshot) {
         temp->emits_gravity = body_snapshot.emits_gravity;
         temp->emits_radiation = body_snapshot.emits_radiation;
     }
+
+    mark_state_changed();
+    if (dynamics_changed) mark_dynamics_changed();
 
     return true;
 }
@@ -148,6 +188,34 @@ const Celestial* World::celestial(EntityId id) const {
     return dynamic_cast<const Celestial*>(ptr);
 }
 
+StatusCode World::set_celestial_ephemeris_providers(
+    EntityId id,
+    BodyEphemerisProviders providers
+) {
+    Celestial* cel = celestial(id);
+    if (cel == nullptr) return StatusCode::body_not_found;
+
+    const auto translation_old = cel->ephemeris_providers.translation;
+    const auto orientation_old = cel->ephemeris_providers.orientation;
+    const bool propagate_tr_old = cel->propagate_tr;
+    const bool propagate_att_old = cel->propagate_att;
+    const CelestialAttitudeModel attitude_model_old = cel->attitude_model;
+
+    StatusCode status = ::set_celestial_ephemeris_providers(*cel, std::move(providers));
+    if (status != StatusCode::ok) return status;
+
+    if (translation_old != cel->ephemeris_providers.translation
+        || orientation_old != cel->ephemeris_providers.orientation) {
+        mark_providers_changed();
+    }
+    if (propagate_tr_old != cel->propagate_tr || propagate_att_old != cel->propagate_att
+        || attitude_model_old != cel->attitude_model) {
+        mark_dynamics_changed();
+    }
+
+    return StatusCode::ok;
+}
+
 Satellite* World::satellite(EntityId id) {
     Body* ptr = body(id);
     if (ptr == nullptr) return nullptr;
@@ -179,7 +247,9 @@ EntityId World::insert_body(uptr<Body> body) {
     if (body == nullptr) return kInvalidEntityId;
     EntityId id = allocate_id();
     body->id = id;
-    bodies.emplace(id, std::move(body));
+    auto [_, inserted] = bodies.emplace(id, std::move(body));
+    if (!inserted) return kInvalidEntityId;
+    mark_topology_changed();
     return id;
 }
 
@@ -679,18 +749,26 @@ bool World::set_stat_anchor_detic(
     vec3d r_body = stat_r_bcbf_from_detic(llh, *cel, angle_in);
     if (!r_body.allFinite()) return false;
 
-    stat->anchored = true;
-    stat->anchor_id = anchor_id;
-    stat->r_body_BCBF = r_body;
     f64 lat = llh(0), lon = llh(1);
     if (angle_in != UAngle::radian) {
         lat = convert_angle(lat, angle_in, UAngle::radian);
         lon = convert_angle(lon, angle_in, UAngle::radian);
     }
-    stat->llh_BCBF = vec3d{lat, lon, llh(2)};
+    const vec3d llh_body{lat, lon, llh(2)};
+    const bool dynamics_changed = !stat->anchored || stat->anchor_id != anchor_id
+        || !(stat->r_body_BCBF.array() == r_body.array()).all()
+        || !(stat->llh_BCBF.array() == llh_body.array()).all() || stat->propagate_tr
+        || stat->propagate_att;
+
+    stat->anchored = true;
+    stat->anchor_id = anchor_id;
+    stat->r_body_BCBF = r_body;
+    stat->llh_BCBF = llh_body;
     // don't propagate anchored stations, just assign
     stat->propagate_tr = false;
     stat->propagate_att = false;
+
+    if (dynamics_changed) mark_dynamics_changed();
 
     return true;
 }
@@ -764,11 +842,20 @@ vec3d World::body_w_inertial(EntityId body_id) const {
     return w_inertial;
 }
 
+const WorldRevisions& World::get_revisions() const { return revisions; }
+void World::mark_topology_changed() { ++revisions.topology; }
+void World::mark_dynamics_changed() { ++revisions.dynamics; }
+void World::mark_providers_changed() { ++revisions.providers; }
+void World::mark_instruments_changed() { ++revisions.instruments; }
+void World::mark_graphics_changed() { ++revisions.graphics; }
+void World::mark_state_changed() { ++revisions.state; }
+
 bool World::make_inactive(EntityId body_id) {
     for (i32 i = 0; i < active_ids.size(); ++i) {
         if (body_id == active_ids[i]) {
             active_ids.erase(active_ids.begin() + i);
             inactive_ids.push_back(body_id);
+            mark_topology_changed();
             return true;
         }
     }
@@ -781,6 +868,7 @@ bool World::make_active(EntityId body_id) {
         if (body_id == inactive_ids[i]) {
             inactive_ids.erase(inactive_ids.begin() + i);
             active_ids.push_back(body_id);
+            mark_topology_changed();
             return true;
         }
     }

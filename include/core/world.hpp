@@ -7,6 +7,7 @@
 #include "core/entity.hpp"
 #include "core/state.hpp"
 #include "core/time.hpp"
+#include "core/world/world_revision.hpp"
 #include "util/typedefs.hpp"
 #include "util/units.hpp"
 
@@ -64,13 +65,15 @@ class World {
     EntityId allocate_id();
     EntityId insert_body(uptr<Body> body);
 
+    WorldRevisions revisions{};
+
   public:
     f64 t_sim() const;
 
     bool is_date_active() const { return date_active; }
     TimeScale get_time_scale() const { return time_scale; }
     const TimeOffsets& get_time_offsets() const { return time_offsets; }
-    void set_time_offsets(TimeOffsets offsets) { time_offsets = offsets; }
+    void set_time_offsets(TimeOffsets offsets);
     void set_date(JulianDate jd, TimeScale scale);
     void set_date(ModifiedJulianDate mjd, TimeScale scale);
     void set_date(CalendarTime cal, TimeScale scale);
@@ -98,6 +101,10 @@ class World {
     const Body* body(EntityId id) const;
     Celestial* celestial(EntityId id);
     const Celestial* celestial(EntityId id) const;
+    StatusCode set_celestial_ephemeris_providers(
+        EntityId id,
+        BodyEphemerisProviders providers
+    );
     Satellite* satellite(EntityId id);
     const Satellite* satellite(EntityId id) const;
     Station* station(EntityId id);
@@ -185,6 +192,16 @@ class World {
     // Inertial frame helpers
     vec3d body_z_inertial(EntityId body_id) const;
     vec3d body_w_inertial(EntityId body_id) const;
+
+    // Revisions
+    const WorldRevisions& get_revisions() const;
+
+    void mark_topology_changed();
+    void mark_dynamics_changed();
+    void mark_providers_changed();
+    void mark_instruments_changed();
+    void mark_graphics_changed();
+    void mark_state_changed();
 
   private:
     friend class SystemStepper; // Allow private access
